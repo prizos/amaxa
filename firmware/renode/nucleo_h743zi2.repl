@@ -1,0 +1,13 @@
+// NUCLEO-H743ZI2 for Renode: the Nucleo-144 H753ZI model (same board and
+// memory map; the H753 is an H743 with a crypto block).
+using "platforms/boards/nucleo_h753zi.repl"
+
+// Renode 1.17.0's STM32H7_ADC throws (and aborts the emulator) when the
+// internal VREFINT channel is sampled. Replace ADC3 with a silent register
+// stub: the firmware's ADC reads then time out and it reports "adc error".
+adc3: @ none
+
+adc3Stub: Python.PythonPeripheral @ sysbus 0x58026000
+    size: 0x400
+    initable: false
+    script: "request.Value = 0"

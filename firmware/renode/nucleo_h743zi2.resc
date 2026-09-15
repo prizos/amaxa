@@ -1,0 +1,24 @@
+:name: NUCLEO-H743ZI2
+:description: Runs a firmware ELF on Renode's Nucleo-144 H7 model; the ST-LINK console (USART3) is logged.
+:  Used by `make sim` / `make sim-live`. Manual use:
+:  renode --console --disable-gui -e 'set elf @out/hello_hw.elf; include @renode/nucleo_h743zi2.resc; start'
+
+using sysbus
+
+$elf ?= @out/hello_hw.elf
+$repl ?= @renode/nucleo_h743zi2.repl
+
+mach create "nucleo_h743zi2"
+machine LoadPlatformDescription $repl
+
+showAnalyzer sysbus.usart3 Antmicro.Renode.Analyzers.LoggingUartAnalyzer
+
+# Runs at start-up and on every machine reset (e.g. an IWDG reset).
+macro reset
+"""
+    sysbus LoadELF $elf
+    # Renode doesn't model GPIO pull-ups: hold the active-low break input
+    # (PE15) at its idle level, as the pull-up does on the real board.
+    sysbus.gpioPortE OnGPIO 15 true
+"""
+runMacro $reset
