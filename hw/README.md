@@ -59,7 +59,9 @@ hw/
     ├── src/led12.ato        the board
     ├── parts/               one directory per footprint library
     │   └── <LIB>/           footprint + <LIB>.ato + <LIB>.md review note
-    ├── elec/layout/         generated KiCad files — committed
+    ├── layout.py            placement and routing
+    ├── rules.kicad_dru      design intent, on top of the fab limits
+    ├── elec/                generated KiCad files — not committed
     └── build/               generated reports — not committed
 ```
 
@@ -132,9 +134,38 @@ package. And **silkscreen needs deliberate placement**: atopile puts each
 designator on top of the part it names, the fab clips silk that lands on a pad,
 and the board comes back with unlabelled parts.
 
-`make drift` is separate: it fails if the committed KiCad files are no longer
-what the source produces. It ignores KiCad object UUIDs, which atopile
-regenerates for the board outline on every build.
+## What is committed
+
+The design: the `.ato` sources, the parts library with its review notes,
+`layout.py`, and the rules files. Not the KiCad board.
+
+That is deliberate, and it was not the first answer. The board was committed to
+begin with, gated by a check that a rebuild did not move it. The check failed
+the moment CI ran it — not because anything was wrong, but because CI's KiCad is
+a different patch release from the one here, and `pcbnew` re-serialises the
+whole file when it fills the pours. The bytes of a generated board depend on
+which KiCad last touched it.
+
+A gate that fails on a patch-version difference is noise, so the board became
+what it always was: output. It cannot go stale, because it is built fresh every
+time. What a reviewer reads is `layout.py` — a placement table and a list of
+routes, which diffs far more usefully than a `.kicad_pcb` ever did — alongside
+the renders and the DRC report CI publishes.
+
+Measuring this afterwards showed the decision was not merely convenient. **Two
+builds on the same machine from identical sources differ on more than five
+thousand lines**: atopile emits footprints in a different order every run and
+gives every object a fresh UUID. Nothing about the design moves. Every part is
+in the same place, every track runs between the same points, the pour covers the
+same copper.
+
+So the board is compared as a design rather than as a file. `make reproducible`
+builds twice and checks that both runs describe the same thing — the same parts
+at the same coordinates, the same copper, the same net names. That is the
+property worth holding, and unlike a byte comparison it is true.
+
+If you ever want to take the board over by hand in KiCad, commit it at that
+point and stop running `make layout` on it. Until then it is generated.
 
 ## Verified findings
 

@@ -5,7 +5,7 @@
 #   make build       turn .ato source into KiCad files
 #   make layout      apply the board's placement and routing, then fill the plane
 #   make check       run the design checks against what the build produced
-#   make drift       fail if the committed board no longer matches its source
+#   make reproducible  build twice and check both runs describe the same board
 #   make outputs     renders, 3D model, gerbers and drill files into out/
 #   make help        list all targets
 #
@@ -57,7 +57,7 @@ DRU        := $(LAYOUT_DIR)/default.kicad_dru
 KICAD_CLI ?= $(shell command -v kicad-cli 2>/dev/null)
 NGSPICE   ?= $(shell command -v ngspice 2>/dev/null)
 
-.PHONY: help tools versions build layout rules check drc drift outputs clean distclean
+.PHONY: help tools versions build layout rules check drc reproducible outputs clean distclean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -121,7 +121,12 @@ versions: ## Print tool versions and check the pinned ones
 
 # --- generate ---------------------------------------------------------------
 
+# Always from scratch. atopile ingests an existing board if it finds one and
+# normalises it slightly on the second pass, so an incremental build and a fresh
+# one do not produce the same file - and the fresh one is the honest answer,
+# since placement and routing come from $(BOARD)/layout.py either way.
 build: $(ATO) ## Turn .ato source into KiCad files for BOARD
+	@rm -rf $(BOARD)/elec
 	@cd $(BOARD) && ../$(ATO) build
 
 # atopile leaves every part in a grid and nothing routed. This puts the board
@@ -147,6 +152,18 @@ $(DRU): fab/pcbway.kicad_dru $(BOARD)/rules.kicad_dru
 	   sed '1d' $(BOARD)/rules.kicad_dru; } > $@
 	@echo "wrote $@"
 
+# The board file is not byte-reproducible: atopile emits footprints in a
+# different order every build and gives every object a fresh UUID. The design it
+# describes is, and that is what this compares - where each part sits, what
+# copper joins what, what the nets are called. If that ever stops holding, the
+# pipeline has become a random number generator and nothing downstream means
+# anything.
+reproducible: layout ## Build twice and check both runs describe the same board
+	@cp $(LAYOUT_DIR)/default.kicad_pcb $(BOARD)/.first.kicad_pcb
+	@$(MAKE) --no-print-directory layout >/dev/null
+	@python3 tools/fingerprint.py $(BOARD)/.first.kicad_pcb $(LAYOUT_DIR)/default.kicad_pcb
+	@rm -f $(BOARD)/.first.kicad_pcb
+
 # --- verify -----------------------------------------------------------------
 
 # KiCad's own rule checker: shorts, clearances, the fab limits and the board's
@@ -158,11 +175,6 @@ drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 # Depends on build so the checks can never pass against stale output.
 check: layout ## Run the design checks against what the build produced
 	@$(VENV)/bin/python -m pytest checks/ -q --board $(BOARD)
-
-# Ignores KiCad object UUIDs, which atopile regenerates for the board outline
-# on every build. See tools/check_drift.py.
-drift: layout ## Fail if the committed board no longer matches its source
-	@python3 tools/check_drift.py --all
 
 OUT := out/$(BOARD)
 

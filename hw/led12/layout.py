@@ -228,11 +228,16 @@ VIAS = [
 # The whole back layer. KiCad clips the pour to the board outline, so the
 # rectangle only has to be large enough to cover it.
 
+# The pour keeps 0.5 mm from everything, which is the strictest clearance any
+# rule on this board asks for: rules.kicad_dru wants that much between the
+# unfused input and ground, because a person wires that terminal by hand and a
+# stray strand should not be able to bridge them. KiCad's filler does not apply
+# custom rules, so the pour has to be told.
 PLANE = {
     "net": "GND",
     "layer": "B.Cu",
     "outline": [(-24.5, -19.5), (24.5, -19.5), (24.5, 19.5), (-24.5, 19.5)],
-    "pad_clearance": 0.25,
+    "pad_clearance": 0.5,
     "min_thickness": 0.25,
     "thermal_gap": 0.3,
     "thermal_bridge": 0.5,
