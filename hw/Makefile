@@ -94,6 +94,7 @@ versions: ## Print tool versions and check the pinned ones
 	@printf "  atopile   %s\n" "$$($(ATO) --version 2>/dev/null)"
 	@printf "  kicad-cli %s\n" "$$([ -n "$(KICAD_CLI)" ] && $(KICAD_CLI) version || echo '(not installed)')"
 	@printf "  ngspice   %s\n" "$$([ -n "$(NGSPICE)" ] && $(NGSPICE) -v 2>/dev/null | sed -n 's/.*ngspice-\([0-9.]*\).*/\1/p' | head -1 || echo '(not installed)')"
+	@printf "  pcbnew    %s\n" "$$(python3 -c 'import pcbnew; print(pcbnew.GetBuildVersion())' 2>/dev/null || echo '(not importable)')"
 	@fail=0; \
 	ato_v=$$($(ATO) --version 2>/dev/null); \
 	if [ "$$ato_v" != "$(ATOPILE_VERSION)" ]; then \
@@ -105,6 +106,10 @@ versions: ## Print tool versions and check the pinned ones
 		case "$$kv" in $(KICAD_REQUIRED).*) ;; *) \
 			echo "ERROR: kicad-cli is $$kv, expected $(KICAD_REQUIRED).x — atopile writes KiCad 9 files" >&2; fail=1;; \
 		esac; fi; \
+	if ! python3 -c 'import pcbnew' >/dev/null 2>&1; then \
+		echo "ERROR: KiCad's pcbnew Python module is not importable. It ships in the" >&2; \
+		echo "       kicad package itself and is what fills copper pours; kicad-cli cannot." >&2; \
+		fail=1; fi; \
 	if [ -z "$(NGSPICE)" ]; then \
 		echo "ERROR: ngspice not found. Install ngspice $(NGSPICE_REQUIRED) (see README.md)" >&2; fail=1; \
 	else \
