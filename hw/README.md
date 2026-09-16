@@ -4,10 +4,10 @@ Boards designed as code: **atopile** (`.ato`) is the design source, **KiCad** ho
 
 The first board, `led12`, is a 12 V LED board with no processor. It exists to prove the pipeline end to end before the STM32H743 control board depends on it.
 
-**Status:** the board builds from source, is placed and routed, and passes
-KiCad DRC with nothing reported at any severity. Twenty-eight checks gate it and
-CI runs all of it, publishing renders, a 3D model and a fab package. No
-simulation yet.
+**Status:** the board builds from source, is placed and routed, passes KiCad DRC
+with nothing reported at any severity, and its analog behaviour is simulated.
+Twenty-eight design checks and nine simulated measurements gate it, and CI runs
+all of it, publishing renders, a 3D model and a fab package.
 
 ## Quick start
 
@@ -133,6 +133,40 @@ Filling needs KiCad's own `pcbnew` Python module, which ships inside the `kicad`
 package. And **silkscreen needs deliberate placement**: atopile puts each
 designator on top of the part it names, the fab clips silk that lands on a pad,
 and the board comes back with unlabelled parts.
+
+## Simulation
+
+`make sim` runs the ngspice decks in `led12/sim/` and checks every measurement
+against a band in `sim/limits.py`, each with a sentence saying why it is where
+it is. A band with no reason behind it is a number somebody widens the next time
+it fails.
+
+**The decks do not restate the design.** Where a deck needs a component value it
+writes `@power.out.voltage:max@` — an atopile instance path and which end of its
+resolved range to take — and the runner fills it in from the build's variable
+report. Changing a resistor in a part definition moves the simulation with it,
+because there is no second copy of the design to fall out of step.
+
+Several measurements deliberately restate what `hw/checks/` computes
+algebraically, so that a disagreement between the two methods fails rather than
+going unnoticed. The LED branch is the clearest case: the design check draws a
+straight line through the datasheet's forward-voltage band and gets 3.73 to
+5.07 mA; the simulation uses a diode that actually curves and gets 3.95 to
+5.01 mA. Two methods, one answer.
+
+The debounce deck exists because the algebra is easy to get wrong in a
+particular way. Pressing and releasing are not symmetric — pressing charges
+through the series resistor with the pulldown in parallel, releasing opens the
+circuit and leaves the capacitor to discharge through the pulldown alone — and a
+deck that models the button as a voltage source gets the release badly wrong,
+because the source pulls the gate down instead of letting go of it.
+
+Models live in `sim/models/`, and `SOURCE.md` there records where each came from
+and how far it can be trusted. The LED's is a fit to the one number its
+datasheet states legibly, not a vendor model, and that is written down.
+
+One trap worth knowing: **ngspice treats the first line of a deck as its title**,
+so a deck that starts with a component definition silently loses it.
 
 ## What is committed
 

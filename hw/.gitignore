@@ -21,3 +21,5 @@ __pycache__/
 # patch release last touched them. The design lives in the .ato sources and in
 # <board>/layout.py; these are output. See README.md, "What is committed".
 */elec/
+# Rendered simulation decks
+*/sim/.run/

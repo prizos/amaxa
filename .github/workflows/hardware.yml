@@ -82,6 +82,17 @@ jobs:
       - name: Design rule check
         run: make drc
 
+      # The decks take their values from the build, so a component change moves
+      # the simulation with it.
+      - name: Simulation
+        run: |
+          {
+            echo '### Simulation'
+            echo '```'
+            make sim
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Renders, 3D model and fab package
         run: make outputs
 

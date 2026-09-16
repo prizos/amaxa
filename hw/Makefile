@@ -6,6 +6,7 @@
 #   make layout      apply the board's placement and routing, then fill the plane
 #   make check       run the design checks against what the build produced
 #   make reproducible  build twice and check both runs describe the same board
+#   make sim         run the ngspice decks and check their measurements
 #   make outputs     renders, 3D model, gerbers and drill files into out/
 #   make help        list all targets
 #
@@ -57,7 +58,7 @@ DRU        := $(LAYOUT_DIR)/default.kicad_dru
 KICAD_CLI ?= $(shell command -v kicad-cli 2>/dev/null)
 NGSPICE   ?= $(shell command -v ngspice 2>/dev/null)
 
-.PHONY: help tools versions build layout rules check drc reproducible outputs clean distclean
+.PHONY: help tools versions build layout rules check drc reproducible sim outputs clean distclean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -176,6 +177,11 @@ drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 check: layout ## Run the design checks against what the build produced
 	@$(VENV)/bin/python -m pytest checks/ -q --board $(BOARD)
 
+# The decks take their component values from the build's variable report, so
+# there is no second copy of the design to fall out of step with the first.
+sim: build ## Run the ngspice decks and check their measurements
+	@python3 tools/simulate.py $(BOARD)
+
 OUT := out/$(BOARD)
 
 # Everything a person or a fab needs to look at. Renders and the 3D model are
@@ -203,7 +209,7 @@ outputs: drc ## Renders, 3D model, gerbers and drill files into out/
 	@ls -1 $(OUT) $(OUT)/fab | sed 's/^/    /'
 
 clean: ## Remove build outputs
-	rm -rf */build out
+	rm -rf */build */elec */sim/.run out
 
 distclean: clean ## Also remove the venv and downloaded tools
 	rm -rf $(VENV) $(TOOLS_DIR)
