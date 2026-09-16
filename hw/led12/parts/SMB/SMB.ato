@@ -29,5 +29,13 @@ component TvsSmbj12A from Diode:
     trait is_atomic_part<manufacturer="Brightking", partnumber="SMBJ12A/TR13", footprint="D_SMB.kicad_mod", symbol="Device:D_TVS">
     trait has_part_picked<manufacturer="Brightking", partno="SMBJ12A/TR13", supplier_partno="C111091", supplier_id="lcsc">
     assert reverse_working_voltage within 12V
+
+    # Not parameters of the standard Diode type, but the 12 V rail is designed
+    # around them, so they are declared here rather than written into a check.
+    v_breakdown_min: V
+    assert v_breakdown_min within 14.7V
+    v_clamp_max: V
+    assert v_clamp_max within 19.9V
+
     cathode ~ pin 1
     anode ~ pin 2

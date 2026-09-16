@@ -21,11 +21,11 @@ component _Res0805 from Resistor:
     unnamed[0] ~ pin 1
     unnamed[1] ~ pin 2
 
-component Res680 from _Res0805:
-    """680 R — LED series resistor."""
-    trait is_atomic_part<manufacturer="Yageo", partnumber="RC0805FR-07680RL", footprint="R_0805_2012Metric.kicad_mod", symbol="Device:R">
-    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-07680RL", supplier_partno="C114549", supplier_id="lcsc">
-    assert resistance within 680ohm +/- 1%
+component Res2k2 from _Res0805:
+    """2.2 k — LED series resistor. Sized for power, not brightness: see R0805.md."""
+    trait is_atomic_part<manufacturer="Yageo", partnumber="RC0805FR-072K2L", footprint="R_0805_2012Metric.kicad_mod", symbol="Device:R">
+    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-072K2L", supplier_partno="C114561", supplier_id="lcsc">
+    assert resistance within 2.2kohm +/- 1%
 
 component Res10k from _Res0805:
     """10 k — button series resistor, sets the debounce charge time."""

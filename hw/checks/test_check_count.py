@@ -9,7 +9,7 @@ When you add or remove a check, update EXPECTED_CHECKS below in the same commit
 as the change, and the diff will say so.
 """
 
-EXPECTED_CHECKS = 12
+EXPECTED_CHECKS = 24
 
 
 def test_expected_number_of_checks_ran(collected_check_count):

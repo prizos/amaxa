@@ -116,12 +116,13 @@ build: $(ATO) ## Turn .ato source into KiCad files for BOARD
 
 # --- verify -----------------------------------------------------------------
 
-check: ## Run the design checks against what the build produced
+# Depends on build so the checks can never pass against stale output.
+check: build ## Run the design checks against what the build produced
 	@$(VENV)/bin/python -m pytest checks/ -q --board $(BOARD)
 
 # Ignores KiCad object UUIDs, which atopile regenerates for the board outline
 # on every build. See tools/check_drift.py.
-drift: ## Fail if the committed board no longer matches its source
+drift: build ## Fail if the committed board no longer matches its source
 	@python3 tools/check_drift.py --all
 
 clean: ## Remove build outputs

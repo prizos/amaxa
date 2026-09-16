@@ -45,3 +45,4 @@ component NFetSwitch from _Sot23Fet:
     assert max_drain_source_voltage within 60V
     assert max_continuous_drain_current within 115mA
     assert gate_source_threshold_voltage within 1V to 2.5V
+    assert on_resistance within 7.5ohm

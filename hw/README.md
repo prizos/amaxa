@@ -4,7 +4,8 @@ Boards designed as code: **atopile** (`.ato`) is the design source, **KiCad** ho
 
 The first board, `led12`, is a 12 V LED board with no processor. It exists to prove the pipeline end to end before the STM32H743 control board depends on it.
 
-**Status:** M1 — toolchain pinned and working. No board yet.
+**Status:** the board builds from source, twelve checks gate it, and CI runs all
+of it. No layout yet — parts are placed but not positioned or routed.
 
 ## Quick start
 
@@ -47,10 +48,59 @@ That split means a machine that can't run atopile can still verify the design, a
 
 ```
 hw/
-├── Makefile                 front end: tools, versions, (build/check/sim to come)
+├── Makefile                 front end: tools, versions, build, check, drift
 ├── requirements/            atopile dependency lock
-└── led12/                   the example board (M3 onwards)
+├── checks/                  the design checks, as pytest
+├── tools/                   check_drift.py
+└── led12/
+    ├── ato.yaml             build targets
+    ├── src/led12.ato        the board
+    ├── parts/               one directory per footprint library
+    │   └── <LIB>/           footprint + <LIB>.ato + <LIB>.md review note
+    ├── elec/layout/         generated KiCad files — committed
+    └── build/               generated reports — not committed
 ```
+
+## The checks
+
+`make check` is where the real electrical reasoning lives, because atopile's own
+assertions cannot do it (see "What atopile's assertions actually check" below).
+It reads what the build produced — the variable report and the board file, which
+carries each part's number and every resolved parameter per instance — and never
+hard-codes a value that the design already states.
+
+**`test_build_gates.py`** turns problems atopile reports but tolerates into
+failures: a parameter resolved to `<empty>`, meaning two constraints on it cannot
+both hold; one supplier part number carrying two different parts (checked against
+the board, not the BOM, because the BOM merges those rows and hides it); a BOM
+line with no supplier code; a footprint with no designator; a designator used
+twice; a pad with no net.
+
+**`test_electrical.py`** checks the claims that relate two quantities, which is
+exactly what atopile cannot do: LED current across the supply range, series
+resistor dissipation against its rating, gate drive against the FET's threshold,
+debounce time constants, fuse headroom over worst-case load, and that nothing on
+the protected rail is rated below what the TVS lets through.
+
+**`test_topology.py`** verifies the shape the electrical checks assume: that the
+fuse really is first in the input path, that nothing bypasses the reverse
+polarity FET, that each LED has its own resistor, that every rail has a test
+point, and that the 12 V net reaches exactly the parts it should.
+
+**`test_parts.py`** keeps the library honest: every part has a review note, every
+declared footprint file exists, no note still describes a part that was replaced.
+
+**`test_check_count.py`** is the guard on the guards — removing a check fails the
+suite until the expected count is updated in the same commit.
+
+Each gate has been made to fail on purpose once. A gate that has never failed is
+not a gate. Two of them found real defects the first time they ran: the LED
+series resistor was dissipating 104 % of its rated power at nominal, and the
+regulator is rated below the TVS clamping voltage.
+
+`make drift` is separate: it fails if the committed KiCad files are no longer
+what the source produces. It ignores KiCad object UUIDs, which atopile
+regenerates for the board outline on every build.
 
 ## Verified findings
 
@@ -105,5 +155,10 @@ Two consequences we rely on:
 | `make help` | List targets |
 | `make tools` | Fetch pinned uv and Python, build the atopile venv |
 | `make versions` | Print every tool version and fail if a pinned one is wrong |
+| `make build` | Turn `.ato` source into KiCad files |
+| `make check` | Run the design checks against what the build produced |
+| `make drift` | Fail if the committed board no longer matches its source |
 | `make clean` | Remove build outputs |
 | `make distclean` | Also remove the venv and downloaded tools |
+
+`BOARD=<name>` selects the board; it defaults to `led12`.

@@ -170,3 +170,120 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture(scope="session")
 def collected_check_count(pytestconfig) -> int:
     return getattr(pytestconfig, "collected_check_count", 0)
+
+
+# --- reading atopile's resolved specs ----------------------------------------
+
+_PREFIX = {
+    "p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "μ": 1e-6, "m": 1e-3,
+    "": 1.0, "k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9,
+}
+_UNITS = ("Ω", "V", "A", "W", "F", "H", "s", "cd", "Hz")
+_NUMBER = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
+
+
+class UnconstrainedSpec(Exception):
+    """The parameter was never given a value, so nothing can be computed from it."""
+
+
+def _magnitude(text: str, fallback_suffix: str = "") -> float:
+    """Turn `680Ω`, `125mW`, `2.4` (with a fallback suffix) into a number in SI units."""
+    text = text.strip()
+    match = re.fullmatch(rf"({_NUMBER})\s*(.*)", text)
+    if not match:
+        raise ValueError(f"cannot read a number from {text!r}")
+    value, suffix = float(match.group(1)), match.group(2).strip() or fallback_suffix
+
+    for unit in _UNITS:
+        if suffix.endswith(unit):
+            prefix = suffix[: -len(unit)]
+            if prefix in _PREFIX:
+                return value * _PREFIX[prefix]
+            break
+    if suffix in _PREFIX:  # bare prefix, no unit
+        return value * _PREFIX[suffix]
+    raise ValueError(f"unknown unit in {text!r}")
+
+
+def _suffix_of(text: str) -> str:
+    match = re.fullmatch(rf"{_NUMBER}\s*(.*)", text.strip())
+    return match.group(1).strip() if match else ""
+
+
+def parse_spec(spec: str | None) -> tuple[float, float]:
+    """
+    An atopile spec string as an inclusive (low, high) range in SI units.
+
+    Handles the four shapes it emits: a single value `125mW`, a tolerance
+    `680Ω ±1%`, a range `2-2.4V` or `90-110nF`, and the unconstrained `{ℝ+}A`.
+    Raises UnconstrainedSpec for the last, because a check that silently treats
+    "never specified" as "zero to infinity" passes for the wrong reason.
+    """
+    if spec is None or "ℝ" in spec or spec == "<empty>":
+        raise UnconstrainedSpec(f"no usable value: {spec!r}")
+
+    text = spec.strip()
+
+    tolerance = re.fullmatch(rf"(.+?)\s*±\s*({_NUMBER})\s*%", text)
+    if tolerance:
+        centre = _magnitude(tolerance.group(1))
+        fraction = float(tolerance.group(2)) / 100.0
+        return centre * (1 - fraction), centre * (1 + fraction)
+
+    # A range: the unit may appear only on the upper bound, as in `2-2.4V`.
+    range_match = re.fullmatch(rf"({_NUMBER}\s*\S*?)\s*-\s*({_NUMBER}\s*\S*)", text)
+    if range_match:
+        low_text, high_text = range_match.group(1), range_match.group(2)
+        high = _magnitude(high_text)
+        low = _magnitude(low_text, fallback_suffix=_suffix_of(high_text))
+        return low, high
+
+    single = _magnitude(text)
+    return single, single
+
+
+@pytest.fixture(scope="session")
+def spec(variables):
+    """
+    Look up one parameter's resolved range: `spec("leds[0].resistor", "resistance")`.
+
+    Fails the test rather than returning something made up if the parameter is
+    missing or was never constrained.
+    """
+    index = {(v["path"], v["name"]): v["spec"] for v in variables}
+
+    def lookup(path: str, name: str) -> tuple[float, float]:
+        if (path, name) not in index:
+            pytest.fail(f"No parameter {path}.{name} in the variable report")
+        try:
+            return parse_spec(index[(path, name)])
+        except UnconstrainedSpec as exc:
+            pytest.fail(
+                f"{path}.{name} cannot be checked: {exc}. "
+                "Assert it in the part definition, from the datasheet."
+            )
+
+    return lookup
+
+
+@pytest.fixture(scope="session")
+def net_members(footprints) -> dict[str, set[tuple[str, str]]]:
+    """
+    Net name -> {(source address, pad)}.
+
+    Addresses like `power.fuse` rather than designators like `F1`, because
+    designators are assigned by the build and shift when a part is added.
+    """
+    out: dict[str, set[tuple[str, str]]] = {}
+    for fp in footprints:
+        address = fp["properties"].get("atopile_address", fp["designator"])
+        for pad, net in fp["pads"].items():
+            if net:
+                out.setdefault(net, set()).add((address, pad))
+    return out
+
+
+@pytest.fixture(scope="session")
+def net_parts(net_members) -> dict[str, set[str]]:
+    """Net name -> the set of source addresses it touches, ignoring which pad."""
+    return {net: {addr for addr, _ in members} for net, members in net_members.items()}

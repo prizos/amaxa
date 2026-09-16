@@ -2441,7 +2441,7 @@
 			(hide yes)
 			(uuid "ba5779cd-63d8-4446-9afd-6eaf4642524b")
 		)
-		(property "on_resistance" "Ron ℝ+Ω"
+		(property "on_resistance" "Ron 7.5Ω"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -2778,19 +2778,19 @@
 				)
 			)
 		)
-		(property "LCSC" "C6186"
+		(property "LCSC" "C6283798"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "7660792d-75c1-4349-8622-eb814642524b")
 		)
-		(property "Manufacturer" "Advanced Monolithic Systems"
+		(property "Manufacturer" "Gainsil"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "405b57f0-1895-40c7-bfca-320b4642524b")
 		)
-		(property "Partnumber" "AMS1117-3.3"
+		(property "Partnumber" "GS2401C-33CTR3"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -2802,7 +2802,7 @@
 			(hide yes)
 			(uuid "a51bcc76-5413-4fe6-8510-dec64642524b")
 		)
-		(property "lcsc_id" "C6186"
+		(property "lcsc_id" "C6283798"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3013,7 +3013,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "100nF ±10%"
+		(property "Value" "1µF ±10%"
 			(at 0 1.68 0)
 			(layer "F.Fab")
 			(effects
@@ -3023,25 +3023,25 @@
 				)
 			)
 		)
-		(property "LCSC" "C49678"
+		(property "LCSC" "C28323"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "54d6f881-9234-422b-b0e9-fc8d4642524b")
 		)
-		(property "Manufacturer" "YAGEO"
+		(property "Manufacturer" "Samsung"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "4e5e9c9f-2656-4d26-901a-eb724642524b")
 		)
-		(property "Partnumber" "CC0805KRX7R9BB104"
+		(property "Partnumber" "CL21B105KBFNNNE"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "1f27181a-f08b-4d06-b612-0e244642524b")
 		)
-		(property "capacitance" "100nF ±10%"
+		(property "capacitance" "1µF ±10%"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3059,7 +3059,7 @@
 			(hide yes)
 			(uuid "dd4c988b-f930-4965-9b1c-397d4642524b")
 		)
-		(property "lcsc_id" "C49678"
+		(property "lcsc_id" "C28323"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3424,7 +3424,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "680Ω ±1%"
+		(property "Value" "2.2kΩ ±1%"
 			(at 0 1.65 0)
 			(layer "F.Fab")
 			(effects
@@ -3434,7 +3434,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C114549"
+		(property "LCSC" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3446,13 +3446,13 @@
 			(hide yes)
 			(uuid "308e9e3a-595d-4288-96ca-d8054642524b")
 		)
-		(property "Partnumber" "RC0805FR-07680RL"
+		(property "Partnumber" "RC0805FR-072K2L"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "323b552b-b89b-4f7d-81e6-a4324642524b")
 		)
-		(property "resistance" "680Ω ±1%"
+		(property "resistance" "2.2kΩ ±1%"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3476,7 +3476,7 @@
 			(hide yes)
 			(uuid "60e5f163-b19a-405f-8aa4-c45d4642524b")
 		)
-		(property "lcsc_id" "C114549"
+		(property "lcsc_id" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3732,7 +3732,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "680Ω ±1%"
+		(property "Value" "2.2kΩ ±1%"
 			(at 0 1.65 0)
 			(layer "F.Fab")
 			(effects
@@ -3742,7 +3742,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C114549"
+		(property "LCSC" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3754,13 +3754,13 @@
 			(hide yes)
 			(uuid "a27ff634-db99-4194-a25b-c6b04642524b")
 		)
-		(property "Partnumber" "RC0805FR-07680RL"
+		(property "Partnumber" "RC0805FR-072K2L"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "6ecc59a2-bcc7-4b74-8672-cb6a4642524b")
 		)
-		(property "resistance" "680Ω ±1%"
+		(property "resistance" "2.2kΩ ±1%"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3784,7 +3784,7 @@
 			(hide yes)
 			(uuid "fb2286e8-2471-47cb-9633-65964642524b")
 		)
-		(property "lcsc_id" "C114549"
+		(property "lcsc_id" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4040,7 +4040,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "680Ω ±1%"
+		(property "Value" "2.2kΩ ±1%"
 			(at 0 1.65 0)
 			(layer "F.Fab")
 			(effects
@@ -4050,7 +4050,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C114549"
+		(property "LCSC" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4062,13 +4062,13 @@
 			(hide yes)
 			(uuid "46fc0283-d76b-4526-99d1-ac254642524b")
 		)
-		(property "Partnumber" "RC0805FR-07680RL"
+		(property "Partnumber" "RC0805FR-072K2L"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "69011997-5c2e-4eb4-be06-750f4642524b")
 		)
-		(property "resistance" "680Ω ±1%"
+		(property "resistance" "2.2kΩ ±1%"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4092,7 +4092,7 @@
 			(hide yes)
 			(uuid "919115a5-3039-41e2-b7c1-1e654642524b")
 		)
-		(property "lcsc_id" "C114549"
+		(property "lcsc_id" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4348,7 +4348,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "680Ω ±1%"
+		(property "Value" "2.2kΩ ±1%"
 			(at 0 1.65 0)
 			(layer "F.Fab")
 			(effects
@@ -4358,7 +4358,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C114549"
+		(property "LCSC" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4370,13 +4370,13 @@
 			(hide yes)
 			(uuid "921a5da9-254f-4033-aa48-ebee4642524b")
 		)
-		(property "Partnumber" "RC0805FR-07680RL"
+		(property "Partnumber" "RC0805FR-072K2L"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "d472cb9a-1d96-43ab-b24f-02164642524b")
 		)
-		(property "resistance" "680Ω ±1%"
+		(property "resistance" "2.2kΩ ±1%"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4400,7 +4400,7 @@
 			(hide yes)
 			(uuid "f6baedd6-fec8-417a-88d9-9a184642524b")
 		)
-		(property "lcsc_id" "C114549"
+		(property "lcsc_id" "C114561"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -5251,7 +5251,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "cacca67d-5e18-4bc7-885f-80b34642524b")
+		(uuid "9358a481-a516-4814-8f8f-48d74642524b")
 	)
 	(gr_line
 		(start 25 -18)
@@ -5261,7 +5261,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "6feb0a7f-9a4e-4834-866d-b2e54642524b")
+		(uuid "0148c126-5d32-42ba-ae69-60934642524b")
 	)
 	(gr_line
 		(start 23 20)
@@ -5271,7 +5271,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "60798530-884d-4619-aaad-4dd54642524b")
+		(uuid "ad9a42a1-2225-4b57-a7d2-89004642524b")
 	)
 	(gr_line
 		(start -25 18)
@@ -5281,7 +5281,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "f20adbf7-9ec7-4b9c-a451-ab6c4642524b")
+		(uuid "388ea902-7512-41de-a2ee-df734642524b")
 	)
 	(gr_arc
 		(start 23 -20)
@@ -5292,7 +5292,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "86e2c7a3-ed90-45dd-89ff-68134642524b")
+		(uuid "ea5f0278-28d9-447e-8d0b-d5494642524b")
 	)
 	(gr_arc
 		(start 25 18)
@@ -5303,7 +5303,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "5a66994f-2a9d-4d31-81c3-c4384642524b")
+		(uuid "4d23d17b-42e2-441c-a617-0c6c4642524b")
 	)
 	(gr_arc
 		(start -23 20)
@@ -5314,7 +5314,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "e53ba7ed-0f91-49c7-bae6-c0434642524b")
+		(uuid "4408aee4-da6b-4aab-a78e-b45f4642524b")
 	)
 	(gr_arc
 		(start -25 -18)
@@ -5325,6 +5325,6 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "791219dc-ce98-4766-b6a2-ea7a4642524b")
+		(uuid "c3211b42-c931-470e-a514-65f84642524b")
 	)
 )
