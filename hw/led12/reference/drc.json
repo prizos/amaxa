@@ -1,7 +1,7 @@
 {
     "$schema": "https://schemas.kicad.org/drc.v1.json",
     "coordinate_units": "mm",
-    "date": "2026-09-16T14:36:38+0100",
+    "date": "2026-09-16T14:41:03+0100",
     "included_severities": [
         "error"
     ],

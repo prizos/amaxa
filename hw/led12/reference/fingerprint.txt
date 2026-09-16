@@ -125,4 +125,4 @@
   (8.48, -9.5) size 0.6 drill 0.3
 
 # zones (1)
-  GND on B.Cu: 446 points
+  GND on B.Cu: 396 points
