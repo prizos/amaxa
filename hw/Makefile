@@ -2,6 +2,9 @@
 #
 #   make tools       fetch pinned uv + Python, build the atopile venv
 #   make versions    print every tool version and check the pinned ones
+#   make build       turn .ato source into KiCad files
+#   make check       run the design checks against what the build produced
+#   make drift       fail if the committed board no longer matches its source
 #   make help        list all targets
 #
 # Two stages, deliberately separated:
@@ -49,7 +52,7 @@ export UV_PYTHON_INSTALL_DIR := $(abspath $(TOOLS_DIR)/pythons)
 KICAD_CLI ?= $(shell command -v kicad-cli 2>/dev/null)
 NGSPICE   ?= $(shell command -v ngspice 2>/dev/null)
 
-.PHONY: help tools versions clean distclean
+.PHONY: help tools versions build check drift clean distclean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -105,6 +108,21 @@ versions: ## Print tool versions and check the pinned ones
 			echo "WARNING: ngspice is $$nv, pinned $(NGSPICE_REQUIRED); simulation numbers may differ" >&2; fi; \
 	fi; \
 	exit $$fail
+
+# --- generate ---------------------------------------------------------------
+
+build: $(ATO) ## Turn .ato source into KiCad files for BOARD
+	@cd $(BOARD) && ../$(ATO) build
+
+# --- verify -----------------------------------------------------------------
+
+check: ## Run the design checks against what the build produced
+	@$(VENV)/bin/python -m pytest checks/ -q --board $(BOARD)
+
+# Ignores KiCad object UUIDs, which atopile regenerates for the board outline
+# on every build. See tools/check_drift.py.
+drift: ## Fail if the committed board no longer matches its source
+	@python3 tools/check_drift.py --all
 
 clean: ## Remove build outputs
 	rm -rf */build out
