@@ -15,9 +15,16 @@ import is_atomic_part
 import has_part_picked
 
 component Fuse1A from Fuse:
-    """1 A slow-blow fuse, 1206."""
-    trait is_atomic_part<manufacturer="Littelfuse", partnumber="0466001.NR", footprint="Fuse_1206_3216Metric.kicad_mod", symbol="Device:Fuse">
-    trait has_part_picked<manufacturer="Littelfuse", partno="0466001.NR", supplier_partno="C881879", supplier_id="lcsc">
+    """
+    1 A slow-blow fuse, 1206. Littelfuse 468 series.
+
+    Not the 0466001.NR first drawn: the 466 series is fast-acting despite the
+    part being chosen for its slow-blow behaviour, and that variant is not
+    stocked. The 468 is the Slo-Blo part, I2t 0.127 A2s against 0.0423 for the
+    466, so it rides out the inrush into the bulk capacitor.
+    """
+    trait is_atomic_part<manufacturer="Littelfuse", partnumber="0468001.NRHF", footprint="Fuse_1206_3216Metric.kicad_mod", symbol="Device:Fuse">
+    trait has_part_picked<manufacturer="Littelfuse", partno="0468001.NRHF", supplier_partno="C45157", supplier_id="lcsc">
     assert trip_current within 1A
     unnamed[0] ~ pin 1
     unnamed[1] ~ pin 2

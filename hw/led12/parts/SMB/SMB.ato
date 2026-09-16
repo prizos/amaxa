@@ -19,10 +19,15 @@ component TvsSmbj12A from Diode:
     SMBJ12A unidirectional TVS, 12 V standoff. Pad 1 cathode, pad 2 anode.
 
     Breakdown and clamping voltage are not parameters of the standard Diode
-    type, so they live in SMB.md and are checked in hw/checks/ instead.
+    type, so they live in SMB.md and are checked in hw/checks/ instead:
+    14.7 V breakdown, 19.9 V clamping at 30.2 A, 600 W for 10/1000 us.
+
+    Brightking rather than Littelfuse: LCSC's Littelfuse SMBJ12A listing
+    carries SMBJ13A parameters (13 V standoff, 21.5 V clamp), so either the
+    listing or the stock is the wrong part.
     """
-    trait is_atomic_part<manufacturer="Littelfuse", partnumber="SMBJ12A", footprint="D_SMB.kicad_mod", symbol="Device:D_TVS">
-    trait has_part_picked<manufacturer="Littelfuse", partno="SMBJ12A", supplier_partno="C908463", supplier_id="lcsc">
+    trait is_atomic_part<manufacturer="Brightking", partnumber="SMBJ12A/TR13", footprint="D_SMB.kicad_mod", symbol="Device:D_TVS">
+    trait has_part_picked<manufacturer="Brightking", partno="SMBJ12A/TR13", supplier_partno="C111091", supplier_id="lcsc">
     assert reverse_working_voltage within 12V
     cathode ~ pin 1
     anode ~ pin 2

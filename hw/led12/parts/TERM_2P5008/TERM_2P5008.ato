@@ -15,9 +15,19 @@ import has_designator_prefix
 import has_part_picked
 
 component ScrewTerm2:
-    """2-pole 5.08 mm screw terminal: the 12 V input."""
-    trait is_atomic_part<manufacturer="Phoenix Contact", partnumber="1715721", footprint="TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal.kicad_mod", symbol="Connector:Screw_Terminal_01x02">
+    """
+    2-pole 5.08 mm screw terminal: the 12 V input.
+
+    The footprint is KiCad's Phoenix MKDS outline, but the part bought is the
+    Kangnex WJ500V, which drops into it exactly: pads at +/-2.54 mm and a
+    1.30 mm drill, both identical to the footprint. The genuine Phoenix part
+    (LCSC C480516) also fits and costs about four times as much.
+
+    Do not substitute the popular KF128-5.08-2P: its leads need a 1.60 mm
+    drill and will not fit these holes.
+    """
+    trait is_atomic_part<manufacturer="Ningbo Kangnex", partnumber="WJ500V-5.08-2P", footprint="TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal.kicad_mod", symbol="Connector:Screw_Terminal_01x02">
     trait has_designator_prefix<prefix="J">
-    trait has_part_picked<manufacturer="Phoenix Contact", partno="1715721", supplier_partno="C471389", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="Ningbo Kangnex", partno="WJ500V-5.08-2P", supplier_partno="C8465", supplier_id="lcsc">
     signal p1 ~ pin 1
     signal p2 ~ pin 2

@@ -15,9 +15,19 @@ import has_designator_prefix
 import has_part_picked
 
 component Button6mm:
-    """6 mm through-hole tactile switch. Pins 1 and 2 are one pole pair."""
-    trait is_atomic_part<manufacturer="Alps", partnumber="SKHHAKA010", footprint="SW_PUSH_6mm.kicad_mod", symbol="Switch:SW_Push">
+    """
+    6 mm x 6 mm through-hole tactile switch, 4 leads in two poles.
+
+    Pin 1 and pin 2 are the two poles, which is what the circuit switches
+    between. Note the geometry, because it is the opposite of the obvious
+    guess: the leads 6.5 mm apart are internally connected to each other, and
+    the two independent poles are the leads 4.5 mm apart. KiCad numbers the
+    four holes 1, 1, 2, 2 accordingly.
+
+    The Alps SKHHAKA010 first drawn is real (LCSC C139754) but barely stocked.
+    """
+    trait is_atomic_part<manufacturer="Korean Hroparts Elec", partnumber="K2-1102DP-C4SW-04", footprint="SW_PUSH_6mm.kicad_mod", symbol="Switch:SW_Push">
     trait has_designator_prefix<prefix="SW">
-    trait has_part_picked<manufacturer="Alps", partno="SKHHAKA010", supplier_partno="C115357", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="Korean Hroparts Elec", partno="K2-1102DP-C4SW-04", supplier_partno="C110153", supplier_id="lcsc">
     signal p1 ~ pin 1
     signal p2 ~ pin 2

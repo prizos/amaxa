@@ -21,17 +21,27 @@ component _Sot23Fet from MOSFET:
     drain ~ pin 3
 
 component PFetRpp from _Sot23Fet:
-    """Si2301 P-channel, -20 V. Reverse-polarity pass element on the 12 V input."""
-    trait is_atomic_part<manufacturer="Vishay", partnumber="SI2301CDS-T1-GE3", footprint="SOT-23.kicad_mod", symbol="Device:Q_PMOS_GSD">
-    trait has_part_picked<manufacturer="Vishay", partno="SI2301CDS-T1-GE3", supplier_partno="C10487", supplier_id="lcsc">
-    assert max_drain_source_voltage within 20V
-    assert max_continuous_drain_current within 2.3A
-    assert on_resistance within 100mohm
+    """
+    AO3407A P-channel, -30 V. Reverse-polarity pass element on the 12 V input.
+
+    Not the Si2301 first drawn. In this circuit the gate sits at ground while
+    the source is at the input, so V_gs equals the full rail: -13.2 V at the
+    top of the range. The Si2301 is rated +/-8 V on the gate, so it would have
+    been over-stressed in normal operation, not just during a surge. Its -20 V
+    drain rating also sat below the TVS clamping voltage of 19.9 V.
+
+    The AO3407A clears both: +/-20 V on the gate and -30 V drain to source.
+    """
+    trait is_atomic_part<manufacturer="Alpha & Omega Semiconductor", partnumber="AO3407A", footprint="SOT-23.kicad_mod", symbol="Device:Q_PMOS_GSD">
+    trait has_part_picked<manufacturer="Alpha & Omega Semiconductor", partno="AO3407A", supplier_partno="C15155", supplier_id="lcsc">
+    assert max_drain_source_voltage within 30V
+    assert max_continuous_drain_current within 4.3A
+    assert on_resistance within 48mohm
 
 component NFetSwitch from _Sot23Fet:
     """2N7002 N-channel, 60 V, 115 mA. Low-side switch for the LED return."""
     trait is_atomic_part<manufacturer="onsemi", partnumber="2N7002LT1G", footprint="SOT-23.kicad_mod", symbol="Device:Q_NMOS_GSD">
-    trait has_part_picked<manufacturer="onsemi", partno="2N7002LT1G", supplier_partno="C8545", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="onsemi", partno="2N7002LT1G", supplier_partno="C16338", supplier_id="lcsc">
     assert max_drain_source_voltage within 60V
     assert max_continuous_drain_current within 115mA
     assert gate_source_threshold_voltage within 1V to 2.5V

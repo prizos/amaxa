@@ -21,8 +21,8 @@ component _Cap0805 from Capacitor:
 
 component Cap100n from _Cap0805:
     """100 nF 50 V X7R — high-frequency decoupling."""
-    trait is_atomic_part<manufacturer="Samsung", partnumber="CL21B104KBCNNNC", footprint="C_0805_2012Metric.kicad_mod", symbol="Device:C">
-    trait has_part_picked<manufacturer="Samsung", partno="CL21B104KBCNNNC", supplier_partno="C49678", supplier_id="lcsc">
+    trait is_atomic_part<manufacturer="YAGEO", partnumber="CC0805KRX7R9BB104", footprint="C_0805_2012Metric.kicad_mod", symbol="Device:C">
+    trait has_part_picked<manufacturer="YAGEO", partno="CC0805KRX7R9BB104", supplier_partno="C49678", supplier_id="lcsc">
     assert capacitance within 100nF +/- 10%
     assert max_voltage within 50V
 
@@ -36,6 +36,6 @@ component Cap1u from _Cap0805:
 component Cap10u from _Cap0805:
     """10 uF 25 V X5R — regulator output capacitor."""
     trait is_atomic_part<manufacturer="Samsung", partnumber="CL21A106KAYNNNE", footprint="C_0805_2012Metric.kicad_mod", symbol="Device:C">
-    trait has_part_picked<manufacturer="Samsung", partno="CL21A106KAYNNNE", supplier_partno="C96446", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="Samsung", partno="CL21A106KAYNNNE", supplier_partno="C15850", supplier_id="lcsc">
     assert capacitance within 10uF +/- 20%
     assert max_voltage within 25V

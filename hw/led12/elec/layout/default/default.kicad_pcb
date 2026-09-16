@@ -141,19 +141,19 @@
 				)
 			)
 		)
-		(property "LCSC" "C471389"
+		(property "LCSC" "C8465"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "d1ec1b42-aa31-4981-becb-e8f54642524b")
 		)
-		(property "Manufacturer" "Phoenix Contact"
+		(property "Manufacturer" "Ningbo Kangnex"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "ea8294dd-7edc-4cc3-b875-5c354642524b")
 		)
-		(property "Partnumber" "1715721"
+		(property "Partnumber" "WJ500V-5.08-2P"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -165,7 +165,7 @@
 			(hide yes)
 			(uuid "27bec91d-d3bd-403d-92aa-9a1c4642524b")
 		)
-		(property "lcsc_id" "C471389"
+		(property "lcsc_id" "C8465"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -450,7 +450,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C881879"
+		(property "LCSC" "C45157"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -462,7 +462,7 @@
 			(hide yes)
 			(uuid "937a1132-37ce-499e-9301-4aee4642524b")
 		)
-		(property "Partnumber" "0466001.NR"
+		(property "Partnumber" "0468001.NRHF"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -480,7 +480,7 @@
 			(hide yes)
 			(uuid "dd040731-2760-49e2-bdbf-df994642524b")
 		)
-		(property "lcsc_id" "C881879"
+		(property "lcsc_id" "C45157"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -579,19 +579,19 @@
 				)
 			)
 		)
-		(property "LCSC" "C10487"
+		(property "LCSC" "C15155"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "b6191ffe-14c0-4e1d-b34f-dca64642524b")
 		)
-		(property "Manufacturer" "Vishay"
+		(property "Manufacturer" "Alpha & Omega Semiconductor"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "d7d28154-4ebd-4d3e-9f7e-0a4d4642524b")
 		)
-		(property "Partnumber" "SI2301CDS-T1-GE3"
+		(property "Partnumber" "AO3407A"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -603,19 +603,19 @@
 			(hide yes)
 			(uuid "1b40eb20-e817-459a-a0d4-c8e94642524b")
 		)
-		(property "max_drain_source_voltage" "Vds max 20V"
+		(property "max_drain_source_voltage" "Vds max 30V"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "caa50de0-92ea-41d3-8778-03b54642524b")
 		)
-		(property "max_continuous_drain_current" "Id max 2.3A"
+		(property "max_continuous_drain_current" "Id max 4.3A"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "97eed097-9fe6-4d63-9c02-cf824642524b")
 		)
-		(property "on_resistance" "Ron 100mΩ"
+		(property "on_resistance" "Ron 48mΩ"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -627,7 +627,7 @@
 			(hide yes)
 			(uuid "f2f3cd36-028c-42f6-9ceb-7ab64642524b")
 		)
-		(property "lcsc_id" "C10487"
+		(property "lcsc_id" "C15155"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -924,7 +924,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17407"
+		(property "LCSC" "C96346"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -966,7 +966,7 @@
 			(hide yes)
 			(uuid "3487171f-86c1-4a72-af3c-5abe4642524b")
 		)
-		(property "lcsc_id" "C17407"
+		(property "lcsc_id" "C96346"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1093,19 +1093,19 @@
 				)
 			)
 		)
-		(property "LCSC" "C908463"
+		(property "LCSC" "C111091"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "8e00953f-0318-445b-8d24-79094642524b")
 		)
-		(property "Manufacturer" "Littelfuse"
+		(property "Manufacturer" "Brightking"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "f514815e-82ea-417d-b352-02f74642524b")
 		)
-		(property "Partnumber" "SMBJ12A"
+		(property "Partnumber" "SMBJ12A/TR13"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1129,7 +1129,7 @@
 			(hide yes)
 			(uuid "16ac5b5e-2c5f-4d57-bf91-6cc84642524b")
 		)
-		(property "lcsc_id" "C908463"
+		(property "lcsc_id" "C111091"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1352,7 +1352,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "100µF ±20%"
+		(property "Value" "47µF ±20%"
 			(at 0 2.3 0)
 			(layer "F.Fab")
 			(effects
@@ -1362,25 +1362,25 @@
 				)
 			)
 		)
-		(property "LCSC" "C59461"
+		(property "LCSC" "C7432791"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "63ea4513-a895-4c62-8414-25774642524b")
 		)
-		(property "Manufacturer" "Samsung"
+		(property "Manufacturer" "Chinocera"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "3356b742-95e2-43d5-a9ac-09df4642524b")
 		)
-		(property "Partnumber" "CL32A107MQVNNNE"
+		(property "Partnumber" "HGC1210R5476M250NSVK"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "f4df4009-003c-487e-bfe3-633b4642524b")
 		)
-		(property "capacitance" "100µF ±20%"
+		(property "capacitance" "47µF ±20%"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1398,7 +1398,7 @@
 			(hide yes)
 			(uuid "c3c1c875-4926-40a5-86c0-a8564642524b")
 		)
-		(property "lcsc_id" "C59461"
+		(property "lcsc_id" "C7432791"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1503,13 +1503,13 @@
 			(hide yes)
 			(uuid "179abbe7-0fc0-4b64-a0fb-bc604642524b")
 		)
-		(property "Manufacturer" "Samsung"
+		(property "Manufacturer" "YAGEO"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "e9d5260a-5f50-498a-bd34-b8ca4642524b")
 		)
-		(property "Partnumber" "CL21B104KBCNNNC"
+		(property "Partnumber" "CC0805KRX7R9BB104"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1660,19 +1660,19 @@
 				)
 			)
 		)
-		(property "LCSC" "C115357"
+		(property "LCSC" "C110153"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "0f0a485b-41b3-458d-a2f8-a7d74642524b")
 		)
-		(property "Manufacturer" "Alps"
+		(property "Manufacturer" "Korean Hroparts Elec"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "f2a1c40f-da15-48f3-b85e-fd0d4642524b")
 		)
-		(property "Partnumber" "SKHHAKA010"
+		(property "Partnumber" "K2-1102DP-C4SW-04"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1684,7 +1684,7 @@
 			(hide yes)
 			(uuid "b3ce56f9-59a8-42b1-999b-11144642524b")
 		)
-		(property "lcsc_id" "C115357"
+		(property "lcsc_id" "C110153"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -1988,7 +1988,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17414"
+		(property "LCSC" "C84376"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -2030,7 +2030,7 @@
 			(hide yes)
 			(uuid "ae9a1269-07e3-452a-8799-fd964642524b")
 		)
-		(property "lcsc_id" "C17414"
+		(property "lcsc_id" "C84376"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -2129,7 +2129,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17407"
+		(property "LCSC" "C96346"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -2171,7 +2171,7 @@
 			(hide yes)
 			(uuid "b2375451-7498-4d5e-a5ae-7d184642524b")
 		)
-		(property "lcsc_id" "C17407"
+		(property "lcsc_id" "C96346"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -2405,7 +2405,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C8545"
+		(property "LCSC" "C16338"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -2453,7 +2453,7 @@
 			(hide yes)
 			(uuid "29b4dc38-1467-4f38-8c23-4e6d4642524b")
 		)
-		(property "lcsc_id" "C8545"
+		(property "lcsc_id" "C16338"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3029,13 +3029,13 @@
 			(hide yes)
 			(uuid "54d6f881-9234-422b-b0e9-fc8d4642524b")
 		)
-		(property "Manufacturer" "Samsung"
+		(property "Manufacturer" "YAGEO"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
 			(uuid "4e5e9c9f-2656-4d26-901a-eb724642524b")
 		)
-		(property "Partnumber" "CL21B104KBCNNNC"
+		(property "Partnumber" "CC0805KRX7R9BB104"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3158,7 +3158,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C96446"
+		(property "LCSC" "C15850"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3194,7 +3194,7 @@
 			(hide yes)
 			(uuid "c62f980a-ccdd-40b6-9809-23f34642524b")
 		)
-		(property "lcsc_id" "C96446"
+		(property "lcsc_id" "C15850"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3293,7 +3293,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17568"
+		(property "LCSC" "C114531"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3335,7 +3335,7 @@
 			(hide yes)
 			(uuid "55269835-4d63-4a52-b61d-4cce4642524b")
 		)
-		(property "lcsc_id" "C17568"
+		(property "lcsc_id" "C114531"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3434,7 +3434,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17673"
+		(property "LCSC" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3476,7 +3476,7 @@
 			(hide yes)
 			(uuid "60e5f163-b19a-405f-8aa4-c45d4642524b")
 		)
-		(property "lcsc_id" "C17673"
+		(property "lcsc_id" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3575,7 +3575,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C72038"
+		(property "LCSC" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3587,7 +3587,7 @@
 			(hide yes)
 			(uuid "055e396d-ca9e-405c-8f33-cb5f4642524b")
 		)
-		(property "Partnumber" "19-217/R6C-AL1M2VY/3T"
+		(property "Partnumber" "17-21SURC/S530-A3/4T"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3599,7 +3599,7 @@
 			(hide yes)
 			(uuid "ac6d519b-39f7-410e-9cf1-27ee4642524b")
 		)
-		(property "lcsc_id" "C72038"
+		(property "lcsc_id" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3742,7 +3742,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17673"
+		(property "LCSC" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3784,7 +3784,7 @@
 			(hide yes)
 			(uuid "fb2286e8-2471-47cb-9633-65964642524b")
 		)
-		(property "lcsc_id" "C17673"
+		(property "lcsc_id" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3883,7 +3883,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C72038"
+		(property "LCSC" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3895,7 +3895,7 @@
 			(hide yes)
 			(uuid "dd70a4a6-a973-42fb-b713-f1104642524b")
 		)
-		(property "Partnumber" "19-217/R6C-AL1M2VY/3T"
+		(property "Partnumber" "17-21SURC/S530-A3/4T"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -3907,7 +3907,7 @@
 			(hide yes)
 			(uuid "8a4621fa-715c-4a52-ad16-ad7d4642524b")
 		)
-		(property "lcsc_id" "C72038"
+		(property "lcsc_id" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4050,7 +4050,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17673"
+		(property "LCSC" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4092,7 +4092,7 @@
 			(hide yes)
 			(uuid "919115a5-3039-41e2-b7c1-1e654642524b")
 		)
-		(property "lcsc_id" "C17673"
+		(property "lcsc_id" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4191,7 +4191,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C72038"
+		(property "LCSC" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4203,7 +4203,7 @@
 			(hide yes)
 			(uuid "0a7f4f22-29ee-4ccf-8440-6d254642524b")
 		)
-		(property "Partnumber" "19-217/R6C-AL1M2VY/3T"
+		(property "Partnumber" "17-21SURC/S530-A3/4T"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4215,7 +4215,7 @@
 			(hide yes)
 			(uuid "d60cf1ba-3f1a-411d-853a-5c824642524b")
 		)
-		(property "lcsc_id" "C72038"
+		(property "lcsc_id" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4358,7 +4358,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C17673"
+		(property "LCSC" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4400,7 +4400,7 @@
 			(hide yes)
 			(uuid "f6baedd6-fec8-417a-88d9-9a184642524b")
 		)
-		(property "lcsc_id" "C17673"
+		(property "lcsc_id" "C114549"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4499,7 +4499,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C72038"
+		(property "LCSC" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4511,7 +4511,7 @@
 			(hide yes)
 			(uuid "07060ef5-fce3-43e7-97a6-64854642524b")
 		)
-		(property "Partnumber" "19-217/R6C-AL1M2VY/3T"
+		(property "Partnumber" "17-21SURC/S530-A3/4T"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -4523,7 +4523,7 @@
 			(hide yes)
 			(uuid "7d4d6d8b-6b91-4bc2-8fe1-061c4642524b")
 		)
-		(property "lcsc_id" "C72038"
+		(property "lcsc_id" "C2943978"
 			(at 0 0 0)
 			(layer "User.9")
 			(hide yes)
@@ -5251,7 +5251,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "b5121b9d-2a9d-4991-b98c-a2f34642524b")
+		(uuid "cacca67d-5e18-4bc7-885f-80b34642524b")
 	)
 	(gr_line
 		(start 25 -18)
@@ -5261,7 +5261,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "442a1385-6eaf-4097-927c-f74d4642524b")
+		(uuid "6feb0a7f-9a4e-4834-866d-b2e54642524b")
 	)
 	(gr_line
 		(start 23 20)
@@ -5271,7 +5271,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "28cf83eb-fcc9-4c18-8d1f-983b4642524b")
+		(uuid "60798530-884d-4619-aaad-4dd54642524b")
 	)
 	(gr_line
 		(start -25 18)
@@ -5281,7 +5281,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "633c8443-b13c-4121-b26c-a3a14642524b")
+		(uuid "f20adbf7-9ec7-4b9c-a451-ab6c4642524b")
 	)
 	(gr_arc
 		(start 23 -20)
@@ -5292,7 +5292,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "e56781f4-2438-45e3-ad9c-263c4642524b")
+		(uuid "86e2c7a3-ed90-45dd-89ff-68134642524b")
 	)
 	(gr_arc
 		(start 25 18)
@@ -5303,7 +5303,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "d082b290-5023-4324-9e50-ccf84642524b")
+		(uuid "5a66994f-2a9d-4d31-81c3-c4384642524b")
 	)
 	(gr_arc
 		(start -23 20)
@@ -5314,7 +5314,7 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "88947d2c-fe99-4b5e-a983-98434642524b")
+		(uuid "e53ba7ed-0f91-49c7-bae6-c0434642524b")
 	)
 	(gr_arc
 		(start -25 -18)
@@ -5325,6 +5325,6 @@
 			(type solid)
 		)
 		(layer "Edge.Cuts")
-		(uuid "0c58a3b5-8252-439a-870e-c05d4642524b")
+		(uuid "791219dc-ce98-4766-b6a2-ea7a4642524b")
 	)
 )

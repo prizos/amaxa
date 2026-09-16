@@ -24,23 +24,23 @@ component _Res0805 from Resistor:
 component Res680 from _Res0805:
     """680 R — LED series resistor."""
     trait is_atomic_part<manufacturer="Yageo", partnumber="RC0805FR-07680RL", footprint="R_0805_2012Metric.kicad_mod", symbol="Device:R">
-    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-07680RL", supplier_partno="C17673", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-07680RL", supplier_partno="C114549", supplier_id="lcsc">
     assert resistance within 680ohm +/- 1%
 
 component Res10k from _Res0805:
     """10 k — button series resistor, sets the debounce charge time."""
     trait is_atomic_part<manufacturer="Yageo", partnumber="RC0805FR-0710KL", footprint="R_0805_2012Metric.kicad_mod", symbol="Device:R">
-    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-0710KL", supplier_partno="C17414", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-0710KL", supplier_partno="C84376", supplier_id="lcsc">
     assert resistance within 10kohm +/- 1%
 
 component Res100k from _Res0805:
     """100 k — gate pulldown, and the reverse-polarity FET gate resistor."""
     trait is_atomic_part<manufacturer="Yageo", partnumber="RC0805FR-07100KL", footprint="R_0805_2012Metric.kicad_mod", symbol="Device:R">
-    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-07100KL", supplier_partno="C17407", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-07100KL", supplier_partno="C96346", supplier_id="lcsc">
     assert resistance within 100kohm +/- 1%
 
 component Res3k3 from _Res0805:
     """3.3 k — fixed load on the 3.3 V rail, so the rail is measurable."""
     trait is_atomic_part<manufacturer="Yageo", partnumber="RC0805FR-073K3L", footprint="R_0805_2012Metric.kicad_mod", symbol="Device:R">
-    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-073K3L", supplier_partno="C17568", supplier_id="lcsc">
+    trait has_part_picked<manufacturer="Yageo", partno="RC0805FR-073K3L", supplier_partno="C114531", supplier_id="lcsc">
     assert resistance within 3.3kohm +/- 1%
