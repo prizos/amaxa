@@ -1,0 +1,64 @@
+name: hardware
+
+on:
+  push:
+    paths:
+      - "hw/**"
+      - ".github/workflows/hardware.yml"
+  pull_request:
+    paths:
+      - "hw/**"
+      - ".github/workflows/hardware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hardware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Everything that consumes committed files: rule checks, design checks and
+  # simulation. Board generation (atopile) is a separate stage; see hw/README.md.
+  verify:
+    name: Verify boards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: hw
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # uv, its Python and the atopile venv. Keyed on the pins themselves.
+      - name: Cache pinned tools
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/uv
+            hw/.tools
+          key: hw-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hw/Makefile', 'hw/requirements/atopile.lock') }}
+          restore-keys: hw-${{ runner.os }}-${{ runner.arch }}-
+
+      # Ubuntu 24.04 ships KiCad 7; atopile writes KiCad 9 files, so use the
+      # KiCad 9 PPA. ngspice comes from the archive.
+      - name: Install KiCad 9 and ngspice
+        run: |
+          sudo add-apt-repository -y ppa:kicad/kicad-9.0-releases
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            kicad kicad-symbols kicad-footprints ngspice
+
+      - name: Build the toolchain
+        run: make tools
+
+      - name: Tool versions
+        run: |
+          {
+            echo '### Hardware toolchain'
+            echo '```'
+            make versions
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
