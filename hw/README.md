@@ -105,6 +105,13 @@ and 40 mm from the thing it decouples.
 **`test_parts.py`** keeps the library honest: every part has a review note, every
 declared footprint file exists, no note still describes a part that was replaced.
 
+**Electrical rule checking** runs in the design source itself, before anything
+is placed: `make build` fails on any ERC message, **warnings included**. SKiDL
+calls an unconnected passive pin a warning, which is precisely the mistake worth
+catching, and this board sits at zero of both. A warning that appears later has
+to be silenced deliberately, on the net or pin that earns it, which is a line in
+a diff rather than a message nobody reads.
+
 **`test_check_count.py`** is the guard on the guards — removing a check fails the
 suite until the expected count is updated in the same commit.
 
@@ -181,6 +188,27 @@ datasheet states legibly, not a vendor model, and that is written down.
 
 One trap worth knowing: **ngspice treats the first line of a deck as its title**,
 so a deck that starts with a component definition silently loses it.
+
+## The schematic, attempted and rejected
+
+SKiDL can emit a `.kicad_sch`, which the previous design source could not. That
+would have unlocked two gates: `kicad-cli sch erc`, and `pcb drc
+--schematic-parity` — the interesting one, because with the schematic and the
+board generated from the same circuit, parity checks **our own board writer**
+for silently dropping something, which nothing else does.
+
+It was tried and dropped. The generated schematic is one sheet per subcircuit,
+which is the right shape, but KiCad's own ERC finds **36 errors** in it: 17
+dangling labels, 17 hierarchical labels that cannot connect to a parent sheet,
+and 2 undriven power pins. SKiDL warns that its point-to-point routing can fail
+on densely connected circuits, and this is what that looks like. A gate that is
+permanently red is not a gate, and parity against a broken schematic would be
+worse than none.
+
+Nothing downstream depended on it, so nothing was lost. It is worth revisiting
+if SKiDL's schematic generation improves; the board writer would then need to
+consume the schematic's symbol UUIDs, since parity matches on `(path ...)` and
+nothing writes one today.
 
 ## Who has to look
 

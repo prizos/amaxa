@@ -48,6 +48,7 @@ os.environ.setdefault("KICAD9_SYMBOL_DIR", "/usr/share/kicad/symbols")
 sys.path.insert(0, str(HERE))
 
 from skidl import ERC, KICAD9, POWER, Net, Part, SubCircuit  # noqa: E402
+from skidl.logger import erc_logger  # noqa: E402
 from skidl import generate_netlist  # noqa: E402
 from skidl import set_default_tool  # noqa: E402
 
@@ -251,7 +252,14 @@ def design(circuit) -> dict:
 def main() -> int:
     circuit = build().circuit
 
-    errors = ERC()
+    # Warnings fail the build as well as errors. SKiDL calls an unconnected
+    # passive pin a warning, which is precisely the mistake worth catching, and
+    # this board sits at zero of both. A warning that appears later has to be
+    # silenced deliberately - `do_erc = False` on the net or pin that earns it -
+    # which is a line in a diff rather than a message nobody reads.
+    ERC()
+    errors = erc_logger.error.count
+    warnings = erc_logger.warning.count
     generate_netlist(file_=str(HERE / "build" / "led12.net"))
     data = design(circuit)
     (HERE / "build" / "design.json").write_text(
@@ -262,7 +270,13 @@ def main() -> int:
         f"{len(data['parts'])} parts, {len(data['nets'])} nets, "
         f"{len(data['values'])} values"
     )
-    return 1 if errors else 0
+    if errors or warnings:
+        print(
+            f"\nERC: {errors} errors, {warnings} warnings. Both fail the build; "
+            "see the note in main()."
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

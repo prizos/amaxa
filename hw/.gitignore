@@ -30,3 +30,7 @@ __pycache__/
 skidl_*.log
 */led12.log
 *.log
+
+# SKiDL schematic output, attempted and rejected; see README.md
+*.kicad_sch
+*-erc.rpt

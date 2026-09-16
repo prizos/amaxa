@@ -39,8 +39,9 @@ be measured. Four test pads expose 12 V, 3.3 V, ground and the gate.
 
 ## What is checked, and what that caught
 
-Thirty-one checks, nine simulated measurements, and DRC against both the
-PCBWay fab limits and the board's own design rules. Each gate has been made to
+Thirty-one checks, nine simulated measurements, electrical rule checking on the
+circuit itself, and DRC against both the PCBWay fab limits and the board's own
+design rules. Each gate has been made to
 fail on purpose at least once — a gate that has never failed is not a gate.
 
 Five real defects have been caught so far, each by a different tier:
@@ -110,7 +111,13 @@ coordinates, same copper, same simulated numbers to every digit.
 | **S3** The board writer, as text s-expressions | **done** |
 | **S4** Re-point the checks and simulation | **done** |
 | **S5** Remove atopile | **done** |
-| S6 The gates SKiDL makes possible | next |
+| **S6** The gates SKiDL makes possible | **done** |
+
+The port is complete. One new gate came of it — electrical rule checking, which
+runs in the design source before anything is placed and fails the build on any
+message, warnings included. An unconnected pin is caught there now, rather than
+surviving to DRC or to the board. Schematic generation was tried and rejected;
+`../README.md` says why.
 
 `reference/` holds the board as atopile last built it, frozen before the port
 began: the fingerprint, the pad-level netlist, the BOM, the DRC report, the
