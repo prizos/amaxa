@@ -23,3 +23,6 @@ __pycache__/
 */elec/
 # Rendered simulation decks
 */sim/.run/
+
+# The SKiDL virtualenv, alongside the atopile one during the port
+/.venv-skidl/
