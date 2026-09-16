@@ -2,14 +2,23 @@
 """
 led12 — the 12 V LED board, as a circuit.
 
-    12V in ──[fuse 1A]──┬──[P-FET reverse polarity]──┬── 12V
-                        │                            │
-                       TVS                    47uF + 100nF
-                                                     │
-      button ──[10k]──┬── N-FET gate                 ├── 4 x (2k2 + LED)
-                      │                              │       cathodes
-                 1uF ─┤ 100k                         └── LDO 3V3 ── 3k3 load
-                      └── GND              N-FET drain sinks LED_RETURN
+                         D ┌─────┐ S
+    12V in ──[fuse 1A]─────┤ Q1  ├────┬────────┬── 12V
+                           └──┬──┘    │        │
+                              G       TVS   47uF + 100nF
+                        100k ─┤ D6          │
+                         GND ─┴──┘          ├── 4 x (2k2 + LED)
+                                            │       cathodes
+      button ──[10k]──┬── N-FET gate        └── LDO 3V3 ── 3k3 load
+                      │
+                 1uF ─┤ 100k ─┤ D7    N-FET drain sinks LED_RETURN
+                      └── GND ─┘
+
+Q1's DRAIN faces the supply. A P-MOSFET's body diode has its anode on the
+drain, so that is the orientation in which it blocks a reversed input; source
+to the supply reads more naturally, works perfectly on the bench, and leaves
+the board unprotected. D6 and D7 are 15 V Zeners clamping each FET's gate,
+which the TVS's 23.2 V clamping voltage would otherwise take past its rating.
 
 Press the button: the gate charges through the debounce network, the N-FET
 turns on and the LEDs light. Release: the 100k discharges the gate.
@@ -98,20 +107,37 @@ def power_input(raw_hv, rail, gnd):
     fuse = part(parts.FUSE_1A, "power.fuse", "F1")
     q_rpp = part(parts.PFET_RPP, "power.q_rpp", "Q1")
     r_gate = part(parts.RES_100K, "power.r_gate", "R5")
-    tvs = part(parts.TVS_12V, "power.tvs", "D5")
+    d_clamp = part(parts.ZENER_GATE_CLAMP, "power.d_gate_clamp", "D6")
+    tvs = part(parts.TVS_14V, "power.tvs", "D5")
     c_bulk = part(parts.CAP_BULK, "power.c_bulk", "C1")
     c_hf = part(parts.CAP_100N, "power.c_hf", "C2")
 
-    # Terminal, then fuse, then the P-FET. The FET conducts only when the
-    # supply is the right way round; reversed, its body diode blocks.
+    # Terminal, then fuse, then the P-FET.
+    #
+    # The DRAIN faces the supply and the SOURCE faces the load, and that is the
+    # whole trick. A P-channel MOSFET's body diode has its anode on the drain,
+    # so in this orientation the diode is reverse-biased when the input goes
+    # negative and the FET blocks. Wired the other way round - source to the
+    # supply, which reads more naturally and is how a high-side load switch is
+    # drawn - the board still works perfectly on the bench and the body diode
+    # conducts under reverse polarity. With the TVS on the protected rail that
+    # is a two-diode path from ground to the reversed input: measured in
+    # simulation at 69 A, limited only by the fuse.
     raw_hv += terminal[1], fuse[1]
     gnd += terminal[2]
-    Net("VIN_FUSED").connect(fuse[2], q_rpp["S"])
-    rail += q_rpp["D"]
+    Net("VIN_FUSED").connect(fuse[2], q_rpp["D"])
+    rail += q_rpp["S"]
 
     # The gate sits at ground through the 100k, so V_gs is the whole rail once
     # it comes up — which is why this part must be rated for it.
-    Net("RPP_GATE").connect(q_rpp["G"], r_gate[1])
+    #
+    # D6 is what stops that argument running out during a surge. The TVS clamps
+    # the rail, and therefore the source, at up to 23.2 V while the gate is held
+    # near ground, so without the clamp V_gs reaches 23.2 V against a ±20 V
+    # part. The Zener conducts at 13.8 V at the earliest - above the 13.2 V the
+    # rail is allowed to reach - so it does nothing at all in normal operation.
+    Net("RPP_GATE").connect(q_rpp["G"], r_gate[1], d_clamp[2])  # 2 = anode
+    rail += d_clamp[1]                                          # 1 = cathode
     gnd += r_gate[2]
 
     # Surge clamp across the protected rail, then bulk and decoupling.
@@ -131,13 +157,22 @@ def debounced_switch(rail, gnd, gate, switched):
     r_pulldown = part(parts.RES_100K, "switch.r_pulldown", "R7")
     c_debounce = part(parts.CAP_1U, "switch.c_debounce", "C5")
     q_switch = part(parts.NFET_SWITCH, "switch.q_switch", "Q2")
+    d_clamp = part(parts.ZENER_GATE_CLAMP, "switch.d_gate_clamp", "D7")
 
     rail += button[1]
     Net("BTN").connect(button[2], r_series[1])
 
     # The gate node: series resistor, pulldown, capacitor and FET all meet.
-    gate += r_series[2], r_pulldown[1], c_debounce[1], q_switch["G"]
-    gnd += r_pulldown[2], c_debounce[2], q_switch["S"]
+    #
+    # D7 is here for the same reason as D6, reached by a different path. With
+    # the button held, this gate is the rail through a 10k/100k divider — so a
+    # surge that clamps the rail at 23.2 V puts 21.1 V on a ±20 V gate. The
+    # clamp holds it at 15.6 V at worst. In normal operation the gate reaches
+    # 12.0 V at the very top of the rail's range, below the Zener's lowest
+    # breakdown of 13.8 V, so it never conducts and the debounce time constants
+    # are untouched: its leakage is 100 nA into a 100k pulldown, ten millivolts.
+    gate += r_series[2], r_pulldown[1], c_debounce[1], q_switch["G"], d_clamp[1]
+    gnd += r_pulldown[2], c_debounce[2], q_switch["S"], d_clamp[2]
 
     switched += q_switch["D"]
 

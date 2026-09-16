@@ -7,6 +7,7 @@
 #   make check       run the design checks against what the build produced
 #   make reproducible  build twice and check both runs describe the same board
 #   make sim         run the ngspice decks and check their measurements
+#   make offline     prove the build reaches nothing over the network
 #   make outputs     renders, 3D model, gerbers and drill files into out/
 #   make help        list all targets
 #
@@ -60,7 +61,7 @@ DRU        := $(LAYOUT_DIR)/default.kicad_dru
 KICAD_CLI ?= $(shell command -v kicad-cli 2>/dev/null)
 NGSPICE   ?= $(shell command -v ngspice 2>/dev/null)
 
-.PHONY: help tools versions build layout rules check drc reproducible sim outputs clean distclean
+.PHONY: help tools versions build layout rules check drc reproducible sim offline outputs clean distclean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -147,6 +148,13 @@ build: $(PY) ## Turn the design source into KiCad files for BOARD
 layout: build $(DRU) ## Apply the board's placement and routing, then fill the plane
 	@python3 tools/layout.py $(BOARD)
 	@python3 tools/fill_zones.py $(LAYOUT_DIR)/default.kicad_pcb
+
+# hw/README.md claims a build reaches nothing over the network. This is what
+# makes that a claim rather than a memory: the design source is run with every
+# way out of the process raising.
+offline: $(PY) ## Build the design source with the network blocked
+	@$(PY) tools/no_network.py $(BOARD)
+	@rm -f $(BOARD)/no_network_sklib.py
 
 # KiCad reads one rules file per board, named after it and beside it. Ours is
 # the shared fab limits followed by the board's own intent, so that a rule about

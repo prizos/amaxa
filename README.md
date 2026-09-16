@@ -34,8 +34,19 @@ It is worth the detour because of what the gates caught on something this
 simple: a 6.3 V capacitor on a 12 V rail, a FET whose gate rating was exceeded
 in normal operation, series resistors dissipating 104 % of their rating, a
 regulator rated below the voltage its own protection clamps at, and a TVS fitted
-backwards. Five defects, five different tiers of checking, on a board with
-twenty-eight parts.
+backwards.
+
+Then an adversarial review went looking for what the gates could **not** see,
+and found three more on the same board: the reverse-polarity FET was wired
+source-to-supply, so its body diode conducted under reverse polarity and the
+board's one safety feature did nothing; the TVS stood off 12 V on a rail
+specified to 13.2 V, so the protection was a load at high line; and neither
+FET's gate survived the clamp. The check meant to catch a part fitted backwards
+was holding the FET backwards, because its expected value was a table of what we
+believed rather than anything derived.
+
+Eight defects now, and the interesting half came from assuming the gates were
+wrong rather than the board.
 
 Each gate has also been made to fail on purpose at least once. A gate that has
 never failed is not a gate.

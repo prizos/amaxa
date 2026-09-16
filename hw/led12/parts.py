@@ -139,13 +139,22 @@ FUSE_1A = PartSpec(
 
 # Breakdown and clamping voltage are not attributes of a generic diode, but the
 # whole 12 V rail is designed around them, so they are recorded here.
-TVS_12V = PartSpec(
+# SMBJ14A and not the SMBJ12A first drawn. A TVS's stand-off voltage is the most
+# it holds off while still counting as non-conducting, and the 12 A part stands
+# off 12.0 V on a rail this design allows to reach 13.2 V - so it sat in its own
+# knee at high line, and in full avalanche when cold, because breakdown voltage
+# falls with temperature. The protection was a load. See SMB.md.
+#
+# v_breakdown_max, not min: the distributor and the datasheet both quote the top
+# of the V_BR band, and the previous entry recorded 14.7 V under a name claiming
+# it was the bottom. A number filed under the wrong name is worse than no number.
+TVS_14V = PartSpec(
     symbol="Device:D_TVS", footprint="SMB:D_SMB", prefix="D",
-    manufacturer="Brightking", mpn="SMBJ12A/TR13", lcsc="C111091", value="SMBJ12A",
+    manufacturer="BORN", mpn="SMBJ14A", lcsc="C152106", value="SMBJ14A",
     params={
-        "reverse_working_voltage": exact(12.0),
-        "v_breakdown_min": exact(14.7),
-        "v_clamp_max": exact(19.9),
+        "reverse_working_voltage": exact(14.0),
+        "v_breakdown_max": exact(17.2),
+        "v_clamp_max": exact(23.2),
     },
 )
 
@@ -160,6 +169,12 @@ _SOT23 = dict(footprint="SOT23:SOT-23", prefix="Q")
 # AO3407A and not the Si2301 first drawn: this circuit holds the gate at ground
 # while the source sits at the rail, so V_gs is the whole 13.2 V in normal
 # operation, and the Si2301 is rated +/-8 V. See SOT23.md.
+#
+# max_gate_source_voltage is here because the gate rating is what rejected the
+# Si2301, and the number that did it was not written down anywhere a check could
+# reach. Under a TVS clamp the source rises to the clamping voltage while the
+# gate is held near ground, so this is the rating that decides whether a surge
+# destroys the pass element. D6 is what keeps the board inside it.
 PFET_RPP = PartSpec(
     symbol="Transistor_FET:Q_PMOS_GSD", **_SOT23,
     manufacturer="Alpha & Omega Semiconductor", mpn="AO3407A", lcsc="C15155",
@@ -167,6 +182,7 @@ PFET_RPP = PartSpec(
     params={
         "max_drain_source_voltage": exact(30.0),
         "max_continuous_drain_current": exact(4.3),
+        "max_gate_source_voltage": exact(20.0),
         "on_resistance": exact(0.048),
     },
 )
@@ -177,8 +193,25 @@ NFET_SWITCH = PartSpec(
     params={
         "max_drain_source_voltage": exact(60.0),
         "max_continuous_drain_current": exact(0.115),
+        "max_gate_source_voltage": exact(20.0),
         "gate_source_threshold_voltage": between(1.0, 2.5),
         "on_resistance": exact(7.5),
+    },
+)
+
+# Clamps the reverse-polarity FET's gate-source voltage during a surge. Without
+# it V_gs follows the TVS clamp to 19.9 V against a +/-20 V part - 0.1 V of
+# margin, which is the Si2301 defect over again one layer down. 15 V is the
+# middle of the only window that exists: above the 13.2 V rail so it never
+# conducts in normal operation, below the FET's rating with room to spare.
+# See SOD123.md.
+ZENER_GATE_CLAMP = PartSpec(
+    symbol="Device:D_Zener", footprint="SOD123:D_SOD-123", prefix="D",
+    manufacturer="Jiangsu Changjing Electronics Technology",
+    mpn="BZT52C15", lcsc="C2104", value="15V",
+    params={
+        "zener_voltage": between(13.8, 15.6),
+        "max_power": exact(0.5),
     },
 )
 

@@ -91,3 +91,24 @@ def test_no_unconnected_pads(footprints):
     assert not floating, "Pads with no net:\n" + "\n".join(
         f"  {ref} pad {pad}" for ref, pad in floating
     )
+
+
+def test_every_net_has_a_track_width_rule(design, board_dir):
+    """
+    No net falls through to the fab's minimum track width by accident.
+
+    `rules.kicad_dru` names nets explicitly, so a net added later is not in any
+    rule and silently gets the fab floor — 0.1 mm — instead of a width someone
+    chose. That is how the four LED anode nets ended up unconstrained: they were
+    renamed during the port and the rules file was not part of the rename.
+
+    DRC cannot catch this. A rule that matches nothing passes.
+    """
+    rules = (board_dir / "rules.kicad_dru").read_text()
+    unruled = sorted(net for net in design["nets"] if f"'{net}'" not in rules)
+    assert not unruled, (
+        "Nets with no track-width rule, so they get the fab minimum:\n"
+        + "\n".join(f"  {net}" for net in unruled)
+        + f"\nAdd them to {board_dir.name}/rules.kicad_dru, in the rule whose "
+        "reasoning applies to them."
+    )

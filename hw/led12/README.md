@@ -12,39 +12,63 @@ interesting is in what had to be true for it to be correct.
 |---|---|
 | ![Top side](docs/board-top.png) | ![Bottom side](docs/board-bottom.png) |
 
-50 × 40 mm, two layers, 28 parts, 63 track segments, 12 stitching vias, and a
+50 × 40 mm, two layers, 30 parts, 68 track segments, 13 stitching vias, and a
 ground pour on the back. **KiCad DRC reports no errors**, against both the fab
-limits and the board's own rules. Eight warnings remain, all long-standing: four
-where a board footprint differs from its library copy because we add part
-identity to it, and four on one test point's silkscreen label.
+limits and the board's own rules. Nine warnings remain: seven
+`lib_footprint_mismatch`, and two on one test point's silkscreen label.
+
+The mismatch explanation here used to say it was because we add part identity to
+the footprints. That was wrong. The count moved from four to seven when three
+parts were rotated, and there are now exactly seven rotated parts on the board —
+R1 to R4, Q1, D6 and D7. The cause is `pcbnew` re-normalising a rotated
+footprint when it fills the pours, not anything about the design.
+
+The silkscreen warnings were four and are now two: `tp_gnd`'s label sat on its
+own pad outline and on `tp_12v`'s label, and moving it to the side fixed that
+much. The remaining two are not positional — every offset tried leaves exactly
+those two — and cannot be chased from the DRC report, whose JSON gives a
+reference field's position as twice the offset actually written.
 
 ## How it works
 
 ```
-12V in ──[fuse 1A]──┬──[P-FET reverse polarity]──┬── 12V
-                    │                            │
-                   TVS                    47uF + 100nF
-                                                 │
-  button ──[10k]──┬── N-FET gate                 ├── 4 x (2k2 + LED)
-                  │                              │       cathodes
-             1uF ─┤ 100k                         └── LDO 3V3 ── 3k3 load
-                  └── GND              N-FET drain sinks LED_RETURN
+                       D ┌────┐ S
+  12V in ──[fuse 1A]─────┤ Q1 ├────┬───────┬── 12V
+                         └─┬──┘    │       │
+                           G      TVS   47uF + 100nF
+                    100k ──┤ D6           │
+                     GND ──┴──┘           ├── 4 x (2k2 + LED) cathodes
+                                          │
+  button ──[10k]──┬── N-FET gate          └── LDO 3V3 ── 3k3 load
+                  │
+             1uF ─┤ 100k ──┤ D7   N-FET drain sinks LED_RETURN
+                  └── GND ──┘
 ```
 
-The input is fused, reverse-polarity protected by a P-FET whose gate sits at
-ground, and clamped by a TVS. Pressing the button charges the gate of a
-low-side N-FET through an RC network, which sinks the return of four LED
-branches. A linear regulator provides a 3.3 V rail with a fixed load so it can
-be measured. Four test pads expose 12 V, 3.3 V, ground and the gate.
+The input is fused, reverse-polarity protected by a P-FET, and clamped by a TVS.
+Pressing the button charges the gate of a low-side N-FET through an RC network,
+which sinks the return of four LED branches. A linear regulator provides a 3.3 V
+rail with a fixed load so it can be measured. Four test pads expose 12 V, 3.3 V,
+ground and the gate.
+
+**Q1's drain faces the supply.** A P-MOSFET's body diode has its anode on the
+drain, so that is the orientation in which it blocks a reversed input. Source to
+the supply reads more naturally, is how a high-side load switch is drawn, works
+perfectly on the bench — and leaves the board completely unprotected. D6 and D7
+are 15 V Zeners holding each FET's gate below its ±20 V rating during a clamp
+event, which the TVS's 23.2 V would otherwise walk straight through.
 
 ## What is checked, and what that caught
 
-Thirty-three checks, thirteen simulated measurements, electrical rule checking on the
+Forty-four checks, thirteen simulated measurements, electrical rule checking on the
 circuit itself, and DRC against both the PCBWay fab limits and the board's own
 design rules. Each gate has been made to
 fail on purpose at least once — a gate that has never failed is not a gate.
 
-Five real defects have been caught so far, each by a different tier:
+Eight real defects have been caught so far. The first five came from the gates
+as they were built; the last three came from an adversarial review that went
+looking for what the gates could **not** see, and every one of them is now
+covered by a check that fails on it.
 
 | Found | By |
 |---|---|
@@ -53,6 +77,9 @@ Five real defects have been caught so far, each by a different tier:
 | LED series resistors dissipating **104 % of their rating** at nominal, 137 % at the corner — 680 Ω is a 5 V habit on a 12 V rail | `checks/test_electrical.py` |
 | Regulator rated **15 V against a TVS that clamps at 19.9 V** — the protection would have destroyed what it protects | `checks/test_electrical.py` |
 | **TVS fitted backwards.** `out.hv ~> tvs ~> out.lv` reads perfectly and bridges anode-to-cathode, shorting the rail through a forward-biased diode | KiCad DRC, once the board was routed |
+| **The reverse-polarity FET was wired backwards** — source to the supply, so its body diode conducted under reverse polarity. With the TVS on the protected rail that is a two-diode short from ground to the reversed input, simulated at 69 A | Adversarial review. Now `test_reverse_polarity_fet_faces_the_supply`, which derives the answer from the netlist instead of a table |
+| **The TVS stood off 12 V on a rail specified to 13.2 V**, so the protection conducted in normal operation at high line, and sooner when cold | Adversarial review. Now `test_tvs_stands_off_the_rail_it_protects` |
+| **Neither FET's gate survived the clamp** — 23.2 V on a ±20 V gate, the Si2301 defect one layer down, with the rating recorded nowhere a check could reach | Adversarial review. Now `test_fet_gates_survive_the_tvs_clamp` |
 
 And two defects in the *pipeline itself*:
 
@@ -78,7 +105,8 @@ datasheet it was read from and what a human confirmed.
 | C3, C5 | 1 µF 50 V | Samsung CL21B105KBFNNNE | C28323 |
 | C4 | 10 µF 25 V | Samsung CL21A106KAYNNNE | C15850 |
 | D1–D4 | red LED, Vf 2.0–2.4 V | Everlight 17-21SURC/S530-A3/4T | C2943978 |
-| D5 | TVS, 12 V standoff, 19.9 V clamp | Brightking SMBJ12A/TR13 | C111091 |
+| D5 | TVS, 14 V standoff, 23.2 V clamp | BORN SMBJ14A | C152106 |
+| D6, D7 | 15 V Zener gate clamp | Jiangsu Changjing BZT52C15 | C2104 |
 | F1 | 1 A slow-blow | Littelfuse 0468001.NRHF | C45157 |
 | J1 | 2-pole 5.08 mm terminal | Ningbo Kangnex WJ500V-5.08-2P | C8465 |
 | Q1 | P-FET, −30 V, ±20 V gate | Alpha & Omega AO3407A | C15155 |

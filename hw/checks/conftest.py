@@ -154,9 +154,31 @@ def nets(footprints) -> dict[str, set[tuple[str, str]]]:
     return out
 
 
+# Every (path, name) any check actually looked up, recorded by the `spec` and
+# `spec_has` fixtures. A textual scan of this directory cannot stand in for it:
+# half the lookups are built from f-strings (`spec(f"{branch}.led", ...)`) or
+# from a tuple of candidate parameter names, so grep both misses real reads and
+# cannot tell a live one from a mention in a comment.
+PARAMETERS_READ: set[tuple[str, str]] = set()
+
+
 def pytest_collection_modifyitems(config, items):
-    """Record how many checks were collected, for the check-count guard."""
-    config.collected_check_count = len(items)
+    """
+    Record how many checks were collected, and run the coverage guard last.
+
+    The guard asserts on what every other check read, so it has to run after
+    them. Sorting on a boolean is stable, so nothing else moves.
+    """
+    # Checks that will actually execute, not checks that exist. A skipped test
+    # is still collected, so counting collection let `@pytest.mark.skip` turn a
+    # gate off in one line without the guard noticing — verified: the suite
+    # reported "30 passed, 1 skipped" and stayed green.
+    config.collected_check_count = sum(
+        1
+        for item in items
+        if not (item.get_closest_marker("skip") or item.get_closest_marker("skipif"))
+    )
+    items.sort(key=lambda item: item.name == "test_every_declared_parameter_is_read")
 
 
 @pytest.fixture(scope="session")
@@ -176,6 +198,7 @@ def spec(design):
 
     def lookup(path: str, name: str) -> tuple[float, float]:
         key = f"{path}.{name}"
+        PARAMETERS_READ.add((path, name))
         if key not in values:
             pytest.fail(
                 f"{key} is not in design.json. Either the path is wrong, or the "
@@ -185,6 +208,25 @@ def spec(design):
         return float(low), float(high)
 
     return lookup
+
+
+@pytest.fixture(scope="session")
+def spec_has(design):
+    """
+    Whether a part declares a parameter at all, without failing if it does not.
+
+    `spec` deliberately fails on a missing value, because a check that treats
+    "never specified" as "anything" passes for the wrong reason. This is for
+    the checks that walk a set of parts and have to ask which of several
+    ratings each one carries.
+    """
+    values = design["values"]
+
+    def has(path: str, name: str) -> bool:
+        PARAMETERS_READ.add((path, name))
+        return f"{path}.{name}" in values
+
+    return has
 
 
 @pytest.fixture(scope="session")

@@ -19,6 +19,9 @@ led12 = SchLib(tool=SKIDL).add_parts(*[
         Part(**{ 'name':'R', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'R'}), 'ref_prefix':'R', 'fplist':[''], 'footprint':'R0805:R_0805_2012Metric', 'keywords':'R res resistor', 'description':'Resistor', 'datasheet':'~', 'pins':[
             Pin(num='1',name='~',func=pin_types.PASSIVE,unit=1),
             Pin(num='2',name='~',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'D_Zener', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'D_Zener'}), 'ref_prefix':'D', 'fplist':[''], 'footprint':'SOD123:D_SOD-123', 'keywords':'diode', 'description':'Zener diode', 'datasheet':'~', 'pins':[
+            Pin(num='1',name='K',func=pin_types.PASSIVE,unit=1),
+            Pin(num='2',name='A',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
         Part(**{ 'name':'D_TVS', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'D_TVS'}), 'ref_prefix':'D', 'fplist':[''], 'footprint':'SMB:D_SMB', 'keywords':'diode TVS thyrector', 'description':'Bidirectional transient-voltage-suppression diode', 'datasheet':'~', 'pins':[
             Pin(num='1',name='A1',func=pin_types.PASSIVE,unit=1),
             Pin(num='2',name='A2',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),

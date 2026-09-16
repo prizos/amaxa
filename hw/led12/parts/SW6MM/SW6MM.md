@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Component | ``Button6mm`` |
+| Component | `BUTTON_6MM` |
 | Manufacturer | Korean Hroparts Elec |
 | Part number | `K2-1102DP-C4SW-04` |
 | LCSC | [C110153](https://www.lcsc.com/product-detail/C110153.html) |

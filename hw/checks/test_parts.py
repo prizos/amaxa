@@ -76,3 +76,81 @@ def test_review_notes_name_their_part(parts, board_dir):
         if part.mpn not in note.read_text():
             stale.append(f"  parts/{library}/{library}.md does not mention {part.mpn}")
     assert not stale, "Review notes out of date with the design:\n" + "\n".join(stale)
+
+
+# Review notes carrying an unresolved "Needs a human eye" marker. These are the
+# things no machine here can check — whether pad 1 is the pin the *datasheet*
+# calls pin 1 — and every one is a way to turn a board into scrap. The list is
+# pinned so that resolving one, or introducing another, is a visible act rather
+# than a drifting number nobody tracks.
+#
+# One of these says in plain words that the board may short 3V3 to GND if the
+# assumption is wrong. Clearing this list is a precondition for ordering.
+NEEDS_A_HUMAN_EYE = {
+    "LED0805": "pad 1 is the cathode, taken from the footprint rather than the drawing",
+    "SMB": "pad 1 is the cathode (banded end)",
+    "SOD123": "pad 1 is the cathode (banded end)",
+    "SOT223": "the tab is bonded to pin 2 (VOUT) and not to ground",
+    "SOT23": "the AO3407A pinout, taken from a distributor symbol",
+}
+
+
+def test_unresolved_human_review_is_tracked(part_dirs):
+    """
+    The set of things still waiting on a person is exactly what is declared.
+
+    A marker that appears without being added here is one nobody is tracking;
+    one that disappears without being removed is a review that quietly stopped
+    being required. Both are how a board gets ordered with an unverified pinout.
+    """
+    found = {
+        d.name
+        for d in part_dirs
+        if (d / f"{d.name}.md").is_file()
+        and "Needs a human eye" in (d / f"{d.name}.md").read_text()
+    }
+    declared = set(NEEDS_A_HUMAN_EYE)
+
+    new = sorted(found - declared)
+    resolved = sorted(declared - found)
+    assert not new and not resolved, (
+        "The unresolved-review list does not match the notes.\n"
+        f"  marked but not tracked: {new}\n"
+        f"  tracked but no longer marked: {resolved}\n"
+        "Update NEEDS_A_HUMAN_EYE in checks/test_parts.py in the same commit."
+    )
+
+
+def test_review_notes_name_a_real_part_constant(parts, part_dirs):
+    """
+    Each note's Component row names the constants in parts.py, exactly.
+
+    These rows named the previous design source's component types — `Res680`,
+    `PFetRpp`, `TvsSmbj12A` — for months after that source was deleted. Twelve
+    identifiers that appeared in no source file, in the one row of the note a
+    reader uses to find the part they are reading about.
+    """
+    import re
+
+    by_library: dict[str, set[str]] = {}
+    for name, part in parts.items():
+        by_library.setdefault(part.footprint.partition(":")[0], set()).add(name)
+
+    wrong = []
+    for d in part_dirs:
+        note = d / f"{d.name}.md"
+        if not note.is_file():
+            continue
+        row = re.search(r"^\| Component \| (.*?) \|$", note.read_text(), re.M)
+        if not row:
+            wrong.append(f"  parts/{d.name}/{d.name}.md has no Component row")
+            continue
+        named = set(re.findall(r"`([^`]+)`", row.group(1)))
+        expected = by_library.get(d.name, set())
+        if named != expected:
+            wrong.append(
+                f"  parts/{d.name}/{d.name}.md names {sorted(named)}, "
+                f"parts.py has {sorted(expected)}"
+            )
+
+    assert not wrong, "Review notes naming parts that do not exist:\n" + "\n".join(wrong)

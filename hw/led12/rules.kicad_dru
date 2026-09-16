@@ -21,7 +21,7 @@
 # Signals carry microamps; the width is for handling and etch tolerance, not
 # for current.
 (rule "signal tracks"
-	(condition "A.NetName == 'GATE' || A.NetName == 'BTN' || A.NetName == 'RPP_GATE' || A.NetName == '3V3'")
+	(condition "A.NetName == 'GATE' || A.NetName == 'BTN' || A.NetName == 'RPP_GATE' || A.NetName == '3V3' || A.NetName == 'LED1_A' || A.NetName == 'LED2_A' || A.NetName == 'LED3_A' || A.NetName == 'LED4_A'")
 	(constraint track_width (min 0.25mm))
 	(severity error))
 

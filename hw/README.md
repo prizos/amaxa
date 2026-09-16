@@ -2,12 +2,14 @@
 
 Boards designed as code: **SKiDL** is the design source, **KiCad** holds the layout and runs the rule checks, **ngspice** simulates the analog behaviour, and CI gates all of it. The reasoning behind the original choices is in [`docs/research/09-board-design-pipeline.md`](../docs/research/09-board-design-pipeline.md); why the design source changed is under [Why not atopile](#why-not-atopile).
 
-**Nothing in this pipeline needs a network.** Not a parts service, not a registry, not an account. `make tools` fetches a pinned `uv` and a pinned Python, and after that a build reaches nothing — verified by running one with `socket.connect` and `getaddrinfo` raising.
+**Nothing in this pipeline needs a network.** Not a parts service, not a registry, not an account. `make tools` fetches a pinned `uv` and a pinned Python, and after that a build reaches nothing.
+
+`make offline` is what makes that a claim rather than a memory: it runs the design source with `socket.connect`, `connect_ex`, `create_connection`, `getaddrinfo` and `gethostbyname` all raising, and fails naming whatever was reached. It used to be a sentence here describing something someone did once.
 
 The first board, `led12`, is a 12 V LED board with no processor. It exists to prove the pipeline end to end before the STM32H743 control board depends on it.
 
 **Status:** the board builds from source, is placed and routed, passes KiCad DRC
-with no errors, and its analog behaviour is simulated. Thirty-three design checks
+with no errors, and its analog behaviour is simulated. Forty-four design checks
 and thirteen simulated measurements gate it, and CI runs all of it, publishing
 renders, a 3D model and a fab package. It has never been fabricated: what is
 proven is the pipeline, not the physical board.

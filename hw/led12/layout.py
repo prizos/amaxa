@@ -60,8 +60,15 @@ PLACEMENT = {
     # screwdriver to it, and nothing is placed to its left.
     "power.terminal": (-21.5, -13.0),
     "power.fuse": (-10.4, -13.0),
-    "power.q_rpp": (-5.8, -13.0),
+    # Turned round so the drain, which must face the supply, is the pad nearest
+    # the fuse. Pads 1 and 2 then face the board, where the gate network and the
+    # 12 V bus are, and the input reaches the drain in a straight line.
+    "power.q_rpp": (-5.8, -13.0, 180),
     "power.r_gate": (-9.5, -17.0),
+    # The gate clamp sits alongside the FET, close to the two pads it bridges.
+    # A clamp far from what it clamps has inductance in series with it, which
+    # is exactly what a surge finds.
+    "power.d_gate_clamp": (-5.8, -9.3, 180),
     "power.tvs": (0.3, -13.0),
     "power.c_bulk": (7.0, -13.0),
     "power.c_hf": (11.5, -13.0),
@@ -72,7 +79,7 @@ PLACEMENT = {
     "rail.r_load": (19.5, -5.0),
     # Test pads in a row across the middle, where a probe can reach them
     # without fouling a part.
-    "tp_gnd": (11.0, -2.0),
+    "tp_gnd": (-2.9, 0.0),
     "tp_12v": (15.5, -2.0),
     "tp_3v3": (19.5, -2.0),
     "tp_gate": (-6.0, 10.0),
@@ -80,6 +87,9 @@ PLACEMENT = {
     # reaches it without touching anything else.
     "switch.button": (-22.0, 6.0),
     "switch.r_series": (-11.0, 10.5),
+    # The low-side FET's gate clamp, in line with the pulldown it shares a node
+    # with. Turned round so its cathode is the pad nearest the gate.
+    "switch.d_gate_clamp": (-10.5, 14.0, 180),
     "switch.r_pulldown": (-6.0, 14.0),
     "switch.c_debounce": (-6.0, 17.0),
     "switch.q_switch": (-1.0, 12.0),
@@ -109,6 +119,7 @@ LABELS = {
     "*": (0.0, -1.7),
     "power.terminal": (0.0, 7.0),      # below: above would run off the board
     "power.q_rpp": (0.0, -2.6),        # SOT-23 is taller than an 0805
+    "power.d_gate_clamp": (0.0, 1.9),  # below: the FET's courtyard is above it
     "switch.q_switch": (0.0, -2.6),
     "power.tvs": (0.0, -3.2),          # SMB, taller again
     "power.c_bulk": (0.0, -2.4),       # 1210
@@ -117,7 +128,13 @@ LABELS = {
     "rail.r_load": (-2.9, 0.0),        # its own column is full above and below
     # The three test pads sit shoulder to shoulder and their labels are three
     # characters wide, so the middle one goes below rather than beside.
-    "tp_gnd": (0.0, -1.9),
+    # To the side, because directly above it collided with tp_12v's label and
+    # its own pad outline: four silkscreen warnings, which this halves. The
+    # other two are not positional - every offset tried leaves exactly those
+    # two, and the coordinates KiCad reports for a reference field in its JSON
+    # output are twice the offset actually written, so they cannot be chased
+    # from the report either.
+    "tp_gnd": (-2.9, 0.0),
     "tp_12v": (-3.4, 1.5),          # diagonally clear of its own pad and the track
     "tp_3v3": (0.0, -1.9),
     "switch.c_debounce": (-2.7, 0.0),  # the pulldown sits directly above it
@@ -147,21 +164,30 @@ ROUTES = [
         "power.terminal:1", (-21.5, -9.5), (-11.8, -9.5), "power.fuse:1",
     ]),
 
-    # Fuse to the reverse-polarity FET's source.
-    ("VIN_FUSED", POWER, F, [
-        "power.fuse:2", (-7.6, -13.0), (-7.6, -12.05), "power.q_rpp:2",
-    ]),
+    # Fuse to the reverse-polarity FET's DRAIN, which is the pad that has to
+    # face the supply: the body diode's anode is on the drain, so this is the
+    # orientation in which it blocks a reversed input. The FET is turned round
+    # in PLACEMENT for the same reason, which makes this a straight line.
+    ("VIN_FUSED", POWER, F, ["power.fuse:2", "power.q_rpp:3"]),
 
-    # That FET's gate is held at ground through its resistor, so it conducts
-    # only when the supply is the right way round. Routed below everything.
+    # The gate is held at ground through its resistor, so the FET conducts only
+    # when the supply is the right way round. The clamp sits on the same node.
     ("RPP_GATE", SIGNAL, F, [
-        "power.q_rpp:1", (-6.74, -18.7), (-10.41, -18.7), "power.r_gate:1",
+        "power.d_gate_clamp:2", (-7.45, -10.9), (-4.8625, -10.9), "power.q_rpp:1",
+    ]),
+    ("RPP_GATE", SIGNAL, F, [
+        "power.d_gate_clamp:2", (-10.41, -9.3), "power.r_gate:1",
     ]),
 
     # The 12 V bus runs on its own line above the input chain, with a stub down
     # to each part. Running it through the row would cross four ground pads.
     ("12V", POWER, F, [(-4.86, -16.5), (13.6, -16.5)]),
-    ("12V", POWER, F, ["power.q_rpp:3", (-4.86, -16.5)]),
+    ("12V", POWER, F, ["power.q_rpp:2", (-4.86, -16.5)]),
+    # The FET's source, up to the clamp's cathode. Everything downstream of
+    # here is the protected rail.
+    ("12V", POWER, F, [
+        "power.q_rpp:2", (-3.4, -13.95), (-3.4, -9.3), "power.d_gate_clamp:1",
+    ]),
     ("12V", POWER, F, ["power.tvs:1", (-1.85, -16.5)]),
     ("12V", POWER, F, ["power.c_bulk:1", (5.52, -16.5)]),
     ("12V", POWER, F, ["power.c_hf:1", (10.55, -16.5)]),
@@ -171,9 +197,10 @@ ROUTES = [
     ("12V", POWER, F, ["rail.c_in:1", (10.55, -6.0), "power.c_hf:1"]),
     # Down the middle of the board to the LED branches, through the test point.
     ("12V", POWER, F, [(13.6, -10.7), (13.6, -4.0), (15.5, -4.0), (15.5, 15.0)]),
-    # Across to the button, keeping below the terminal.
+    # Across to the button, keeping below the terminal. It carries on up the
+    # same vertical the clamp hangs off rather than starting at the FET again.
     ("12V", POWER, F, [
-        "power.q_rpp:3", (-4.86, -5.0), (-22.0, -5.0), "switch.button:1",
+        (-3.4, -9.3), (-3.4, -5.0), (-22.0, -5.0), "switch.button:1",
     ]),
 
     # The button has two holes per pole, joined inside the switch but not on
@@ -202,6 +229,7 @@ ROUTES = [
         "switch.r_series:2", (-3.5, 10.5), (-3.5, 11.05), "switch.q_switch:1",
     ]),
     ("GATE", SIGNAL, F, ["switch.r_pulldown:1", (-6.91, 10.5)]),
+    ("GATE", SIGNAL, F, ["switch.d_gate_clamp:1", "switch.r_pulldown:1"]),
     ("GATE", SIGNAL, F, ["switch.c_debounce:1", "switch.r_pulldown:1"]),
 
     # LED returns: a bus down the left of the array, into the FET's drain.
@@ -246,6 +274,7 @@ VIAS = [
     ("rail.c_out:2", (22.5, -8.0), "GND", *VIA),
     ("rail.r_load:2", (22.5, -5.0), "GND", *VIA),
     ("tp_gnd:1", (11.0, 0.5), "GND", *VIA),
+    ("switch.d_gate_clamp:2", (-12.15, 16.2), "GND", *VIA),
     ("switch.r_pulldown:2", (-3.6, 14.0), "GND", *VIA),
     ("switch.c_debounce:2", (-3.2, 17.0), "GND", *VIA),
     ("switch.q_switch:2", (-1.94, 14.5), "GND", *VIA),

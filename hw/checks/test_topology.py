@@ -104,6 +104,7 @@ def test_protected_rail_feeds_everything_it_should(net_parts):
         "rail.c_in",
         "switch.button",
         "tp_12v",
+        "power.d_gate_clamp",
     } | {f"leds[{i}].resistor" for i in range(4)}
 
     missing = expected - rail
@@ -130,8 +131,20 @@ POLARITY = [
     ("power.tvs", "1", "12V"),       # cathode, to the rail it protects
     ("power.tvs", "2", "GND"),       # anode
     ("power.q_rpp", "1", "RPP_GATE"),
-    ("power.q_rpp", "2", "VIN_FUSED"),  # source, on the supply side
-    ("power.q_rpp", "3", "12V"),        # drain, on the protected side
+    # A P-MOSFET's body diode has its ANODE on the drain, so for reverse
+    # polarity protection the drain faces the supply and the source faces the
+    # load. Wired the other way round the part still switches perfectly and
+    # the body diode conducts when the input is reversed, which is the entire
+    # failure this device exists to prevent. This table said the other way
+    # round for the whole life of the board, so correcting the design turned
+    # this check red rather than green — which is what a hand-written expected
+    # value buys you.
+    ("power.q_rpp", "2", "12V"),        # source, on the protected side
+    ("power.q_rpp", "3", "VIN_FUSED"),  # drain, on the supply side
+    ("power.d_gate_clamp", "1", "12V"),       # cathode, to the source
+    ("power.d_gate_clamp", "2", "RPP_GATE"),  # anode, to the gate
+    ("switch.d_gate_clamp", "1", "GATE"),     # cathode, to the gate it clamps
+    ("switch.d_gate_clamp", "2", "GND"),      # anode
     ("switch.q_switch", "1", "GATE"),
     ("switch.q_switch", "2", "GND"),       # source
     ("switch.q_switch", "3", "LED_RETURN"),  # drain
@@ -164,3 +177,49 @@ def test_polarised_parts_face_the_right_way(net_members):
             wrong.append(f"  {address} pad {pad}: on {found!r}, expected {expected!r}")
 
     assert not wrong, "Parts wired the wrong way round:\n" + "\n".join(wrong)
+
+
+def test_reverse_polarity_fet_faces_the_supply(net_members):
+    """
+    The reverse-polarity FET's drain is on the supply side, not the load side.
+
+    This is the one check here whose expected value is *derived* rather than
+    written down, and it exists because the hand-written one got it wrong.
+
+    A P-channel MOSFET's body diode has its anode on the drain. Put the drain
+    on the supply and that diode is reverse-biased when the input goes
+    negative, so the FET blocks. Put the source there instead — which reads
+    more naturally, and is how a high-side load switch is drawn — and the part
+    still switches perfectly on the bench while the body diode conducts under
+    reverse polarity. With a TVS on the protected rail that is a two-diode path
+    from ground to the reversed input; simulated at 69 A, limited only by the
+    fuse.
+
+    `POLARITY` above encoded the wrong orientation as the expected one for the
+    whole life of the board, with a comment asserting it was right, so the
+    check that is meant to catch a part fitted backwards was the thing holding
+    it backwards. A table of what you believe cannot catch a belief that is
+    wrong. So this one asks the netlist instead: whatever net the fuse feeds is
+    the supply side by definition, and that is the net the drain must be on.
+    """
+    owner_of = {
+        (address, pad): net
+        for net, members in net_members.items()
+        for address, pad in members
+    }
+    fuse_out = owner_of.get(("power.fuse", "2"))
+    drain = owner_of.get(("power.q_rpp", "3"))
+    source = owner_of.get(("power.q_rpp", "2"))
+
+    assert fuse_out is not None, "power.fuse pad 2 is not on any net"
+    assert drain == fuse_out, (
+        f"The reverse-polarity FET's drain is on {drain!r}, but the fuse feeds "
+        f"{fuse_out!r}. A P-MOSFET's body diode has its anode on the drain, so "
+        "the drain has to face the supply or the diode conducts when the input "
+        "is reversed and the board is not protected at all."
+    )
+    assert source != fuse_out, (
+        f"The reverse-polarity FET's source is on {source!r}, the same net the "
+        "fuse feeds. That is a high-side load switch, not reverse-polarity "
+        "protection."
+    )

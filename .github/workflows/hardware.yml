@@ -75,6 +75,9 @@ jobs:
       - name: Reproducibility
         run: make reproducible
 
+      - name: Nothing reaches the network
+        run: make offline
+
       - name: Design checks
         run: make check
 
