@@ -10,6 +10,15 @@
 /hw/fab/                @prizos
 /hw/**/rules.kicad_dru  @prizos
 
+# Netclasses live here, and every track-width rule is conditioned on one. It
+# also sets clearances stricter than the fab rules ask for. A board with a
+# permissive project file passes DRC having checked rather less than it looks.
+/hw/**/board.kicad_pro  @prizos
+
+# What each part is: symbol, footprint, part number, and the datasheet figures
+# every electrical check reasons about.
+/hw/**/parts.py         @prizos
+
 # The design checks, and the guard that counts them.
 /hw/checks/             @prizos
 

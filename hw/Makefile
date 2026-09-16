@@ -1,6 +1,6 @@
 # amaxa hardware: Makefile front end for board design and verification.
 #
-#   make tools       fetch pinned uv + Python, build the atopile venv
+#   make tools       fetch pinned uv + Python, build the design virtualenv
 #   make versions    print every tool version and check the pinned ones
 #   make build       turn .ato source into KiCad files
 #   make layout      apply the board's placement and routing, then fill the plane
@@ -11,7 +11,7 @@
 #   make help        list all targets
 #
 # Two stages, deliberately separated:
-#   generate  (atopile)      turns .ato source into KiCad files. Needs the venv.
+#   generate  (SKiDL)        turns the design source into KiCad files.
 #   verify    (kicad-cli,    consumes committed files. Runs anywhere, and is
 #              pytest,        what gates CI.
 #              ngspice)
@@ -27,10 +27,12 @@ TOOLS_DIR := .tools
 VENV      := .venv
 
 # --- pinned versions --------------------------------------------------------
-# atopile writes KiCad 9 file format (20241229), so KiCad 9 is what we pin.
+# We write the KiCad 9 file format (20241229) ourselves, so KiCad 9 is what we
+# pin. The format changed twenty-two times inside the v10 cycle alone, which
+# makes each major version a scheduled migration rather than an upgrade.
 UV_VERSION       := 0.12.15
 PYTHON_VERSION   := 3.14
-ATOPILE_VERSION  := 0.15.9
+SKIDL_VERSION    := 2.3.0
 KICAD_REQUIRED   := 9.0
 NGSPICE_REQUIRED := 45.2
 
@@ -47,25 +49,10 @@ endif
 
 UV_DIR := $(TOOLS_DIR)/uv-$(UV_VERSION)
 UV     := $(UV_DIR)/uv
-ATO    ?= $(VENV)/bin/ato
-
-# The SKiDL virtualenv, which is replacing atopile's. It also carries pytest,
-# which used to arrive as one of atopile's dependencies.
-SKIDL_VENV := .venv-skidl
-SKIDL_PY   := $(SKIDL_VENV)/bin/python
+PY     ?= $(VENV)/bin/python
 
 # uv keeps its downloaded Pythons here, so nothing touches the system Python.
 export UV_PYTHON_INSTALL_DIR := $(abspath $(TOOLS_DIR)/pythons)
-
-# atopile reports to telemetry.atopileapi.com by default on a developer's
-# machine, sending an installation id, a hashed project id, error logs, build
-# duration, the ato version and *the git hash of the current commit*. It already
-# stays quiet when CI is set, so this only changes local builds.
-#
-# Turned off because a build tool should not be the thing that decides what
-# leaves this machine. Set TELEMETRY=1 to allow it.
-TELEMETRY ?= 0
-export FBRK_TELEMETRY := $(TELEMETRY)
 
 LAYOUT_DIR := $(BOARD)/elec/layout/default
 DRU        := $(LAYOUT_DIR)/default.kicad_dru
@@ -91,43 +78,35 @@ $(UV):
 	@rm -f $(UV_DIR)/uv.tar.gz
 	@touch $@
 
-# atopile publishes no Linux arm64 wheel, so on arm64 this builds it from
-# source (~2 min). uv's own Python is used because it ships the headers that
-# build needs; Ubuntu's system Python does not.
-$(ATO): $(UV) requirements/atopile.lock
-	@echo "Creating $(VENV) on Python $(PYTHON_VERSION) and installing atopile $(ATOPILE_VERSION)"
+# SKiDL is pure Python, so this is the same on every architecture - no wheel
+# to be missing and nothing to build from source.
+$(PY): $(UV) requirements/skidl.lock
+	@echo "Creating $(VENV) on Python $(PYTHON_VERSION) from requirements/skidl.lock"
 	@$(UV) python install $(PYTHON_VERSION)
-	@$(UV) venv --python $(PYTHON_VERSION) $(VENV)
-	@$(UV) pip install --python $(VENV)/bin/python -r requirements/atopile.lock
+	@$(UV) venv --clear --python $(PYTHON_VERSION) $(VENV)
+	@$(UV) pip install --python $(PY) -r requirements/skidl.lock
 	@touch $@
 
-$(SKIDL_PY): $(UV) requirements/skidl.lock
-	@echo "Creating $(SKIDL_VENV) on Python $(PYTHON_VERSION) from requirements/skidl.lock"
-	@$(UV) python install $(PYTHON_VERSION)
-	@$(UV) venv --clear --python $(PYTHON_VERSION) $(SKIDL_VENV)
-	@$(UV) pip install --python $(SKIDL_PY) -r requirements/skidl.lock
-	@touch $@
-
-tools: $(ATO) $(SKIDL_PY) ## Fetch pinned uv + Python and build the atopile venv
+tools: $(PY) ## Fetch pinned uv + Python and build the design virtualenv
 	@$(MAKE) --no-print-directory versions
 
 versions: ## Print tool versions and check the pinned ones
 	@printf "  uv        %s\n" "$$($(UV) --version 2>/dev/null | awk '{print $$2}')"
 	@printf "  python    %s\n" "$$($(VENV)/bin/python --version 2>/dev/null | awk '{print $$2}')"
-	@printf "  atopile   %s\n" "$$($(ATO) --version 2>/dev/null)"
+	@printf "  skidl     %s\n" "$$($(PY) -c 'import skidl; print(skidl.__version__)' 2>/dev/null || echo '(not installed)')"
 	@printf "  kicad-cli %s\n" "$$([ -n "$(KICAD_CLI)" ] && $(KICAD_CLI) version || echo '(not installed)')"
 	@printf "  ngspice   %s\n" "$$([ -n "$(NGSPICE)" ] && $(NGSPICE) -v 2>/dev/null | sed -n 's/.*ngspice-\([0-9.]*\).*/\1/p' | head -1 || echo '(not installed)')"
 	@printf "  pcbnew    %s\n" "$$(python3 -c 'import pcbnew; print(pcbnew.GetBuildVersion())' 2>/dev/null || echo '(not importable)')"
 	@fail=0; \
-	ato_v=$$($(ATO) --version 2>/dev/null); \
-	if [ "$$ato_v" != "$(ATOPILE_VERSION)" ]; then \
-		echo "ERROR: atopile is '$$ato_v', expected $(ATOPILE_VERSION). Run: make tools" >&2; fail=1; fi; \
+	skidl_v=$$($(PY) -c 'import skidl; print(skidl.__version__)' 2>/dev/null); \
+	if [ "$$skidl_v" != "$(SKIDL_VERSION)" ]; then \
+		echo "ERROR: skidl is '$$skidl_v', expected $(SKIDL_VERSION). Run: make tools" >&2; fail=1; fi; \
 	if [ -z "$(KICAD_CLI)" ]; then \
 		echo "ERROR: kicad-cli not found. Install KiCad $(KICAD_REQUIRED) (see README.md)" >&2; fail=1; \
 	else \
 		kv=$$($(KICAD_CLI) version 2>/dev/null); \
 		case "$$kv" in $(KICAD_REQUIRED).*) ;; *) \
-			echo "ERROR: kicad-cli is $$kv, expected $(KICAD_REQUIRED).x — atopile writes KiCad 9 files" >&2; fail=1;; \
+			echo "ERROR: kicad-cli is $$kv, expected $(KICAD_REQUIRED).x — we write KiCad 9 files" >&2; fail=1;; \
 		esac; fi; \
 	if ! python3 -c 'import pcbnew' >/dev/null 2>&1; then \
 		echo "ERROR: KiCad's pcbnew Python module is not importable. It ships in the" >&2; \
@@ -150,13 +129,14 @@ versions: ## Print tool versions and check the pinned ones
 #
 # Always from scratch: the board is output, and a stale elec/ is how a build
 # ends up half describing a design that no longer exists.
-build: $(SKIDL_PY) ## Turn the design source into KiCad files for BOARD
+build: $(PY) ## Turn the design source into KiCad files for BOARD
 	@rm -rf $(BOARD)/elec $(BOARD)/build
 	@mkdir -p $(BOARD)/build
-	@cd $(BOARD) && ../$(SKIDL_PY) $(BOARD).py
+	@cd $(BOARD) && ../$(PY) $(BOARD).py
 	@python3 tools/board.py $(BOARD)
 
-# atopile leaves every part in a grid and nothing routed. This puts the board
+# The board writer leaves every part at the origin and nothing routed. This
+# puts the board
 # together from $(BOARD)/layout.py, then fills the copper pours - kicad-cli
 # cannot fill them, and DRC reads whatever fill is already in the file, so an
 # unfilled plane reports every ground pad as unconnected.
@@ -183,11 +163,15 @@ $(DRU): fab/pcbway.kicad_dru $(BOARD)/rules.kicad_dru
 	   sed '1d' $(BOARD)/rules.kicad_dru; } > $@
 	@echo "wrote $@"
 
-# The board file is not byte-reproducible: atopile emits footprints in a
-# different order every build and gives every object a fresh UUID. The design it
-# describes is, and that is what this compares - where each part sits, what
-# copper joins what, what the nets are called. If that ever stops holding, the
-# pipeline has become a random number generator and nothing downstream means
+# What we write is byte-identical from one build to the next: the design source
+# is deterministic, and both the board writer and the layout engine derive every
+# UUID from the object it belongs to. The remaining churn is KiCad's - filling
+# the copper pours goes through pcbnew, which reassigns identifiers on save, and
+# moves about six hundred lines that mean nothing.
+#
+# So the comparison is of the design rather than the file: where each part sits,
+# what copper joins what, what the nets are called. If that ever stops holding,
+# the pipeline has become a random number generator and nothing downstream means
 # anything.
 reproducible: layout ## Build twice and check both runs describe the same board
 	@cp $(LAYOUT_DIR)/default.kicad_pcb $(BOARD)/.first.kicad_pcb
@@ -207,7 +191,7 @@ drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 
 # Depends on build so the checks can never pass against stale output.
 check: layout ## Run the design checks against what the build produced
-	@$(SKIDL_PY) -m pytest checks/ -q --board $(BOARD)
+	@$(PY) -m pytest checks/ -q --board $(BOARD)
 
 # The decks take their component values from the build's variable report, so
 # there is no second copy of the design to fall out of step with the first.

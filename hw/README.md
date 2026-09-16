@@ -1,13 +1,15 @@
 # amaxa hardware
 
-Boards designed as code: **atopile** (`.ato`) is the design source, **KiCad** holds the layout and runs the rule checks, **ngspice** simulates the analog behaviour, and CI gates all of it. The reasoning behind these choices is in [`docs/research/09-board-design-pipeline.md`](../docs/research/09-board-design-pipeline.md).
+Boards designed as code: **SKiDL** is the design source, **KiCad** holds the layout and runs the rule checks, **ngspice** simulates the analog behaviour, and CI gates all of it. The reasoning behind the original choices is in [`docs/research/09-board-design-pipeline.md`](../docs/research/09-board-design-pipeline.md); why the design source changed is under [Why not atopile](#why-not-atopile).
+
+**Nothing in this pipeline needs a network.** Not a parts service, not a registry, not an account. `make tools` fetches a pinned `uv` and a pinned Python, and after that a build reaches nothing — verified by running one with `socket.connect` and `getaddrinfo` raising.
 
 The first board, `led12`, is a 12 V LED board with no processor. It exists to prove the pipeline end to end before the STM32H743 control board depends on it.
 
 **Status:** the board builds from source, is placed and routed, passes KiCad DRC
-with nothing reported at any severity, and its analog behaviour is simulated.
-Twenty-eight design checks and nine simulated measurements gate it, and CI runs
-all of it, publishing renders, a 3D model and a fab package.
+with no errors, and its analog behaviour is simulated. Thirty-one design checks
+and nine simulated measurements gate it, and CI runs all of it, publishing
+renders, a 3D model and a fab package.
 
 ## Quick start
 
@@ -15,25 +17,25 @@ Needs Linux (x86_64 or arm64) with `make`, `curl`, `tar` and `sudo` for the KiCa
 
 ```sh
 sudo apt install kicad ngspice    # KiCad 9.x and ngspice; see "What is pinned"
-make tools                        # pinned uv + Python + atopile venv
+make tools                        # pinned uv + Python + the design virtualenv
 make versions                     # confirms every tool matches its pin
 ```
 
-`make tools` downloads nothing into your system: `uv`, its Python and the atopile virtualenv all live under `hw/.tools/` and `hw/.venv/`, both git-ignored. `make distclean` removes them.
+`make tools` downloads nothing into your system: `uv`, its Python and the virtualenv all live under `hw/.tools/` and `hw/.venv/`, both git-ignored. `make distclean` removes them.
 
 ## What is pinned
 
 | Component | Version | Where | Notes |
 |---|---|---|---|
-| uv | 0.12.15 | `Makefile` (sha256 per architecture) | Fetches Python and installs atopile |
-| Python | 3.14 (uv-managed) | `Makefile` | atopile requires 3.14. uv's build ships the headers the install needs; Ubuntu's system Python does not |
-| atopile | 0.15.9 | `requirements/atopile.lock` (123 packages) | Built from source on arm64, ~2 min; a prebuilt wheel exists only for x86_64 |
+| uv | 0.12.15 | `Makefile` (sha256 per architecture) | Fetches Python and installs the lock |
+| Python | 3.14 (uv-managed) | `Makefile` | Nothing requires it specifically any more; it is pinned so local and CI match |
+| SKiDL | 2.3.0 | `requirements/skidl.lock` (31 packages, hash-pinned) | Pure Python, so identical on every architecture |
 | KiCad | **9.0.x** | system package | **Must be 9, not 10** — see below |
 | ngspice | 45.2 | system package | Version differences change simulation numbers, so `make versions` warns on a mismatch |
 
 ### Why KiCad 9 and not 10
 
-atopile writes the KiCad **9** file format (`20241229`). If you open the board in KiCad 10 and save, the files are upgraded and the next atopile build may fail to read them. `make versions` fails if `kicad-cli` is not 9.x, and a later check will assert the file-format version inside the board itself.
+We write the KiCad **9** file format (`20241229`) ourselves, in `tools/board.py`. The format changed twenty-two times inside the v10 cycle alone, which makes each major version a scheduled migration rather than an upgrade. `make versions` fails if `kicad-cli` is not 9.x.
 
 Ubuntu 26.04 ships KiCad 9.0.8 directly. On Ubuntu 24.04 (what CI uses), add `ppa:kicad/kicad-9.0-releases`, which publishes 9.0.9.
 
@@ -41,25 +43,27 @@ Ubuntu 26.04 ships KiCad 9.0.8 directly. On Ubuntu 24.04 (what CI uses), add `pp
 
 The pipeline splits in half deliberately:
 
-- **Generate** — atopile turns `.ato` source into KiCad files. Needs the virtualenv.
-- **Verify** — `kicad-cli`, pytest and ngspice consume the committed files. Runs anywhere, and is what gates CI.
+- **Generate** — `led12/led12.py` builds the circuit and writes `design.json`; `tools/board.py` turns that into KiCad files. Needs the virtualenv.
+- **Verify** — `kicad-cli`, pytest and ngspice consume what was generated. Only the first step needs the virtualenv at all.
 
-That split means a machine that can't run atopile can still verify the design, and it keeps the blocking checks free of heavyweight tooling.
+One file knows SKiDL exists. Everything downstream reads `design.json`, a schema we own, and KiCad files. That indirection is the lesson from the tool this replaced, whose printed output had quietly become the interface half the pipeline read — so every place we read it was a place it could hurt us.
 
 ## Layout
 
 ```
 hw/
 ├── Makefile                 front end: tools, versions, build, check, drift
-├── requirements/            atopile dependency lock
+├── requirements/            hash-pinned dependency lock
 ├── checks/                  the design checks, as pytest
-├── tools/                   check_drift.py
+├── tools/                   the engines: board writer, layout, simulation
 └── led12/
     ├── ato.yaml             build targets
-    ├── src/led12.ato        the board
     ├── parts/               one directory per footprint library
     │   └── <LIB>/           footprint + <LIB>.ato + <LIB>.md review note
-    ├── layout.py            placement and routing
+    ├── led12.py             the circuit: the only file that knows SKiDL
+    ├── parts.py             every part as data — symbol, footprint, part number
+    ├── board.kicad_pro      netclasses and the clearances DRC enforces
+    ├── layout.py            the board: size, placement, routing, pour
     ├── rules.kicad_dru      design intent, on top of the fab limits
     ├── elec/                generated KiCad files — not committed
     └── build/               generated reports — not committed
@@ -67,21 +71,24 @@ hw/
 
 ## The checks
 
-`make check` is where the real electrical reasoning lives, because atopile's own
-assertions cannot do it (see "What atopile's assertions actually check" below).
+`make check` is where the electrical reasoning lives. It reads `design.json` and
+the board file, and never hard-codes a value the design already states.
 It reads what the build produced — the variable report and the board file, which
 carries each part's number and every resolved parameter per instance — and never
 hard-codes a value that the design already states.
 
-**`test_build_gates.py`** turns problems atopile reports but tolerates into
-failures: a parameter resolved to `<empty>`, meaning two constraints on it cannot
-both hold; one supplier part number carrying two different parts (checked against
+**`test_build_gates.py`** reads what was generated rather than what was
+described, because a part can be specified perfectly and still reach the board
+wrong: one supplier part number carrying two different parts (checked against
 the board, not the BOM, because the BOM merges those rows and hides it); a BOM
 line with no supplier code; a footprint with no designator; a designator used
 twice; a pad with no net.
 
-**`test_electrical.py`** checks the claims that relate two quantities, which is
-exactly what atopile cannot do: LED current across the supply range, series
+**`test_symbols.py`** checks that each part's symbol exists and that its pin
+numbers match its footprint's pads. Nothing else does, and a part wired to the
+wrong leg passes every other gate — it builds, routes and clears DRC.
+
+**`test_electrical.py`** checks the claims that relate two quantities: LED current across the supply range, series
 resistor dissipation against its rating, gate drive against the FET's threshold,
 debounce time constants, fuse headroom over worst-case load, and that nothing on
 the protected rail is rated below what the TVS lets through.
@@ -114,8 +121,9 @@ not a gate. Three found real defects the first time they ran:
 
 ## Laying the board out
 
-`make layout` applies `led12/layout.py` — a placement table and a list of routes
-— to the board atopile generated, then fills the ground pour. Routes name pads
+`make layout` applies `led12/layout.py` — the board's size, a placement table and
+a list of routes — to the board `tools/board.py` wrote, then fills the ground
+pour. Routes name pads
 symbolically, as `power.q_rpp:3`, so moving a part in the placement table moves
 the tracks that reach it; literal coordinates are only the corners in between.
 
@@ -130,7 +138,13 @@ Two things about zones are worth knowing. **`kicad-cli` cannot fill them**, and
 it runs DRC against whatever fill is already in the file — so an unfilled ground
 plane reports every ground pad as unconnected while the render looks perfect.
 Filling needs KiCad's own `pcbnew` Python module, which ships inside the `kicad`
-package. And **silkscreen needs deliberate placement**: atopile puts each
+package, and which KiCad warns on import is **deprecated and due for removal**.
+That is the one remaining place this pipeline depends on it, and the only
+reason the board is not byte-identical from build to build: `pcbnew` reassigns
+object identifiers when it saves, moving about six hundred meaningless lines.
+Everything we write ourselves is stable.
+
+And **silkscreen needs deliberate placement**: a stock footprint puts its
 designator on top of the part it names, the fab clips silk that lands on a pad,
 and the board comes back with unlabelled parts.
 
@@ -142,8 +156,8 @@ it is. A band with no reason behind it is a number somebody widens the next time
 it fails.
 
 **The decks do not restate the design.** Where a deck needs a component value it
-writes `@power.out.voltage:max@` — an atopile instance path and which end of its
-resolved range to take — and the runner fills it in from the build's variable
+writes `@power.out.voltage:max@` — an instance path and which end of its
+range to take — and the runner fills it in from the build's variable
 report. Changing a resistor in a part definition moves the simulation with it,
 because there is no second copy of the design to fall out of step.
 
@@ -220,12 +234,11 @@ time. What a reviewer reads is `layout.py` — a placement table and a list of
 routes, which diffs far more usefully than a `.kicad_pcb` ever did — alongside
 the renders and the DRC report CI publishes.
 
-Measuring this afterwards showed the decision was not merely convenient. **Two
-builds on the same machine from identical sources differ on more than five
-thousand lines**: atopile emits footprints in a different order every run and
-gives every object a fresh UUID. Nothing about the design moves. Every part is
-in the same place, every track runs between the same points, the pour covers the
-same copper.
+Measuring this afterwards showed the decision was not merely convenient. Two
+builds on the same machine from identical sources still differ, though far less
+than they used to: **what we write is byte-identical, and the remaining six
+hundred lines of churn are KiCad's**, from filling the pours. Nothing about the
+design moves.
 
 So the board is compared as a design rather than as a file. `make reproducible`
 builds twice and checks that both runs describe the same thing — the same parts
@@ -235,36 +248,42 @@ property worth holding, and unlike a byte comparison it is true.
 If you ever want to take the board over by hand in KiCad, commit it at that
 point and stop running `make layout` on it. Until then it is generated.
 
-## Verified findings
+## Why not atopile
 
-Facts established while setting this up, worth not rediscovering.
+The pipeline was built on **atopile** and then moved off it. Keeping the record,
+because it is the justification for the move and the reason several checks here
+exist at all.
 
-### Getting it running
+**Its authors abandoned the open-source project.** The public repo's default
+branch has had no commits since **2026-03-11**, while PyPI shipped seventeen more
+releases with no git tags; in August the maintainers closed roughly twenty of
+their own in-flight PRs unmerged. Their own words, 2026-08-06: *"the public
+repository has become stale, despite us working full-time on the project."* The
+0.15 line is "soft-deprecated" with a removal date "to be announced", there is no
+0.16 on PyPI, and the successor is a sign-in-only browser product speaking a
+different language. The public documentation is gone.
+
+**Every service of theirs that provided something is gone.**
+`components.atopileapi.com` (the part picker), `packages.atopileapi.com` (the
+registry dependencies came from) and `api.atopileapi.com` all fail to resolve.
+`telemetry.atopileapi.com` resolves and answers.
+
+**It reported telemetry by default**, to that endpoint, on a developer's machine:
+an installation id, a hashed project id, error logs, build duration, the version,
+and the git hash of the current commit. Opt-out, and documented in a docstring
+rather than anywhere a user would look.
+
+None of that broke the board — we used explicit parts and no cloud, and were
+hash-pinned. But it was a dependency with a stated end of life, no documentation
+for the version we were on, and no fixes ever.
+
+### What it was like to get running
 
 - **atopile has no Linux arm64 wheel**, in any of its 171 releases. On arm64 it builds from source in about two minutes, which works as long as uv's own Python (with headers) is used.
 - **atopile's parts server is gone** (`components.atopileapi.com` no longer resolves), so its automatic part picker can't run. Parts are specified explicitly and committed instead, each with a review note.
 - **atopile's public repo has been frozen since March 2026** while releases keep appearing. It's MIT licensed, so the fallback is forking and pinning. Deciding that is a later milestone.
 
-### What atopile talks to
-
-Worth knowing before depending on it, and checked on this machine rather than
-read from the documentation:
-
-- **It reports telemetry by default on a developer's machine**, to
-  `telemetry.atopileapi.com`, a PostHog endpoint. It sends an installation id
-  (or the logged-in user id), a hashed project id, error logs, how long the
-  build took, the ato version, and **the git hash of the current commit**. It
-  already stays quiet when `CI` is set, so this was only ever local builds.
-  `make` turns it off via `FBRK_TELEMETRY`; pass `TELEMETRY=1` to allow it.
-- **Every other service of theirs is gone.** `components.atopileapi.com` (the
-  part picker), `packages.atopileapi.com` (the package registry that `ato`
-  dependencies come from) and `api.atopileapi.com` all fail to resolve.
-  `telemetry.atopileapi.com` resolves and answers.
-
-That the only surviving service is the one that collects rather than provides is
-the clearest signal available about where the project stands.
-
-### How atopile wants parts laid out
+### How it wanted parts laid out
 
 Undocumented, and reverse-engineered from `faebryk/libs/part_lifecycle.py`:
 
@@ -274,7 +293,7 @@ Undocumented, and reverse-engineered from `faebryk/libs/part_lifecycle.py`:
 - Only `lcsc` is accepted as a supplier id. Any other value raises.
 - Names collide silently with the standard library. Our test pad was called `TestPoint`, which resolved to the stdlib `TestPoint` (it has `contact`, not `pad`) and failed with ``Field `tp_12v.pad` could not be resolved``.
 
-### What atopile's assertions actually check
+### What its assertions actually checked
 
 This one matters, because it decides what CI can gate on. Measured, not read:
 
@@ -294,7 +313,7 @@ Two consequences we rely on:
 - Because a contradiction shows up as `<empty>` rather than a failure, **`<empty>` is promoted to a build failure by our own gate**. Otherwise a contradicting assertion is indistinguishable from a passing one.
 - Because `assert x > A` is silently dropped, an inequality in a `.ato` file is a **lie**. The check-count guard in `hw/checks/` exists so that a check which stops running gets noticed.
 
-### Things atopile does give us for free
+### What it did give us
 
 - Deriving a part from a standard-library type (`component Res680 from Resistor`) brings real parameters, a designator prefix, `~>` bridging, and a populated BOM `Value` column. Hand-rolled components get an empty `Value`.
 - It warns when **one part number carries two different values** ("Value is not the same for two equal partnumbers"). That is the single most valuable check it ships, because explicit parts make it easy to reuse a 680 Ω part number for a 10 kΩ resistor. We promote that warning to an error.
@@ -305,7 +324,7 @@ Two consequences we rely on:
 | Target | Does |
 |---|---|
 | `make help` | List targets |
-| `make tools` | Fetch pinned uv and Python, build the atopile venv |
+| `make tools` | Fetch pinned uv and Python, build the design virtualenv |
 | `make versions` | Print every tool version and fail if a pinned one is wrong |
 | `make build` | Turn `.ato` source into KiCad files |
 | `make check` | Run the design checks against what the build produced |

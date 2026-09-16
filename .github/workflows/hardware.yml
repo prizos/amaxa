@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   # Everything that consumes committed files: rule checks, design checks and
-  # simulation. Board generation (atopile) is a separate stage; see hw/README.md.
+  # simulation. See hw/README.md.
   verify:
     name: Verify boards
     runs-on: ubuntu-24.04
@@ -32,17 +32,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # uv, its Python and the atopile venv. Keyed on the pins themselves.
+      # uv, its Python and the design virtualenv. Keyed on the pins themselves.
       - name: Cache pinned tools
         uses: actions/cache@v6
         with:
           path: |
             ~/.cache/uv
             hw/.tools
-          key: hw-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hw/Makefile', 'hw/requirements/atopile.lock') }}
+          key: hw-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hw/Makefile', 'hw/requirements/skidl.lock') }}
           restore-keys: hw-${{ runner.os }}-${{ runner.arch }}-
 
-      # Ubuntu 24.04 ships KiCad 7; atopile writes KiCad 9 files, so use the
+      # Ubuntu 24.04 ships KiCad 7; we write KiCad 9 files, so use the
       # KiCad 9 PPA. ngspice comes from the archive. The kicad package also
       # provides the pcbnew Python module, which is what fills copper pours.
       - name: Install KiCad 9 and ngspice
@@ -167,7 +167,7 @@ jobs:
           path: |
             ~/.cache/uv
             hw/.tools
-          key: hw-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hw/Makefile', 'hw/requirements/atopile.lock') }}
+          key: hw-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('hw/Makefile', 'hw/requirements/skidl.lock') }}
           restore-keys: hw-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install KiCad 9 and ngspice

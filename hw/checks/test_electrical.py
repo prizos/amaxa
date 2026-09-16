@@ -210,8 +210,7 @@ def test_rail_parts_survive_the_tvs_clamp(spec, footprints):
     ]
 
     addresses = {
-        (fp["properties"].get("address") or fp["properties"].get("atopile_address")):
-        fp["designator"]
+        fp["properties"].get("address"): fp["designator"]
         for fp in footprints
     }
     weak = []

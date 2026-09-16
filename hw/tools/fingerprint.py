@@ -2,10 +2,10 @@
 """
 Reduce a KiCad board to the design it describes, ignoring how it was written.
 
-Two builds of this project from identical sources produce files that differ on
-thousands of lines: atopile emits footprints in a different order each time and
-gives every object a fresh UUID. None of that is the design. Every part is in
-the same place, every track runs between the same points, and the pour covers
+Two builds from identical sources produce files that differ on hundreds of
+lines, because filling the copper pours goes through KiCad's own code and it
+reassigns object identifiers on save. None of that is the design. Every part is
+in the same place, every track runs between the same points, and the pour covers
 the same copper.
 
 So the board cannot be compared byte for byte, but it can be compared as a
@@ -49,8 +49,7 @@ def fingerprint(path: Path) -> dict[str, set[str]]:
         at = re.search(r"\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
         lib = re.search(r'\(footprint "([^"]+)"', block)
         parts.add(
-            f"{props.get('Reference')} "
-            f"{props.get('address') or props.get('atopile_address')} "
+            f"{props.get('Reference')} {props.get('address')} "
             f"{lib.group(1)} at ({at.group(1)}, {at.group(2)}) "
             f"rot {at.group(3) or '0'} = {props.get('Value')} "
             f"[{props.get('LCSC') or 'no supplier part'}]"

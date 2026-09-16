@@ -1,20 +1,21 @@
 # Parts
 
-One directory per KiCad footprint library. Each holds the footprint file, the
-`.ato` that declares the components using it, and a review note.
+One directory per KiCad footprint library. Each holds the footprint file and a
+review note. What the parts *are* — symbol, part number, supplier code and the
+datasheet figures — lives in [`../parts.py`](../parts.py).
 
-atopile requires the footprint to sit beside the `.ato` that declares the
-component, and takes the library name from the directory. That is why the
-directories are named after packages rather than parts, and why several
-components can share one: `SOT23` holds both MOSFETs, `R0805` all four
-resistors.
+The directories are named after packages rather than parts, so several parts
+can share one: `SOT23` holds both MOSFETs, `R0805` all four resistors. KiCad
+takes the library name from the directory, and `tools/board.py` writes an
+`fp-lib-table` pointing at them.
 
 ## What the review notes are for
 
-The automatic part picker cannot run — atopile's parts server no longer
-resolves — so every part here is specified by hand. Nothing checks by machine
-that a part number matches the footprint it was given, or that pad 1 is the
-pin the datasheet calls pin 1. The note is the record of that check.
+Every part is specified by hand. Two things are now checked by machine — that
+the symbol exists, and that its pin numbers match the footprint's pads — but
+nothing checks that the part number matches the package it was given, or that
+pin 1 is the pin the *datasheet* calls pin 1. The note is the record that a
+person looked.
 
 Each note records the part, why it was chosen, what was rejected, the pin
 mapping and how it was established, and what is still unconfirmed.
@@ -48,10 +49,12 @@ further check.
 1. Copy the footprint from the KiCad library into a directory named after the
    package. Do not edit it; if the stock footprint is unsuitable, pick a
    different stock one and say why in the note.
-2. Declare the component in `<DIR>/<DIR>.ato`, deriving from a standard-library
-   type (`Resistor`, `Capacitor`, `LED`, `Fuse`, `MOSFET`, `Diode`) where one
-   fits. That gives real parameters, a designator prefix and a BOM value.
-3. Assert the part's own datasheet values in the component body. A board that
-   then asks for something the part cannot do resolves to an `<empty>` spec,
-   which `make check` rejects.
-4. Write `<DIR>/<DIR>.md`. `make check` fails if it is missing.
+2. Add a `PartSpec` to [`../parts.py`](../parts.py): the KiCad symbol, the
+   footprint, the manufacturer and part number, the supplier code, and the
+   datasheet figures the checks and simulations reason about. Use `lcsc=None`
+   for something deliberately not bought, which keeps it off the BOM.
+3. Check the symbol's pin numbers against the footprint's pads yourself, and
+   against the datasheet. `make check` verifies the first pairing; only you can
+   verify the second.
+4. Write `<DIR>/<DIR>.md`, naming the part number. `make check` fails if the
+   note is missing, and fails again if it still names a part that was replaced.

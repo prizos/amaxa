@@ -77,15 +77,14 @@ def pcb_text(board_dir) -> str:
     return pcb.read_text()
 
 
-def _address(footprint: dict) -> str | None:
+def _address(footprint: dict) -> str:
     """
-    A part's stable instance name.
+    A part's stable instance name, as the board writer recorded it.
 
-    Written as `address` by our own board writer and as `atopile_address` by
-    the design source being replaced; both are read while the two coexist.
+    Addresses name a role — `power.q_rpp` — while designators name a physical
+    part. Only one of those survives adding a component.
     """
-    props = footprint["properties"]
-    return props.get("address") or props.get("atopile_address") or footprint["designator"]
+    return footprint["properties"].get("address") or footprint["designator"]
 
 
 def _sexp_blocks(text: str, head: str) -> list[str]:

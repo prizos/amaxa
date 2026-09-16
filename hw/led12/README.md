@@ -13,7 +13,10 @@ interesting is in what had to be true for it to be correct.
 | ![Top side](docs/board-top.png) | ![Bottom side](docs/board-bottom.png) |
 
 50 × 40 mm, two layers, 28 parts, 63 track segments, 12 stitching vias, and a
-ground pour on the back. **KiCad DRC reports nothing at any severity.**
+ground pour on the back. **KiCad DRC reports no errors**, against both the fab
+limits and the board's own rules. Eight warnings remain, all long-standing: four
+where a board footprint differs from its library copy because we add part
+identity to it, and four on one test point's silkscreen label.
 
 ## How it works
 
@@ -36,7 +39,7 @@ be measured. Four test pads expose 12 V, 3.3 V, ground and the gate.
 
 ## What is checked, and what that caught
 
-Thirty-three checks, nine simulated measurements, and DRC against both the
+Thirty-one checks, nine simulated measurements, and DRC against both the
 PCBWay fab limits and the board's own design rules. Each gate has been made to
 fail on purpose at least once — a gate that has never failed is not a gate.
 
@@ -56,7 +59,10 @@ And two defects in the *pipeline itself*:
   run outside `make drc` checked the board against **no custom rules** — and
   changed the copper, producing a different ground pour.
 - The design source named `Device:Q_NMOS_GSD` and `Device:Q_PMOS_GSD`, which
-  exist in no KiCad library. Nothing noticed for months.
+  exist in no KiCad library. Nothing noticed for months, because the old tool
+  never resolved symbols at all. `checks/test_symbols.py` catches it now.
+- The silkscreen rules policed every layer despite being named for silkscreen,
+  so they fired on fabrication-layer text that is never printed.
 
 ## Bill of materials
 
@@ -84,39 +90,45 @@ datasheet it was read from and what a human confirmed.
 | U1 | 3.3 V LDO, 44 V max in | Gainsil GS2401C-33CTR3 | C6283798 |
 | TP1–TP4 | test pads | bare copper, deliberately off the BOM | — |
 
-## Where the port stands
+## The port off atopile
 
-The design source is being moved off **atopile**, whose authors have abandoned
-the open-source project — zero commits since 2026-03-11, every service except
+The design source has been moved off **atopile**, whose authors abandoned the
+open-source project — no commits since 2026-03-11, every service except
 telemetry switched off, the successor a sign-in-only browser product. The
 replacement is **SKiDL**: MIT, maintained since 2016, with no company behind it
-and nothing to switch off.
+and nothing to switch off. `../README.md` has the evidence.
 
-Only the design source changes. The layout engine, the checks, the simulation
-and CI all stay.
+Only the design source changed. The layout engine, the checks, the simulation
+and CI all stayed, and the board came out the same — same parts at the same
+coordinates, same copper, same simulated numbers to every digit.
 
 | | |
 |---|---|
 | **S0** Spike, and freeze the reference | **done** |
 | **S1** Parts as Python data, symbol checks | **done** |
-| S2 The board as `@SubCircuit` blocks | next |
-| S3 The board writer, as text s-expressions | |
-| S4 Re-point the checks and simulation | |
-| S5 Remove atopile | |
-| S6 The gates SKiDL makes possible | |
+| **S2** The board as `@SubCircuit` blocks | **done** |
+| **S3** The board writer, as text s-expressions | **done** |
+| **S4** Re-point the checks and simulation | **done** |
+| **S5** Remove atopile | **done** |
+| S6 The gates SKiDL makes possible | next |
 
-`reference/` holds the board as it is today, frozen while atopile still builds:
-the fingerprint, the pad-level netlist, the BOM, the DRC report, the placement
-file and the rendered simulation decks. The port is accepted when the
-SKiDL-built board reproduces them.
+`reference/` holds the board as atopile last built it, frozen before the port
+began: the fingerprint, the pad-level netlist, the BOM, the DRC report, the
+placement file and the rendered simulation decks. The SKiDL board reproduces
+them, with three deltas that were chosen rather than discovered — the four LED
+anode nets are named `LED1_A`…`LED4_A` instead of being de-duplicated, net
+numbering is alphabetical, and the `Value` strings are human (`47uF`, `red`)
+rather than carrying the unconstrained-parameter notation the old tool leaked
+into a silkscreen-adjacent field.
 
 ## The files
 
 | | |
 |---|---|
+| `led12.py` | the circuit — the only file that knows SKiDL |
 | `parts.py` | every part as data — symbol, footprint, part number, datasheet figures |
-| `src/led12.ato` | the board, in atopile's language (being replaced) |
-| `layout.py` | placement, routing, vias and the ground pour |
+| `layout.py` | the board: size, placement, routing, vias and the ground pour |
+| `board.kicad_pro` | netclasses and the clearances DRC enforces |
 | `rules.kicad_dru` | design intent: track widths, clearances |
 | `sim/` | ngspice decks, device models and the bands each measurement must meet |
 | `parts/<LIB>/` | footprint, and the review note recording what a human checked |

@@ -82,7 +82,7 @@ class Board:
         for start, end in sexp_blocks(self.text, "footprint"):
             block = self.text[start:end]
             props = dict(re.findall(r'\(property "([^"]+)" "([^"]*)"', block))
-            address = props.get("address") or props.get("atopile_address")
+            address = props.get("address")
             if not address:
                 continue
             at = re.search(r"\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
