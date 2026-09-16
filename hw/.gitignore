@@ -30,3 +30,5 @@ __pycache__/
 # SKiDL writes an ERC report and a log beside wherever it is run
 *.erc
 skidl_*.log
+*/led12.log
+*.log
