@@ -31,11 +31,17 @@
 	(severity error))
 
 # Thinner silkscreen than this does not survive the screen.
+#
+# Scoped to the silkscreen layers, which is what the fab prints. Unscoped,
+# these also police the fabrication layers - where footprints carry small
+# annotation text that is never printed and has no minimum.
 (rule "silkscreen line width"
+	(condition "A.Layer == 'F.SilkS' || A.Layer == 'B.SilkS'")
 	(constraint text_thickness (min 0.15mm))
 	(severity error))
 
 (rule "silkscreen text height"
+	(condition "A.Layer == 'F.SilkS' || A.Layer == 'B.SilkS'")
 	(constraint text_height (min 0.8mm))
 	(severity error))
 

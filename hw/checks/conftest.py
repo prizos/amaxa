@@ -11,6 +11,7 @@ Run them with `make -C hw check`, which builds first.
 """
 
 import csv
+import importlib.util
 import json
 import re
 import sys
@@ -39,48 +40,29 @@ def board_dir(pytestconfig) -> Path:
 
 @pytest.fixture(scope="session")
 def build_dir(board_dir) -> Path:
-    d = board_dir / "build" / "builds" / "default"
+    d = board_dir / "build"
     if not d.is_dir():
         pytest.fail(f"No build output in {d}. Run `make -C hw build` first.")
     return d
 
 
 @pytest.fixture(scope="session")
-def variables(build_dir) -> list[dict]:
+def design(build_dir) -> dict:
     """
-    Every parameter in the design, flattened.
+    The design, as the board's own source wrote it.
 
-    Each entry is {path, name, spec, actual, meetsSpec, type}, where `path` is
-    the instance path like `leds[0].resistor` and `spec` is the resolved
-    constraint as atopile prints it, e.g. `680Ω ±1%` or `<empty>`.
+    `design.json` is our schema, not a tool's output format: parts by address,
+    parameter ranges as plain numbers, and the nets joining them. Keeping it
+    ours is the lesson from the design tool this replaced, whose printed output
+    had quietly become the interface half the pipeline read.
     """
-    data = json.loads((build_dir / "default.variables.ato.json").read_text())
-    out: list[dict] = []
-
-    def walk(node: dict):
-        for var in node.get("variables", []):
-            out.append(
-                {
-                    "path": node["path"],
-                    "type": node.get("typeName"),
-                    "name": var["name"],
-                    "spec": var.get("spec"),
-                    "actual": var.get("actual"),
-                    "meets_spec": var.get("meetsSpec"),
-                }
-            )
-        for child in node.get("children", []):
-            walk(child)
-
-    for node in data["nodes"]:
-        walk(node)
-    return out
+    return json.loads((build_dir / "design.json").read_text())
 
 
 @pytest.fixture(scope="session")
 def bom(build_dir) -> list[dict]:
     """The BOM as a list of rows, with `designators` split out of the first column."""
-    with (build_dir / "default.bom.csv").open() as fh:
+    with (build_dir / "bom.csv").open() as fh:
         rows = list(csv.DictReader(fh))
     for row in rows:
         row["designators"] = [d.strip() for d in row["Designator"].split(",")]
@@ -93,6 +75,17 @@ def pcb_text(board_dir) -> str:
     if not pcb.is_file():
         pytest.fail(f"No board file at {pcb}")
     return pcb.read_text()
+
+
+def _address(footprint: dict) -> str | None:
+    """
+    A part's stable instance name.
+
+    Written as `address` by our own board writer and as `atopile_address` by
+    the design source being replaced; both are read while the two coexist.
+    """
+    props = footprint["properties"]
+    return props.get("address") or props.get("atopile_address") or footprint["designator"]
 
 
 def _sexp_blocks(text: str, head: str) -> list[str]:
@@ -119,7 +112,7 @@ def footprints(pcb_text) -> list[dict]:
 
     atopile writes each part's identity and every resolved parameter into the
     board file as footprint properties, keyed per instance — `Value`, `LCSC`,
-    `Partnumber`, `resistance`, and `atopile_address`, the path back to the
+    `Partnumber`, `resistance`, and `address`, the path back to the
     source. That makes the board file, not the BOM, the place to check what was
     actually specified: the BOM merges rows that share a part number, which
     hides exactly the mistake we most want to catch.
@@ -173,59 +166,27 @@ def collected_check_count(pytestconfig) -> int:
     return getattr(pytestconfig, "collected_check_count", 0)
 
 
-# The spec parser lives in tools/specs.py so the simulation runner can use it
-# without pytest; see its docstring.
-sys.path.insert(0, str(HW_DIR / "tools"))
-from specs import UnconstrainedSpec, parse_spec  # noqa: E402
-
-__all__ = ["parse_spec", "UnconstrainedSpec"]
-
-
 @pytest.fixture(scope="session")
-def spec(variables):
+def spec(design):
     """
-    Look up one parameter's resolved range: `spec("leds[0].resistor", "resistance")`.
+    One parameter's range: `spec("leds[0].resistor", "resistance")` -> (low, high).
 
-    Fails the test rather than returning something made up if the parameter is
-    missing or was never constrained.
+    Fails rather than inventing a value, because a check that silently treats
+    "never specified" as "anything" passes for the wrong reason.
     """
-    index = {(v["path"], v["name"]): v["spec"] for v in variables}
+    values = design["values"]
 
     def lookup(path: str, name: str) -> tuple[float, float]:
-        if (path, name) not in index:
-            pytest.fail(f"No parameter {path}.{name} in the variable report")
-        try:
-            return parse_spec(index[(path, name)])
-        except UnconstrainedSpec as exc:
+        key = f"{path}.{name}"
+        if key not in values:
             pytest.fail(
-                f"{path}.{name} cannot be checked: {exc}. "
-                "Assert it in the part definition, from the datasheet."
+                f"{key} is not in design.json. Either the path is wrong, or the "
+                "part never states that value."
             )
+        low, high = values[key]
+        return float(low), float(high)
 
     return lookup
-
-
-@pytest.fixture(scope="session")
-def net_members(footprints) -> dict[str, set[tuple[str, str]]]:
-    """
-    Net name -> {(source address, pad)}.
-
-    Addresses like `power.fuse` rather than designators like `F1`, because
-    designators are assigned by the build and shift when a part is added.
-    """
-    out: dict[str, set[tuple[str, str]]] = {}
-    for fp in footprints:
-        address = fp["properties"].get("atopile_address", fp["designator"])
-        for pad, net in fp["pads"].items():
-            if net:
-                out.setdefault(net, set()).add((address, pad))
-    return out
-
-
-@pytest.fixture(scope="session")
-def net_parts(net_members) -> dict[str, set[str]]:
-    """Net name -> the set of source addresses it touches, ignoring which pad."""
-    return {net: {addr for addr, _ in members} for net, members in net_members.items()}
 
 
 @pytest.fixture(scope="session")
@@ -249,7 +210,7 @@ def board_outline(pcb_text) -> tuple[float, float, float, float]:
 def position(footprints):
     """`position("power.c_bulk")` -> that part's (x, y) on the board."""
     index = {
-        fp["properties"].get("atopile_address"): (fp["x"], fp["y"])
+        _address(fp): (fp["x"], fp["y"])
         for fp in footprints
     }
 
@@ -259,3 +220,39 @@ def position(footprints):
         return index[address]
 
     return lookup
+
+
+@pytest.fixture(scope="session")
+def net_members(footprints) -> dict[str, set[tuple[str, str]]]:
+    """
+    Net name -> {(source address, pad)}.
+
+    Addresses like `power.fuse` rather than designators like `F1`, because
+    designators name a physical part while addresses name its role, and only
+    one of those is stable when a part is added.
+    """
+    out: dict[str, set[tuple[str, str]]] = {}
+    for fp in footprints:
+        address = _address(fp)
+        for pad, net in fp["pads"].items():
+            if net:
+                out.setdefault(net, set()).add((address, pad))
+    return out
+
+
+@pytest.fixture(scope="session")
+def net_parts(net_members) -> dict[str, set[str]]:
+    """Net name -> the set of source addresses it touches, ignoring which pad."""
+    return {net: {addr for addr, _ in members} for net, members in net_members.items()}
+
+
+@pytest.fixture(scope="session")
+def parts(board_dir):
+    """The board's part list, loaded from its own `parts.py`."""
+    path = board_dir / "parts.py"
+    if not path.is_file():
+        pytest.fail(f"no {path}")
+    spec = importlib.util.spec_from_file_location(f"{board_dir.name}_parts", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.ALL

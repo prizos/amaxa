@@ -112,16 +112,22 @@ jobs:
             echo '</details>'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Rendered with a CSV reader rather than sed: designators are grouped as
+      # "C3, C5" and one footprint name contains a comma, so splitting on commas
+      # tears both apart.
       - name: Bill of materials
         run: |
           {
             echo '### Bill of materials'
             echo ''
-            sed -e 's/^/| /' -e 's/$/ |/' -e 's/,/ | /g' \
-              led12/build/builds/default/default.bom.csv | head -1
-            echo '| --- | --- | --- | --- | --- | --- | --- |'
-            sed -e 's/^/| /' -e 's/$/ |/' -e 's/,/ | /g' \
-              led12/build/builds/default/default.bom.csv | tail -n +2
+            python3 -c '
+          import csv, sys
+          rows = list(csv.reader(open("led12/build/bom.csv")))
+          print("| " + " | ".join(rows[0]) + " |")
+          print("|" + "---|" * len(rows[0]))
+          for row in rows[1:]:
+              print("| " + " | ".join(row) + " |")
+          '
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Renders and the 3D model are what a human reviews on the pull request;
@@ -133,8 +139,8 @@ jobs:
           name: led12-board
           path: |
             hw/out/led12/**
-            hw/led12/build/builds/default/*.csv
-            hw/led12/build/builds/default/*.json
+            hw/led12/build/*.csv
+            hw/led12/build/*.json
             hw/led12/elec/layout/default/*.kicad_pcb
             hw/led12/elec/layout/default/drc.json
           if-no-files-found: error

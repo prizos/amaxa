@@ -46,7 +46,7 @@ def branch_current(spec):
 
     def current(branch: str) -> tuple[float, float]:
         r_lo, r_hi = spec(f"{branch}.resistor", "resistance")
-        vf_lo, vf_hi = spec(f"{branch}.led.diode", "forward_voltage")
+        vf_lo, vf_hi = spec(f"{branch}.led", "forward_voltage")
         low = (v_lo - vf_hi) / (r_hi + n * rds_hi)
         high = (v_hi - vf_lo) / (r_lo + n * rds_lo)
         return low, high
@@ -210,7 +210,9 @@ def test_rail_parts_survive_the_tvs_clamp(spec, footprints):
     ]
 
     addresses = {
-        fp["properties"].get("atopile_address"): fp["designator"] for fp in footprints
+        (fp["properties"].get("address") or fp["properties"].get("atopile_address")):
+        fp["designator"]
+        for fp in footprints
     }
     weak = []
     for address, parameter in on_rail:

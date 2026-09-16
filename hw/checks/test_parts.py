@@ -4,6 +4,8 @@ Gates on the parts library itself.
 Nothing checks by machine that a part number matches its footprint, or that
 pad 1 is the pin the datasheet calls pin 1. The review note is the record that
 someone looked, so these make sure the record exists and stays honest.
+
+Pin numbering is checked separately, in test_symbols.py.
 """
 
 import re
@@ -13,8 +15,8 @@ import pytest
 
 @pytest.fixture(scope="session")
 def part_dirs(board_dir):
-    parts = board_dir / "parts"
-    return sorted(d for d in parts.iterdir() if d.is_dir())
+    libraries = board_dir / "parts"
+    return sorted(d for d in libraries.iterdir() if d.is_dir())
 
 
 def test_every_part_library_has_a_review_note(part_dirs):
@@ -27,19 +29,12 @@ def test_every_part_library_has_a_review_note(part_dirs):
     )
 
 
-def test_every_part_library_declares_components(part_dirs):
-    """A directory atopile registers as a library but nothing declares from."""
-    empty = [d.name for d in part_dirs if not (d / f"{d.name}.ato").is_file()]
-    assert not empty, f"Part libraries with no .ato: {empty}"
-
-
 def test_every_part_library_has_exactly_one_footprint(part_dirs):
     """
     One footprint per library directory.
 
-    atopile takes the library name from the directory, so two footprints in one
-    directory are two parts claiming the same library name. Sharing is fine and
-    intended — both MOSFETs use the one SOT-23 — but they share the *file*.
+    Several parts sharing one is intended — both MOSFETs use the one SOT-23 —
+    but they share the *file*.
     """
     wrong = {
         d.name: sorted(f.name for f in d.glob("*.kicad_mod"))
@@ -49,39 +44,35 @@ def test_every_part_library_has_exactly_one_footprint(part_dirs):
     assert not wrong, f"Libraries without exactly one footprint: {wrong}"
 
 
-def test_declared_footprints_exist(part_dirs):
+def test_every_footprint_is_used(parts, part_dirs):
     """
-    Every `footprint=` names a file that is actually there.
+    No footprint in the tree that nothing references.
 
-    atopile resolves these late, in the middle of writing the PCB, and the
-    failure names a library rather than the line that was wrong.
+    An orphan is either a part that was removed and left its footprint behind,
+    or a footprint nobody wired up — and the second is the expensive one.
     """
-    missing = []
+    used = {part.footprint for part in parts.values()}
+    orphans = []
     for d in part_dirs:
-        source = (d / f"{d.name}.ato").read_text()
-        for name in re.findall(r'footprint="([^"]+)"', source):
-            if not (d / name).is_file():
-                missing.append(f"  parts/{d.name}/{d.name}.ato -> {name}")
-    assert not missing, "Footprints named in source but not present:\n" + "\n".join(
-        missing
-    )
+        for mod in d.glob("*.kicad_mod"):
+            if f"{d.name}:{mod.stem}" not in used:
+                orphans.append(f"  parts/{d.name}/{mod.name}")
+    assert not orphans, "Footprints in the tree that no part uses:\n" + "\n".join(orphans)
 
 
-def test_review_notes_name_their_part(part_dirs):
+def test_review_notes_name_their_part(parts, board_dir):
     """
-    The note has to name the part number the source actually uses.
+    The note has to name the part number the design actually uses.
 
-    Parts get swapped; notes get left behind. This catches a note that still
-    describes the part that was replaced.
+    Parts get swapped; notes get left behind. This catches a note still
+    describing the part that was replaced.
     """
     stale = []
-    for d in part_dirs:
-        source = (d / f"{d.name}.ato").read_text()
-        note_path = d / f"{d.name}.md"
-        if not note_path.is_file():
+    for name, part in sorted(parts.items()):
+        library = part.footprint.partition(":")[0]
+        note = board_dir / "parts" / library / f"{library}.md"
+        if not note.is_file():
             continue  # its own check covers this
-        note = note_path.read_text()
-        for partno in re.findall(r'partnumber="([^"]+)"', source):
-            if partno not in note:
-                stale.append(f"  parts/{d.name}/{d.name}.md does not mention {partno}")
-    assert not stale, "Review notes out of date with the source:\n" + "\n".join(stale)
+        if part.mpn not in note.read_text():
+            stale.append(f"  parts/{library}/{library}.md does not mention {part.mpn}")
+    assert not stale, "Review notes out of date with the design:\n" + "\n".join(stale)

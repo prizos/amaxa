@@ -29,30 +29,13 @@ HW_DIR = Path(__file__).resolve().parent.parent
 PLACEHOLDER = re.compile(r"@([A-Za-z0-9_.\[\]]+):(nom|min|max)([-+][\d.]+)?@")
 MEASUREMENT = re.compile(r"^\s*([a-z_][a-z0-9_]*)\s*=\s*([-\d.eE+]+)", re.MULTILINE)
 
-sys.path.insert(0, str(HW_DIR / "tools"))
-from specs import UnconstrainedSpec, parse_spec  # noqa: E402
-
-
 def design_values(board: Path) -> dict[str, tuple[float, float]]:
-    """Every parameter the build resolved, as (low, high) in SI units."""
-    report = board / "build" / "builds" / "default" / "default.variables.ato.json"
+    """Every value the design states, as (low, high) in SI units."""
+    report = board / "build" / "design.json"
     if not report.is_file():
-        sys.exit(f"no variable report at {report}. Run `make -C hw build` first.")
-
-    out: dict[str, tuple[float, float]] = {}
-
-    def walk(node: dict):
-        for var in node.get("variables", []):
-            try:
-                out[f"{node['path']}.{var['name']}"] = parse_spec(var.get("spec"))
-            except (UnconstrainedSpec, ValueError):
-                pass  # never given a value; a deck asking for it will say so
-        for child in node.get("children", []):
-            walk(child)
-
-    for node in json.loads(report.read_text())["nodes"]:
-        walk(node)
-    return out
+        sys.exit(f"no design at {report}. Run `make -C hw build` first.")
+    values = json.loads(report.read_text())["values"]
+    return {key: (float(low), float(high)) for key, (low, high) in values.items()}
 
 
 def render(template: str, values: dict[str, tuple[float, float]], name: str) -> str:

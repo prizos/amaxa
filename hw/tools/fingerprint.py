@@ -49,7 +49,8 @@ def fingerprint(path: Path) -> dict[str, set[str]]:
         at = re.search(r"\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
         lib = re.search(r'\(footprint "([^"]+)"', block)
         parts.add(
-            f"{props.get('Reference')} {props.get('atopile_address')} "
+            f"{props.get('Reference')} "
+            f"{props.get('address') or props.get('atopile_address')} "
             f"{lib.group(1)} at ({at.group(1)}, {at.group(2)}) "
             f"rot {at.group(3) or '0'} = {props.get('Value')} "
             f"[{props.get('LCSC') or 'no supplier part'}]"

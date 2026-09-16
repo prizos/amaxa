@@ -1,23 +1,10 @@
 """
 Gates on what the build itself produced.
 
-atopile reports some genuine problems without failing the build. These turn
-them into failures, which is the only reason they count as gates.
+These read the board and the bill of materials rather than the design source,
+so they check what was actually generated. A part can be described perfectly
+and still reach the board wrong.
 """
-
-
-def test_no_contradictory_specs(variables):
-    """
-    No parameter resolved to an empty set.
-
-    `<empty>` means two constraints on one parameter cannot both hold — asking a
-    680 R part for 10 k, say. atopile resolves it, reports it in the variable
-    report, and carries on building a board that cannot be made.
-    """
-    empty = [v for v in variables if v["spec"] == "<empty>"]
-    assert not empty, "Parameters with contradictory constraints:\n" + "\n".join(
-        f"  {v['path']}.{v['name']} ({v['type']})" for v in empty
-    )
 
 
 def test_one_value_per_part_number(footprints):

@@ -49,6 +49,11 @@ UV_DIR := $(TOOLS_DIR)/uv-$(UV_VERSION)
 UV     := $(UV_DIR)/uv
 ATO    ?= $(VENV)/bin/ato
 
+# The SKiDL virtualenv, which is replacing atopile's. It also carries pytest,
+# which used to arrive as one of atopile's dependencies.
+SKIDL_VENV := .venv-skidl
+SKIDL_PY   := $(SKIDL_VENV)/bin/python
+
 # uv keeps its downloaded Pythons here, so nothing touches the system Python.
 export UV_PYTHON_INSTALL_DIR := $(abspath $(TOOLS_DIR)/pythons)
 
@@ -96,7 +101,14 @@ $(ATO): $(UV) requirements/atopile.lock
 	@$(UV) pip install --python $(VENV)/bin/python -r requirements/atopile.lock
 	@touch $@
 
-tools: $(ATO) ## Fetch pinned uv + Python and build the atopile venv
+$(SKIDL_PY): $(UV) requirements/skidl.lock
+	@echo "Creating $(SKIDL_VENV) on Python $(PYTHON_VERSION) from requirements/skidl.lock"
+	@$(UV) python install $(PYTHON_VERSION)
+	@$(UV) venv --clear --python $(PYTHON_VERSION) $(SKIDL_VENV)
+	@$(UV) pip install --python $(SKIDL_PY) -r requirements/skidl.lock
+	@touch $@
+
+tools: $(ATO) $(SKIDL_PY) ## Fetch pinned uv + Python and build the atopile venv
 	@$(MAKE) --no-print-directory versions
 
 versions: ## Print tool versions and check the pinned ones
@@ -132,13 +144,17 @@ versions: ## Print tool versions and check the pinned ones
 
 # --- generate ---------------------------------------------------------------
 
-# Always from scratch. atopile ingests an existing board if it finds one and
-# normalises it slightly on the second pass, so an incremental build and a fresh
-# one do not produce the same file - and the fresh one is the honest answer,
-# since placement and routing come from $(BOARD)/layout.py either way.
-build: $(ATO) ## Turn .ato source into KiCad files for BOARD
-	@rm -rf $(BOARD)/elec
-	@cd $(BOARD) && ../$(ATO) build
+# Two steps, and the split is the point. The board's own source knows SKiDL and
+# writes design.json - parts, nets and parameters, in a schema we own. The board
+# writer reads only that, so nothing downstream is coupled to a design tool.
+#
+# Always from scratch: the board is output, and a stale elec/ is how a build
+# ends up half describing a design that no longer exists.
+build: $(SKIDL_PY) ## Turn the design source into KiCad files for BOARD
+	@rm -rf $(BOARD)/elec $(BOARD)/build
+	@mkdir -p $(BOARD)/build
+	@cd $(BOARD) && ../$(SKIDL_PY) $(BOARD).py
+	@python3 tools/board.py $(BOARD)
 
 # atopile leaves every part in a grid and nothing routed. This puts the board
 # together from $(BOARD)/layout.py, then fills the copper pours - kicad-cli
@@ -191,7 +207,7 @@ drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 
 # Depends on build so the checks can never pass against stale output.
 check: layout ## Run the design checks against what the build produced
-	@$(VENV)/bin/python -m pytest checks/ -q --board $(BOARD)
+	@$(SKIDL_PY) -m pytest checks/ -q --board $(BOARD)
 
 # The decks take their component values from the build's variable report, so
 # there is no second copy of the design to fall out of step with the first.
@@ -225,7 +241,7 @@ outputs: drc ## Renders, 3D model, gerbers and drill files into out/
 		$(LAYOUT_DIR)/default.kicad_pcb
 	@$(KICAD_CLI) pcb export drill --format excellon --output $(OUT)/fab/ \
 		$(LAYOUT_DIR)/default.kicad_pcb
-	@cp $(BOARD)/build/builds/default/default.bom.csv $(OUT)/bom.csv
+	@cp $(BOARD)/build/bom.csv $(OUT)/bom.csv
 	@echo "wrote $(OUT)/"
 	@ls -1 $(OUT) $(OUT)/fab | sed 's/^/    /'
 

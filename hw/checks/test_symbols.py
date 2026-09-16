@@ -25,18 +25,6 @@ sys.path.insert(0, str(HW_DIR / "tools"))
 from symbols import SymbolNotFound, footprint_pads, symbol_pins  # noqa: E402
 
 
-@pytest.fixture(scope="session")
-def parts(board_dir):
-    """The board's part list, loaded from its own `parts.py`."""
-    path = board_dir / "parts.py"
-    if not path.is_file():
-        pytest.skip(f"no {path}; this board does not define parts in Python yet")
-    spec = importlib.util.spec_from_file_location(f"{board_dir.name}_parts", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.ALL
-
-
 def footprint_path(board_dir: Path, footprint: str) -> Path:
     library, _, name = footprint.partition(":")
     return board_dir / "parts" / library / f"{name}.kicad_mod"

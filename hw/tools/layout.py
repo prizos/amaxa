@@ -82,7 +82,7 @@ class Board:
         for start, end in sexp_blocks(self.text, "footprint"):
             block = self.text[start:end]
             props = dict(re.findall(r'\(property "([^"]+)" "([^"]*)"', block))
-            address = props.get("atopile_address")
+            address = props.get("address") or props.get("atopile_address")
             if not address:
                 continue
             at = re.search(r"\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
@@ -109,7 +109,7 @@ class Board:
 
 def strip_generated(text: str) -> str:
     """Remove every object a previous run wrote."""
-    for head in ("segment", "via", "zone"):
+    for head in ("segment", "via", "zone", "gr_line", "gr_arc"):
         while True:
             spans = [
                 (a, b)
@@ -282,6 +282,59 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
     return objects
 
 
+def board_outline(spec: dict) -> list[str]:
+    """
+    The board edge: four straight sides joined by four corner arcs.
+
+    Drawn here rather than by the board writer because it is geometry, and all
+    the other geometry lives in this file. The arcs' endpoints have to land
+    exactly on the straight segments' endpoints or KiCad rejects the outline as
+    unclosed.
+    """
+    width, height = spec["size"]
+    radius = spec["corner_radius"]
+    x, y = width / 2, height / 2
+    inner_x, inner_y = x - radius, y - radius
+
+    objects = []
+    sides = [
+        ((-inner_x, -y), (inner_x, -y)),   # top
+        ((x, -inner_y), (x, inner_y)),     # right
+        ((inner_x, y), (-inner_x, y)),     # bottom
+        ((-x, inner_y), (-x, -inner_y)),   # left
+    ]
+    for (x1, y1), (x2, y2) in sides:
+        objects.append(
+            f"\t(gr_line\n"
+            f"\t\t(start {x1:g} {y1:g})\n"
+            f"\t\t(end {x2:g} {y2:g})\n"
+            f"\t\t(stroke\n\t\t\t(width 0.05)\n\t\t\t(type solid)\n\t\t)\n"
+            f'\t\t(layer "Edge.Cuts")\n'
+            f'\t\t(uuid "{stable_uuid(TAG, "edge", x1, y1, x2, y2)}")\n'
+            f"\t)"
+        )
+
+    diagonal = radius * math.sqrt(0.5)
+    corners = [
+        ((inner_x, -y), (inner_x + diagonal, -inner_y - diagonal), (x, -inner_y)),
+        ((x, inner_y), (inner_x + diagonal, inner_y + diagonal), (inner_x, y)),
+        ((-inner_x, y), (-inner_x - diagonal, inner_y + diagonal), (-x, inner_y)),
+        ((-x, -inner_y), (-inner_x - diagonal, -inner_y - diagonal), (-inner_x, -y)),
+    ]
+    for (sx, sy), (mx, my), (ex, ey) in corners:
+        objects.append(
+            f"\t(gr_arc\n"
+            f"\t\t(start {sx:g} {sy:g})\n"
+            f"\t\t(mid {mx:g} {my:g})\n"
+            f"\t\t(end {ex:g} {ey:g})\n"
+            f"\t\t(stroke\n\t\t\t(width 0.05)\n\t\t\t(type solid)\n\t\t)\n"
+            f'\t\t(layer "Edge.Cuts")\n'
+            f'\t\t(uuid "{stable_uuid(TAG, "edge-arc", sx, sy, ex, ey)}")\n'
+            f"\t)"
+        )
+    return objects
+
+
 def ground_plane(board: Board, plane: dict) -> str:
     """A filled copper pour, so the return path is a plane and not a track."""
     net = board.nets[plane["net"]]
@@ -342,7 +395,8 @@ def main() -> int:
     )
     footprints = board.footprints()
 
-    objects = route(board, footprints, description.PLACEMENT, description.ROUTES)
+    objects = board_outline(description.BOARD)
+    objects += route(board, footprints, description.PLACEMENT, description.ROUTES)
     objects += stitch(board, footprints, description.PLACEMENT, description.VIAS)
     objects.append(ground_plane(board, description.PLANE))
 
@@ -354,9 +408,10 @@ def main() -> int:
 
     tracks = sum(1 for o in objects if o.lstrip().startswith("(segment"))
     vias = sum(1 for o in objects if o.lstrip().startswith("(via"))
+    edges = sum(1 for o in objects if o.lstrip().startswith(("(gr_line", "(gr_arc")))
     print(
         f"placed {len(description.PLACEMENT)} parts, "
-        f"{tracks} track segments, {vias} vias, 1 plane"
+        f"{tracks} track segments, {vias} vias, {edges} outline segments, 1 plane"
     )
     return 0
 

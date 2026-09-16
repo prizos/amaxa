@@ -24,7 +24,33 @@ than straight through them. And the back copper belongs to the ground pour, so
 every signal is on the front.
 """
 
-# --- placement: atopile address -> (x, y) or (x, y, rotation) ---------------
+# --- the board itself --------------------------------------------------------
+#
+# Physical construction, read by tools/board.py when it writes the board and by
+# tools/layout.py when it draws the outline. The ground pour's outline is
+# derived from these numbers rather than restated, because a second copy of the
+# board's dimensions is a second thing to get wrong.
+
+BOARD = {
+    "size": (50.0, 40.0),        # mm
+    "corner_radius": 2.0,
+    "thickness": 1.6,            # finished board
+    "copper_thickness": 0.035,   # 1 oz
+    "core_thickness": 1.51,
+    "finish": "ENIG",
+    "mask_colour": "Black",      # stated rather than left to KiCad's green default
+    "pour_inset": 0.5,           # copper-to-edge, matching board.kicad_pro
+}
+
+
+def _pour_outline() -> list[tuple[float, float]]:
+    """The pour rectangle, inset from the board edge by the clearance it needs."""
+    width, height = BOARD["size"]
+    x, y = width / 2 - BOARD["pour_inset"], height / 2 - BOARD["pour_inset"]
+    return [(-x, -y), (x, -y), (x, y), (-x, y)]
+
+
+# --- placement: address -> (x, y) or (x, y, rotation) ------------------------
 #
 # Every part on the board must appear here. The engine refuses to run if one is
 # missing, so a part added to the schematic cannot quietly land at the origin.
@@ -187,10 +213,12 @@ ROUTES = [
     ("LED_RETURN", POWER, F, [(3.0, 15.0), "leds[3].led:1"]),
 
     # Each branch: LED anode to its own resistor, resistor to the 12 V bus.
-    ("LED_A", SIGNAL, F, ["leds[0].led:2", "leds[0].resistor:2"]),
-    ("leds[1]-LED_A", SIGNAL, F, ["leds[1].led:2", "leds[1].resistor:2"]),
-    ("leds[2]-LED_A", SIGNAL, F, ["leds[2].led:2", "leds[2].resistor:2"]),
-    ("leds[3]-LED_A", SIGNAL, F, ["leds[3].led:2", "leds[3].resistor:2"]),
+    # Named LED1_A..LED4_A by the design source, rather than left to be
+    # de-duplicated into LED_A, leds[1]-LED_A and so on.
+    ("LED1_A", SIGNAL, F, ["leds[0].led:2", "leds[0].resistor:2"]),
+    ("LED2_A", SIGNAL, F, ["leds[1].led:2", "leds[1].resistor:2"]),
+    ("LED3_A", SIGNAL, F, ["leds[2].led:2", "leds[2].resistor:2"]),
+    ("LED4_A", SIGNAL, F, ["leds[3].led:2", "leds[3].resistor:2"]),
     ("12V", POWER, F, ["leds[0].resistor:1", (15.5, 3.0)]),
     ("12V", POWER, F, ["leds[1].resistor:1", (15.5, 7.0)]),
     ("12V", POWER, F, ["leds[2].resistor:1", (15.5, 11.0)]),
@@ -236,7 +264,7 @@ VIAS = [
 PLANE = {
     "net": "GND",
     "layer": "B.Cu",
-    "outline": [(-24.5, -19.5), (24.5, -19.5), (24.5, 19.5), (-24.5, 19.5)],
+    "outline": _pour_outline(),
     "pad_clearance": 0.5,
     "min_thickness": 0.25,
     "thermal_gap": 0.3,
