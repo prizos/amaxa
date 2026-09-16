@@ -1,0 +1,26 @@
+# Files where a change quietly weakens a gate rather than obviously breaking
+# something. Everything here needs a human to look at it.
+#
+# The risk is not that someone edits these carelessly. It is that loosening a
+# rule looks exactly like fixing a failure, and a board that passes because the
+# check was widened looks identical to one that passes because it is correct.
+
+# The fab limits and the boards' own design rules. Widening a clearance or a
+# track width makes DRC pass without changing the board.
+/hw/fab/                @prizos
+/hw/**/rules.kicad_dru  @prizos
+
+# The design checks, and the guard that counts them.
+/hw/checks/             @prizos
+
+# What the simulation is allowed to come out as. Moving a band is the same
+# thing as deciding the circuit is fine after all.
+/hw/**/sim/limits.py    @prizos
+
+# The models the simulation rests on. A fitted model is an assumption, and
+# changing one changes every number downstream of it.
+/hw/**/sim/models/      @prizos
+
+# The tooling the gates run through.
+/hw/tools/              @prizos
+/.github/workflows/     @prizos

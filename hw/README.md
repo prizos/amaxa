@@ -168,6 +168,40 @@ datasheet states legibly, not a vendor model, and that is written down.
 One trap worth knowing: **ngspice treats the first line of a deck as its title**,
 so a deck that starts with a component definition silently loses it.
 
+## Who has to look
+
+`.github/CODEOWNERS` requires review on the files where a change quietly
+weakens a gate rather than obviously breaking something: the fab limits and
+board rules, the design checks and their count guard, the simulation limits and
+the models under them, and the tooling the gates run through.
+
+The risk is not carelessness. It is that **loosening a rule looks exactly like
+fixing a failure**. A board that passes because a clearance was widened looks
+identical to one that passes because it is correct, and the diff that did it is
+one line.
+
+## Releasing
+
+Pushing a tag builds the orderable package: gerbers for the nine layers that
+matter, Excellon drill data, the placement file, the BOM, renders, a STEP
+model, a record of what it was built from and the tool versions that built it,
+and the design fingerprint.
+
+It is published as a CI artifact rather than attached to a GitHub release,
+because the workflow should not create anything outward-facing on its own.
+
+Two things that were considered and deliberately left out:
+
+- **KiBot.** It would add a browsable index and image diffs, and a dependency.
+  The outputs it produces we already produce, and for this pipeline the useful
+  diff is not a picture — it is `layout.py`, which says a part moved and by how
+  much, and the design fingerprint, which says what the board *is* in a form two
+  runs can be compared by eye.
+- **A live BOM stock check in CI.** Stock at the time each part was chosen is
+  recorded in its review note, which is the number that justified the choice.
+  Live stock belongs at the moment of ordering, not in a gate that fails because
+  a distributor's API was slow.
+
 ## What is committed
 
 The design: the `.ato` sources, the parts library with its review notes,

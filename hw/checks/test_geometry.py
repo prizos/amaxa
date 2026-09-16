@@ -76,3 +76,24 @@ def test_nothing_is_stacked_at_the_origin(footprints):
         seen.setdefault((fp["x"], fp["y"]), []).append(fp["designator"])
     stacked = {pos: refs for pos, refs in seen.items() if len(refs) > 1}
     assert not stacked, f"Parts sharing a position: {stacked}"
+
+
+def test_the_board_is_actually_routed(pcb_text):
+    """
+    There is copper on the board, and the pour has been filled.
+
+    Every other check here passes on a board that was generated but never laid
+    out: the pads carry their nets from the netlist whether or not anything
+    joins them. Only DRC notices, and only if it is run. This says plainly that
+    the layout step happened.
+    """
+    tracks = pcb_text.count("(segment")
+    vias = pcb_text.count("(via")
+    filled = pcb_text.count("(filled_polygon")
+
+    assert tracks, "The board has no tracks. Run `make -C hw layout`."
+    assert vias, "The board has no vias, so nothing reaches the ground plane."
+    assert filled, (
+        "The ground pour has an outline but no copper in it. kicad-cli cannot "
+        "fill zones; `make -C hw layout` runs tools/fill_zones.py, which can."
+    )

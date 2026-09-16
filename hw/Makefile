@@ -179,7 +179,12 @@ check: layout ## Run the design checks against what the build produced
 
 # The decks take their component values from the build's variable report, so
 # there is no second copy of the design to fall out of step with the first.
-sim: build ## Run the ngspice decks and check their measurements
+#
+# It depends on layout rather than build even though it only reads the variable
+# report, because build starts by deleting elec/ - so a target that stops at
+# build leaves the board generated but unplaced and unrouted, which is a
+# confusing thing to find in the tree afterwards.
+sim: layout ## Run the ngspice decks and check their measurements
 	@python3 tools/simulate.py $(BOARD)
 
 OUT := out/$(BOARD)
