@@ -1,0 +1,32 @@
+"""Registers the arm-none-eabi GCC toolchain for each supported Linux build host.
+
+The cc_toolchain targets themselves live inside the downloaded toolchain
+repositories (see arm_gnu_toolchain.BUILD), so tool paths stay relative.
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "arm_gnu_toolchain.BUILD",
+    "cc_toolchain_config.bzl",
+])
+
+[
+    toolchain(
+        name = "arm_none_eabi_on_linux_" + host,
+        exec_compatible_with = [
+            "@platforms//cpu:" + host,
+            "@platforms//os:linux",
+        ],
+        target_compatible_with = [
+            "@platforms//cpu:armv7e-mf",
+            "@platforms//os:none",
+        ],
+        toolchain = "@arm_gnu_toolchain_linux_{}//:cc_toolchain".format(host),
+        toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+    )
+    for host in [
+        "aarch64",
+        "x86_64",
+    ]
+]

@@ -1,0 +1,42 @@
+"""Board support for ST NUCLEO-H743ZI2 (STM32H743ZIT6, LQFP144)."""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Selects the MCU for the ST CMSIS device headers.
+cc_library(
+    name = "mcu_config",
+    defines = ["STM32H743xx"],
+)
+
+# HAL module selection and oscillator values.
+cc_library(
+    name = "hal_conf",
+    hdrs = ["stm32h7xx_hal_conf.h"],
+    defines = ["USE_HAL_DRIVER"],
+    includes = ["."],
+    deps = [":mcu_config"],
+)
+
+# Pin map for the board.
+cc_library(
+    name = "board",
+    hdrs = ["board.h"],
+    includes = ["."],
+)
+
+filegroup(
+    name = "linker_script",
+    srcs = ["STM32H743ZITx_FLASH.ld"],
+)
+
+# Everything a bare-metal app on this board links against.
+cc_library(
+    name = "bsp",
+    deps = [
+        ":board",
+        "@cmsis_device_h7//:startup_stm32h743",
+        "@stm32h7xx_hal_driver//:hal",
+    ],
+)

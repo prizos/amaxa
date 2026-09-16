@@ -1,0 +1,15 @@
+# Firmware builds target the STM32H743 (Cortex-M7, no OS).
+build:stm32 --platforms=//platforms:stm32h743
+
+# Keep debug info in the ELF (it never reaches flash) so GDB and Renode can use it.
+build --strip=never
+
+# Don't leak the host environment (PATH, LD_LIBRARY_PATH, ...) into actions.
+build --incompatible_strict_action_env
+
+# Friendlier output.
+common --color=auto
+build --show_timestamps=false
+
+# Machine-local overrides (CI caches, remote cache, ...). Not committed.
+try-import %workspace%/user.bazelrc

@@ -1,0 +1,70 @@
+"""amaxa firmware: bare-metal STM32H743 builds with a hermetic Arm GNU toolchain."""
+
+module(
+    name = "amaxa_firmware",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.25")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# ---------------------------------------------------------------------------
+# Arm GNU Toolchain (arm-none-eabi-gcc), one archive per Linux build host.
+# Checksums are Arm's published .sha256asc values.
+# ---------------------------------------------------------------------------
+ARM_GNU_TOOLCHAIN_VERSION = "15.2.rel1"
+
+ARM_GNU_TOOLCHAIN_URL = "https://developer.arm.com/-/media/Files/downloads/gnu/{v}/binrel/arm-gnu-toolchain-{v}-{host}-arm-none-eabi.tar.xz"
+
+http_archive(
+    name = "arm_gnu_toolchain_linux_x86_64",
+    build_file = "//toolchain:arm_gnu_toolchain.BUILD",
+    sha256 = "597893282ac8c6ab1a4073977f2362990184599643b4c5ee34870a8215783a16",
+    strip_prefix = "arm-gnu-toolchain-{}-x86_64-arm-none-eabi".format(ARM_GNU_TOOLCHAIN_VERSION),
+    urls = [ARM_GNU_TOOLCHAIN_URL.format(
+        host = "x86_64",
+        v = ARM_GNU_TOOLCHAIN_VERSION,
+    )],
+)
+
+http_archive(
+    name = "arm_gnu_toolchain_linux_aarch64",
+    build_file = "//toolchain:arm_gnu_toolchain.BUILD",
+    sha256 = "d061559d814b205ed30c5b7c577c03317ec447ca51cd5a159d26b12a5bbeb20c",
+    strip_prefix = "arm-gnu-toolchain-{}-aarch64-arm-none-eabi".format(ARM_GNU_TOOLCHAIN_VERSION),
+    urls = [ARM_GNU_TOOLCHAIN_URL.format(
+        host = "aarch64",
+        v = ARM_GNU_TOOLCHAIN_VERSION,
+    )],
+)
+
+register_toolchains("//toolchain:all")
+
+# ---------------------------------------------------------------------------
+# Vendor sources: Arm CMSIS core headers, ST CMSIS device files, ST H7 HAL.
+# ---------------------------------------------------------------------------
+http_archive(
+    name = "cmsis_core",
+    build_file = "//third_party:cmsis_core.BUILD",
+    sha256 = "9ce693dd15c41f02506adda79323c077912b3211303ca0d9b28b8ebe735a7031",
+    strip_prefix = "CMSIS_5-5.9.0",
+    urls = ["https://github.com/ARM-software/CMSIS_5/archive/refs/tags/5.9.0.tar.gz"],
+)
+
+http_archive(
+    name = "cmsis_device_h7",
+    build_file = "//third_party:cmsis_device_h7.BUILD",
+    sha256 = "0dc612b4fe4d953cec2cbca1a97e0ca23895c27869d4999ef26c223952ac1ae4",
+    strip_prefix = "cmsis-device-h7-1.10.7",
+    urls = ["https://github.com/STMicroelectronics/cmsis_device_h7/archive/refs/tags/v1.10.7.tar.gz"],
+)
+
+http_archive(
+    name = "stm32h7xx_hal_driver",
+    build_file = "//third_party:stm32h7xx_hal_driver.BUILD",
+    sha256 = "1003e0070e53317f1ad416b918064bea858c15429bd116046facaa6077e98c5e",
+    strip_prefix = "stm32h7xx-hal-driver-1.11.6",
+    urls = ["https://github.com/STMicroelectronics/stm32h7xx_hal_driver/archive/refs/tags/v1.11.6.tar.gz"],
+)

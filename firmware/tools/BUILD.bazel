@@ -1,0 +1,3 @@
+"""Firmware packaging rules."""
+
+exports_files(["firmware.bzl"])

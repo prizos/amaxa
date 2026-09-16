@@ -1,0 +1,6 @@
+# Bazel output symlinks
+/bazel-*
+# Local tool downloads (bazelisk) and copied build artefacts
+/.tools/
+/out/
+user.bazelrc

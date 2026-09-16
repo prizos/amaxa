@@ -1,0 +1,80 @@
+name: firmware
+
+on:
+  push:
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware.yml"
+  pull_request:
+    paths:
+      - "firmware/**"
+      - ".github/workflows/firmware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build hello_hw
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: firmware
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Toolchain, vendor sources and Bazel's action cache survive between runs.
+      - name: Cache Bazel downloads and outputs
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/bazelisk
+            ~/.cache/bazel-repo
+            ~/.cache/bazel-disk
+          key: firmware-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('firmware/.bazelversion', 'firmware/MODULE.bazel', 'firmware/MODULE.bazel.lock') }}
+          restore-keys: firmware-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Configure Bazel for CI
+        run: |
+          # Ubuntu 24.04 restricts unprivileged user namespaces, which Bazel's
+          # Linux sandbox needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          cat > user.bazelrc <<RC
+          common --repository_cache=$HOME/.cache/bazel-repo
+          build --disk_cache=$HOME/.cache/bazel-disk
+          common --color=no --curses=no
+          RC
+
+      - name: Build (debug, -Og)
+        run: make build MODE=dbg
+
+      - name: Build (release, -O2)
+        run: make build MODE=opt
+
+      - name: Size report
+        run: |
+          {
+            echo '### hello_hw (release)'
+            echo '```'
+            cat out/hello_hw.size.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware images
+        uses: actions/upload-artifact@v7
+        with:
+          name: hello_hw-${{ github.sha }}
+          path: |
+            firmware/out/hello_hw.elf
+            firmware/out/hello_hw.bin
+            firmware/out/hello_hw.hex
+            firmware/out/hello_hw.size.txt
+          if-no-files-found: error
+          retention-days: 14

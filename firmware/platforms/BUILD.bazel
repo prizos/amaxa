@@ -1,0 +1,12 @@
+"""Target platforms for firmware builds."""
+
+package(default_visibility = ["//visibility:public"])
+
+# STM32H743: Arm Cortex-M7 with double-precision FPU, bare metal.
+platform(
+    name = "stm32h743",
+    constraint_values = [
+        "@platforms//cpu:armv7e-mf",
+        "@platforms//os:none",
+    ],
+)

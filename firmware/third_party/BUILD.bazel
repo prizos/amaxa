@@ -1,0 +1,3 @@
+"""BUILD files overlaid on vendor source archives (see MODULE.bazel)."""
+
+exports_files(glob(["*.BUILD"]))
