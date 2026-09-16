@@ -26,3 +26,7 @@ __pycache__/
 
 # The SKiDL virtualenv, alongside the atopile one during the port
 /.venv-skidl/
+
+# SKiDL writes an ERC report and a log beside wherever it is run
+*.erc
+skidl_*.log

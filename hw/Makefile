@@ -144,7 +144,11 @@ build: $(ATO) ## Turn .ato source into KiCad files for BOARD
 # together from $(BOARD)/layout.py, then fills the copper pours - kicad-cli
 # cannot fill them, and DRC reads whatever fill is already in the file, so an
 # unfilled plane reports every ground pad as unconnected.
-layout: build ## Apply the board's placement and routing, then fill the plane
+# The rules file is regenerated here, not only by `drc`, because `build` starts
+# by deleting elec/ - which is where the generated rules live. Without this, a
+# kicad-cli run that does not go through `make drc` silently checks the board
+# against no custom rules at all and reports a clean board.
+layout: build $(DRU) ## Apply the board's placement and routing, then fill the plane
 	@python3 tools/layout.py $(BOARD)
 	@python3 tools/fill_zones.py $(LAYOUT_DIR)/default.kicad_pcb
 
@@ -180,6 +184,8 @@ reproducible: layout ## Build twice and check both runs describe the same board
 # KiCad's own rule checker: shorts, clearances, the fab limits and the board's
 # own rules. Exit code 5 means violations were found.
 drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
+	@test -s $(DRU) || { echo "ERROR: $(DRU) is missing or empty, so DRC would" >&2; \
+		echo "       run against no custom rules and pass regardless." >&2; exit 1; }
 	@$(KICAD_CLI) pcb drc --format json --severity-error --exit-code-violations \
 		--output $(LAYOUT_DIR)/drc.json $(LAYOUT_DIR)/default.kicad_pcb
 

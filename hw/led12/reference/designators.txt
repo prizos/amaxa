@@ -1,0 +1,28 @@
+leds[0].led              D1    
+leds[0].resistor         R1    2.2kΩ ±1%
+leds[1].led              D2    
+leds[1].resistor         R2    2.2kΩ ±1%
+leds[2].led              D3    
+leds[2].resistor         R3    2.2kΩ ±1%
+leds[3].led              D4    
+leds[3].resistor         R4    2.2kΩ ±1%
+power.c_bulk             C1    47µF ±20%
+power.c_hf               C2    100nF ±10%
+power.fuse               F1    It 1A
+power.q_rpp              Q1    Vgs ℝ+V
+power.r_gate             R5    100kΩ ±1%
+power.terminal           J1    
+power.tvs                D5    Vf {ℝ+}V
+rail.c_in                C3    1µF ±10%
+rail.c_out               C4    10µF ±20%
+rail.ldo                 U1    
+rail.r_load              R6    3.3kΩ ±1%
+switch.button            SW1   
+switch.c_debounce        C5    1µF ±10%
+switch.q_switch          Q2    Vgs 1.75V
+switch.r_pulldown        R7    100kΩ ±1%
+switch.r_series          R8    10kΩ ±1%
+tp_12v                   TP2   
+tp_3v3                   TP1   
+tp_gate                  TP3   
+tp_gnd                   TP4   
