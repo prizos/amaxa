@@ -6,6 +6,7 @@
 #   make layout      apply the board's placement and routing, then fill the plane
 #   make check       run the design checks against what the build produced
 #   make drift       fail if the committed board no longer matches its source
+#   make outputs     renders, 3D model, gerbers and drill files into out/
 #   make help        list all targets
 #
 # Two stages, deliberately separated:
@@ -56,7 +57,7 @@ DRU        := $(LAYOUT_DIR)/default.kicad_dru
 KICAD_CLI ?= $(shell command -v kicad-cli 2>/dev/null)
 NGSPICE   ?= $(shell command -v ngspice 2>/dev/null)
 
-.PHONY: help tools versions build layout rules check drc drift clean distclean
+.PHONY: help tools versions build layout rules check drc drift outputs clean distclean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -157,6 +158,32 @@ check: layout ## Run the design checks against what the build produced
 # on every build. See tools/check_drift.py.
 drift: layout ## Fail if the committed board no longer matches its source
 	@python3 tools/check_drift.py --all
+
+OUT := out/$(BOARD)
+
+# Everything a person or a fab needs to look at. Renders and the 3D model are
+# for review; the gerbers and drill files are what gets ordered.
+outputs: drc ## Renders, 3D model, gerbers and drill files into out/
+	@mkdir -p $(OUT)/fab
+	@$(KICAD_CLI) pcb render --side top --width 1600 --height 1280 \
+		--quality high --output $(OUT)/top.png $(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb render --side bottom --width 1600 --height 1280 \
+		--quality high --output $(OUT)/bottom.png $(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb export svg --page-size-mode 2 --exclude-drawing-sheet \
+		--layers F.Cu,F.SilkS,F.Mask,Edge.Cuts \
+		--output $(OUT)/front.svg $(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb export step --subst-models --no-dnp \
+		--output $(OUT)/$(BOARD).step $(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb export pos --format csv --units mm --side both \
+		--output $(OUT)/positions.csv $(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb export gerbers --output $(OUT)/fab/ \
+		--layers F.Cu,B.Cu,F.Silkscreen,B.Silkscreen,F.Mask,B.Mask,F.Paste,B.Paste,Edge.Cuts \
+		$(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb export drill --format excellon --output $(OUT)/fab/ \
+		$(LAYOUT_DIR)/default.kicad_pcb
+	@cp $(BOARD)/build/builds/default/default.bom.csv $(OUT)/bom.csv
+	@echo "wrote $(OUT)/"
+	@ls -1 $(OUT) $(OUT)/fab | sed 's/^/    /'
 
 clean: ## Remove build outputs
 	rm -rf */build out

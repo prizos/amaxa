@@ -49,7 +49,7 @@ jobs:
           sudo add-apt-repository -y ppa:kicad/kicad-9.0-releases
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-            kicad kicad-symbols kicad-footprints ngspice
+            kicad kicad-symbols kicad-footprints python3-pcbnew ngspice
 
       - name: Build the toolchain
         run: make tools
@@ -66,13 +66,24 @@ jobs:
       - name: Generate the board from source
         run: make build
 
-      # The committed KiCad files must be what the .ato source produces. If a
+      # Placement, routing and the ground pour, from led12/layout.py.
+      - name: Lay out the board
+        run: make layout
+
+      # The committed KiCad files must be what the source produces. If a
       # rebuild moves the board, the commit is stale.
       - name: Check the committed board is up to date
         run: make drift
 
       - name: Design checks
         run: make check
+
+      # KiCad's own checker, against the PCBWay limits and the board's rules.
+      - name: Design rule check
+        run: make drc
+
+      - name: Renders, 3D model and fab package
+        run: make outputs
 
       - name: Bill of materials
         run: |
@@ -86,14 +97,17 @@ jobs:
               led12/build/builds/default/default.bom.csv | tail -n +2
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload build outputs
+      # Renders and the 3D model are what a human reviews on the pull request;
+      # the gerbers are what gets ordered.
+      - name: Upload board outputs
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: led12-build
+          name: led12-board
           path: |
+            hw/out/led12/**
             hw/led12/build/builds/default/*.csv
             hw/led12/build/builds/default/*.json
-            hw/led12/build/builds/default/*.md
             hw/led12/elec/layout/default/*.kicad_pcb
+            hw/led12/elec/layout/default/drc.json
           if-no-files-found: error
