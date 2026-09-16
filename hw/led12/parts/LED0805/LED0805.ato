@@ -1,0 +1,24 @@
+"""
+0805 indicator LED.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `LED0805`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in LED0805.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import LED
+import is_atomic_part
+import has_part_picked
+
+component LedRed from LED:
+    """Red 0805 indicator. Pad 1 is the cathode, pad 2 the anode."""
+    trait is_atomic_part<manufacturer="Everlight", partnumber="19-217/R6C-AL1M2VY/3T", footprint="LED_0805_2012Metric.kicad_mod", symbol="Device:LED">
+    trait has_part_picked<manufacturer="Everlight", partno="19-217/R6C-AL1M2VY/3T", supplier_partno="C72038", supplier_id="lcsc">
+    assert diode.forward_voltage within 2.0V +/- 10%
+    assert diode.max_current within 20mA
+    diode.cathode ~ pin 1
+    diode.anode ~ pin 2

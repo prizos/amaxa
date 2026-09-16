@@ -1,0 +1,23 @@
+"""
+6 mm tactile switch.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `SW6MM`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in SW6MM.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import is_atomic_part
+import has_designator_prefix
+import has_part_picked
+
+component Button6mm:
+    """6 mm through-hole tactile switch. Pins 1 and 2 are one pole pair."""
+    trait is_atomic_part<manufacturer="Alps", partnumber="SKHHAKA010", footprint="SW_PUSH_6mm.kicad_mod", symbol="Switch:SW_Push">
+    trait has_designator_prefix<prefix="SW">
+    trait has_part_picked<manufacturer="Alps", partno="SKHHAKA010", supplier_partno="C115357", supplier_id="lcsc">
+    signal p1 ~ pin 1
+    signal p2 ~ pin 2

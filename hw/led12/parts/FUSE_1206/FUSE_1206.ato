@@ -1,0 +1,23 @@
+"""
+1206 fuse.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `FUSE_1206`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in FUSE_1206.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import Fuse
+import is_atomic_part
+import has_part_picked
+
+component Fuse1A from Fuse:
+    """1 A slow-blow fuse, 1206."""
+    trait is_atomic_part<manufacturer="Littelfuse", partnumber="0466001.NR", footprint="Fuse_1206_3216Metric.kicad_mod", symbol="Device:Fuse">
+    trait has_part_picked<manufacturer="Littelfuse", partno="0466001.NR", supplier_partno="C881879", supplier_id="lcsc">
+    assert trip_current within 1A
+    unnamed[0] ~ pin 1
+    unnamed[1] ~ pin 2

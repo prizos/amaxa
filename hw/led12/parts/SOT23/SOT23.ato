@@ -1,0 +1,37 @@
+"""
+SOT-23 MOSFETs, both polarities.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `SOT23`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in SOT23.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import MOSFET
+import is_atomic_part
+import has_part_picked
+
+component _Sot23Fet from MOSFET:
+    """Shared SOT-23 pad mapping: 1 = gate, 2 = source, 3 = drain."""
+    gate ~ pin 1
+    source ~ pin 2
+    drain ~ pin 3
+
+component PFetRpp from _Sot23Fet:
+    """Si2301 P-channel, -20 V. Reverse-polarity pass element on the 12 V input."""
+    trait is_atomic_part<manufacturer="Vishay", partnumber="SI2301CDS-T1-GE3", footprint="SOT-23.kicad_mod", symbol="Device:Q_PMOS_GSD">
+    trait has_part_picked<manufacturer="Vishay", partno="SI2301CDS-T1-GE3", supplier_partno="C10487", supplier_id="lcsc">
+    assert max_drain_source_voltage within 20V
+    assert max_continuous_drain_current within 2.3A
+    assert on_resistance within 100mohm
+
+component NFetSwitch from _Sot23Fet:
+    """2N7002 N-channel, 60 V, 115 mA. Low-side switch for the LED return."""
+    trait is_atomic_part<manufacturer="onsemi", partnumber="2N7002LT1G", footprint="SOT-23.kicad_mod", symbol="Device:Q_NMOS_GSD">
+    trait has_part_picked<manufacturer="onsemi", partno="2N7002LT1G", supplier_partno="C8545", supplier_id="lcsc">
+    assert max_drain_source_voltage within 60V
+    assert max_continuous_drain_current within 115mA
+    assert gate_source_threshold_voltage within 1V to 2.5V

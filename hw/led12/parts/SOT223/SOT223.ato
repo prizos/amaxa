@@ -1,0 +1,29 @@
+"""
+SOT-223 linear regulator.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `SOT223`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in SOT223.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import is_atomic_part
+import has_designator_prefix
+import has_part_picked
+
+component Ldo3v3:
+    """
+    AMS1117-3.3 LDO. SOT-223: 1 = GND, 2 = VOUT (tab), 3 = VIN.
+
+    Kept as a plain component: the standard Regulator type models a different
+    shape, and the part number is this device's identity anyway.
+    """
+    trait is_atomic_part<manufacturer="Advanced Monolithic Systems", partnumber="AMS1117-3.3", footprint="SOT-223-3_TabPin2.kicad_mod", symbol="Regulator_Linear:AMS1117-3.3">
+    trait has_designator_prefix<prefix="U">
+    trait has_part_picked<manufacturer="Advanced Monolithic Systems", partno="AMS1117-3.3", supplier_partno="C6186", supplier_id="lcsc">
+    signal gnd ~ pin 1
+    signal vout ~ pin 2
+    signal vin ~ pin 3

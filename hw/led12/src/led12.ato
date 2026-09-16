@@ -1,0 +1,206 @@
+"""
+led12 — 12 V LED board.
+
+A deliberately small board whose job is to prove the design pipeline end to end:
+declarative source, generated layout, rule checks, simulation and CI gates.
+There is no processor.
+
+    12V in ──[fuse 1A]──┬──[P-FET reverse polarity]──┬── 12V
+                        │                             │
+                       TVS                     100uF + 100nF
+                                                      │
+    button ──[10k]──┬── N-FET gate                    ├── 4 x (680R + LED)
+                    │                                 │       cathodes
+               1uF ─┤ 100k                            └── LDO 3V3 ── 3k3 load
+                    └── GND                  N-FET drain sinks LED_RETURN
+
+Press the button: the gate charges through the debounce network, the N-FET turns
+on and the LEDs light. Release: the 100k discharges the gate and they go out.
+Designators are assigned by the build, so this diagram names blocks, not parts.
+
+A note on assertions. atopile 0.15.9 only intersects intervals on a single
+parameter; inequalities and cross-parameter arithmetic are silently ignored (see
+hw/README.md, "What atopile's assertions actually check"). So the asserts below
+are only ever statements about one quantity, and every claim that relates two —
+LED current, gate drive margin, debounce time, fuse headroom — is checked in
+hw/checks/ against the exported netlist instead. Writing those here as `assert`
+would look like a check and do nothing.
+"""
+
+import ElectricPower
+import RectangularBoardShape
+import has_net_name
+import has_net_name_suggestion
+
+from "../parts/TERM_2P5008/TERM_2P5008.ato" import ScrewTerm2
+from "../parts/FUSE_1206/FUSE_1206.ato" import Fuse1A
+from "../parts/SOT23/SOT23.ato" import PFetRpp
+from "../parts/SOT23/SOT23.ato" import NFetSwitch
+from "../parts/SMB/SMB.ato" import TvsSmbj12A
+from "../parts/C1210/C1210.ato" import CapBulk
+from "../parts/C0805/C0805.ato" import Cap100n
+from "../parts/C0805/C0805.ato" import Cap1u
+from "../parts/C0805/C0805.ato" import Cap10u
+from "../parts/R0805/R0805.ato" import Res680
+from "../parts/R0805/R0805.ato" import Res10k
+from "../parts/R0805/R0805.ato" import Res100k
+from "../parts/R0805/R0805.ato" import Res3k3
+from "../parts/LED0805/LED0805.ato" import LedRed
+from "../parts/SW6MM/SW6MM.ato" import Button6mm
+from "../parts/SOT223/SOT223.ato" import Ldo3v3
+from "../parts/TP15/TP15.ato" import TestPad
+
+
+module PowerInput:
+    """Screw terminal, fuse, reverse-polarity FET and input bulk capacitance."""
+    raw = new ElectricPower      # straight off the terminal, unprotected
+    out = new ElectricPower      # fused, reverse-protected, decoupled
+
+    assert out.voltage within 10.8V to 13.2V
+
+    # has_net_name is a required name, not a suggestion: if any two of these
+    # nets ever merge, the build fails with conflicting required names, which
+    # is a short we want to hear about. (A suggestion would not work here
+    # anyway - ElectricPower.hv/lv already carry an immutable one.)
+    trait raw.hv has_net_name<name="VIN_RAW">
+    trait out.hv has_net_name<name="12V">
+    trait out.lv has_net_name<name="GND">
+
+    terminal = new ScrewTerm2
+    fuse = new Fuse1A
+    q_rpp = new PFetRpp
+    r_gate = new Res100k
+    tvs = new TvsSmbj12A
+    c_bulk = new CapBulk
+    c_hf = new Cap100n
+
+    # Terminal -> fuse -> P-FET -> protected rail. The FET conducts only when
+    # the supply is the right way round: reversed, its body diode blocks.
+    terminal.p1 ~ raw.hv
+    terminal.p2 ~ raw.lv
+    raw.lv ~ out.lv
+    raw.hv ~> fuse ~> q_rpp.source
+    trait q_rpp.source has_net_name<name="VIN_FUSED">
+    q_rpp.drain ~ out.hv
+
+    # Gate sits at ground through the 100k, so V_gs = -V_in once the rail is up.
+    trait q_rpp.gate has_net_name<name="RPP_GATE">
+    q_rpp.gate ~> r_gate ~> out.lv
+
+    # Surge clamp across the protected rail, then bulk and high-frequency caps.
+    out.hv ~> tvs ~> out.lv
+    out.hv ~> c_bulk ~> out.lv
+    out.hv ~> c_hf ~> out.lv
+
+
+module DebouncedSwitch:
+    """Push button, RC debounce, and the low-side switch it drives."""
+    power = new ElectricPower
+    signal switched          # LED return, pulled to lv when the button is pressed
+    signal gate              # exposed so it can reach a test point
+
+    trait gate has_net_name<name="GATE">
+    trait switched has_net_name<name="LED_RETURN">
+
+    button = new Button6mm
+    r_series = new Res10k
+    r_pulldown = new Res100k
+    c_debounce = new Cap1u
+    q_switch = new NFetSwitch
+
+    # Button ties the rail to the debounce network.
+    signal btn_out
+    trait btn_out has_net_name<name="BTN">
+    power.hv ~ button.p1
+    button.p2 ~ btn_out
+    btn_out ~> r_series ~> gate
+
+    # Gate holds low until pressed; R6 and C3 set the debounce time.
+    gate ~ q_switch.gate
+    gate ~> r_pulldown ~> power.lv
+    gate ~> c_debounce ~> power.lv
+
+    # Low-side switch sinks the LED return.
+    q_switch.source ~ power.lv
+    q_switch.drain ~ switched
+
+
+module LedBranch:
+    """One series resistor and LED, between the rail and the switched return."""
+    power = new ElectricPower
+    signal switched
+
+    resistor = new Res680
+    led = new LedRed
+
+    # A suggestion, not a required name: there are four of these branches, and
+    # four nets cannot all be required to carry the same name. atopile
+    # de-duplicates suggestions as LED_A, LED_A-1 and so on.
+    signal led_anode
+    trait led_anode has_net_name_suggestion<name="LED_A", level="SUGGESTED">
+
+    power.hv ~> resistor ~> led_anode
+    led_anode ~ led.diode.anode
+    led.diode.cathode ~ switched
+
+
+module Rail3v3:
+    """12 V to 3.3 V LDO with a small fixed load, so the rail is measurable."""
+    power_in = new ElectricPower
+    power_out = new ElectricPower
+
+    assert power_out.voltage within 3.234V to 3.366V   # 3.3 V +/- 2 %
+
+    trait power_out.hv has_net_name<name="3V3">
+
+    ldo = new Ldo3v3
+    c_in = new Cap100n
+    c_out = new Cap10u
+    r_load = new Res3k3
+
+    power_in.lv ~ power_out.lv
+    ldo.vin ~ power_in.hv
+    ldo.vout ~ power_out.hv
+    ldo.gnd ~ power_in.lv
+
+    power_in.hv ~> c_in ~> power_in.lv
+    power_out.hv ~> c_out ~> power_out.lv
+    power_out.hv ~> r_load ~> power_out.lv
+
+
+module Led12:
+    """The board."""
+    power_12v = new ElectricPower
+    power_3v3 = new ElectricPower
+    signal switched
+
+    board = new RectangularBoardShape
+    board.x = 50mm
+    board.y = 40mm
+    board.corner_radius = 2mm
+
+    power = new PowerInput
+    switch = new DebouncedSwitch
+    rail = new Rail3v3
+    leds = new LedBranch[4]
+
+    power.out ~ power_12v
+    switch.power ~ power_12v
+    switch.switched ~ switched
+    rail.power_in ~ power_12v
+    rail.power_out ~ power_3v3
+
+    for led_branch in leds:
+        led_branch.power ~ power_12v
+        led_branch.switched ~ switched
+
+    # Test points on every rail plus the gate, so the board can be probed.
+    tp_12v = new TestPad
+    tp_3v3 = new TestPad
+    tp_gnd = new TestPad
+    tp_gate = new TestPad
+
+    tp_12v.pad ~ power_12v.hv
+    tp_3v3.pad ~ power_3v3.hv
+    tp_gnd.pad ~ power_12v.lv
+    tp_gate.pad ~ switch.gate

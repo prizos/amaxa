@@ -1,0 +1,26 @@
+requires-atopile: "^0.15.0"
+
+builds:
+  default:
+    entry: src/led12.ato:Led12
+
+    # Targets are listed explicitly instead of using the `default` group, which
+    # depends on `pinout`. That report maps each part's "leads" onto footprint
+    # pads by matching names, which only works for parts the automatic picker
+    # generated; our footprints have numeric pads bound explicitly with
+    # `~ pin N`, so it cannot resolve them and fails the build. Nets and the PCB
+    # are unaffected, and hw/checks/ covers pin mapping instead.
+    #
+    # `default` has to be excluded as well as unlisted: atopile always adds it
+    # to the selected set, and exclusions are applied before dependencies are
+    # pulled in, so listing `pinout` under exclude_targets alone does nothing.
+    targets:
+      - bom
+      - manifest
+      - variable-report
+      - power-tree
+      - stackup
+      - datasheets
+      - data-interface-layout
+    exclude_targets:
+      - default
