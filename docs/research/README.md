@@ -26,11 +26,13 @@ Research notes for selecting the MCU on the amaxa digital control board. The wor
   - **NXP i.MX RT1062:** Cortex-M7 at 600 MHz, $7.97 each at 1,200 units, and an emulator model is nearly ready.
   - **GigaDevice GD32H759:** Cortex-M7 at 600 MHz with more motor and CAN hardware. Its price is not verified, and it has no emulator model yet.
 
+| [14-atopile-postmortem.md](14-atopile-postmortem.md) | **Written later, from experience**: why the hardware pipeline was built on atopile and then moved off it, and what it cost to reverse-engineer a tool whose documentation had been taken down |
+
 ## Open decisions
 
 **Board design pipeline** (see [09](09-board-design-pipeline.md)):
 1. **Fab house.** Their capability limits become our design-rule file.
-2. **atopile or SKiDL** as the design language. atopile fits far better, but its upstream looks abandoned, so we would own a fork.
+2. ~~**atopile or SKiDL** as the design language.~~ **Settled: SKiDL.** atopile was used first and then removed — see [14](14-atopile-postmortem.md).
 3. **Who routes the boards:** us, an agent working in KiCad, or a contractor.
 
 **MCU selection:**

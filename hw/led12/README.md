@@ -1,35 +1,17 @@
 # led12 — 12 V LED board
 
-A deliberately small board with no processor. Its job is to prove the design
-pipeline end to end — declarative source, generated layout, rule checks,
-simulation and CI gates — before any of it is trusted with the STM32H743
-control board.
-
-Press the button, four LEDs light. That is the whole function. Everything
-interesting is in what had to be true for it to be correct.
+A deliberately small board with no processor. Press the button, four LEDs light.
+That is the whole function. Its job is to prove the design pipeline end to end
+before any of it is trusted with the STM32H743 control board.
 
 | Top | Bottom |
 |---|---|
 | ![Top side](docs/board-top.png) | ![Bottom side](docs/board-bottom.png) |
 
-50 × 40 mm, two layers, 30 parts, 68 track segments, 13 stitching vias, and a
-ground pour on the back. **KiCad DRC reports no errors**, against both the fab
-limits and the board's own rules. Nine warnings remain: seven
-`lib_footprint_mismatch`, and two on one test point's silkscreen label.
+50 × 40 mm, two layers, 30 parts, and a ground pour on the back. **It has never
+been fabricated.**
 
-The mismatch explanation here used to say it was because we add part identity to
-the footprints. That was wrong. The count moved from four to seven when three
-parts were rotated, and there are now exactly seven rotated parts on the board —
-R1 to R4, Q1, D6 and D7. The cause is `pcbnew` re-normalising a rotated
-footprint when it fills the pours, not anything about the design.
-
-The silkscreen warnings were four and are now two: `tp_gnd`'s label sat on its
-own pad outline and on `tp_12v`'s label, and moving it to the side fixed that
-much. The remaining two are not positional — every offset tried leaves exactly
-those two — and cannot be chased from the DRC report, whose JSON gives a
-reference field's position as twice the offset actually written.
-
-## How it works
+## The circuit
 
 ```
                        D ┌────┐ S
@@ -51,110 +33,69 @@ which sinks the return of four LED branches. A linear regulator provides a 3.3 V
 rail with a fixed load so it can be measured. Four test pads expose 12 V, 3.3 V,
 ground and the gate.
 
-**Q1's drain faces the supply.** A P-MOSFET's body diode has its anode on the
-drain, so that is the orientation in which it blocks a reversed input. Source to
-the supply reads more naturally, is how a high-side load switch is drawn, works
-perfectly on the bench — and leaves the board completely unprotected. D6 and D7
-are 15 V Zeners holding each FET's gate below its ±20 V rating during a clamp
-event, which the TVS's 23.2 V would otherwise walk straight through.
+Three things are less obvious than they look:
 
-## What is checked, and what that caught
-
-Forty-four checks, thirteen simulated measurements, electrical rule checking on the
-circuit itself, and DRC against both the PCBWay fab limits and the board's own
-design rules. Each gate has been made to
-fail on purpose at least once — a gate that has never failed is not a gate.
-
-Eight real defects have been caught so far. The first five came from the gates
-as they were built; the last three came from an adversarial review that went
-looking for what the gates could **not** see, and every one of them is now
-covered by a check that fails on it.
-
-| Found | By |
-|---|---|
-| Bulk capacitor was a **6.3 V part on a 12 V rail**, and 100 µF at 25 V does not exist in 1210 at all | Verifying every part against the distributor |
-| Reverse-polarity FET rated **±8 V gate-source** in a circuit that puts 13.2 V across it in normal operation | The same |
-| LED series resistors dissipating **104 % of their rating** at nominal, 137 % at the corner — 680 Ω is a 5 V habit on a 12 V rail | `checks/test_electrical.py` |
-| Regulator rated **15 V against a TVS that clamps at 19.9 V** — the protection would have destroyed what it protects | `checks/test_electrical.py` |
-| **TVS fitted backwards.** `out.hv ~> tvs ~> out.lv` reads perfectly and bridges anode-to-cathode, shorting the rail through a forward-biased diode | KiCad DRC, once the board was routed |
-| **The reverse-polarity FET was wired backwards** — source to the supply, so its body diode conducted under reverse polarity. With the TVS on the protected rail that is a two-diode short from ground to the reversed input, simulated at 69 A | Adversarial review. Now `test_reverse_polarity_fet_faces_the_supply`, which derives the answer from the netlist instead of a table |
-| **The TVS stood off 12 V on a rail specified to 13.2 V**, so the protection conducted in normal operation at high line, and sooner when cold | Adversarial review. Now `test_tvs_stands_off_the_rail_it_protects` |
-| **Neither FET's gate survived the clamp** — 23.2 V on a ±20 V gate, the Si2301 defect one layer down, with the rating recorded nowhere a check could reach | Adversarial review. Now `test_fet_gates_survive_the_tvs_clamp` |
-
-And two defects in the *pipeline itself*:
-
-- The generated rules file lived in a directory the build deletes, so any DRC
-  run outside `make drc` checked the board against **no custom rules** — and
-  changed the copper, producing a different ground pour.
-- The design source named `Device:Q_NMOS_GSD` and `Device:Q_PMOS_GSD`, which
-  exist in no KiCad library. Nothing noticed for months, because the old tool
-  never resolved symbols at all. `checks/test_symbols.py` catches it now.
-- The silkscreen rules policed every layer despite being named for silkscreen,
-  so they fired on fabrication-layer text that is never printed.
+- **Q1's drain faces the supply.** A P-MOSFET's body diode has its anode on the
+  drain, so that is the orientation in which it blocks a reversed input. Source
+  to the supply reads more naturally, is how a high-side load switch is drawn,
+  works perfectly on the bench — and leaves the board unprotected.
+- **D6 and D7 are 15 V Zeners clamping each FET's gate.** The TVS clamps at
+  23.2 V, and both FETs are ±20 V gate-source, so without these a surge takes
+  each gate past its rating. 15 V is the only window: above the 13.2 V the rail
+  may reach, below the 20 V the FETs allow.
+- **The TVS stands off 14 V, not 12.** The rail is specified to 13.2 V, and a
+  TVS above its stand-off voltage leaks — more so cold, because avalanche
+  breakdown has a positive temperature coefficient. A 12 V part made the
+  protection a load at high line.
 
 ## Bill of materials
 
-Every part verified against LCSC — manufacturer, part number, supplier code,
-stock and price — with a review note in `parts/<LIB>/<LIB>.md` recording the
-datasheet it was read from and what a human confirmed.
+Generated at `build/bom.csv` by `make build`, and published with every CI run.
+Every part is verified against the distributor, with a review note in
+`parts/<LIB>/<LIB>.md` recording the datasheet it was read from, what was
+rejected and why, and what still needs a person to confirm.
 
-| Ref | Value | Part | LCSC |
-|---|---|---|---|
-| C1 | 47 µF 25 V 1210 | Chinocera HGC1210R5476M250NSVK | C7432791 |
-| C2 | 100 nF 50 V | YAGEO CC0805KRX7R9BB104 | C49678 |
-| C3, C5 | 1 µF 50 V | Samsung CL21B105KBFNNNE | C28323 |
-| C4 | 10 µF 25 V | Samsung CL21A106KAYNNNE | C15850 |
-| D1–D4 | red LED, Vf 2.0–2.4 V | Everlight 17-21SURC/S530-A3/4T | C2943978 |
-| D5 | TVS, 14 V standoff, 23.2 V clamp | BORN SMBJ14A | C152106 |
-| D6, D7 | 15 V Zener gate clamp | Jiangsu Changjing BZT52C15 | C2104 |
-| F1 | 1 A slow-blow | Littelfuse 0468001.NRHF | C45157 |
-| J1 | 2-pole 5.08 mm terminal | Ningbo Kangnex WJ500V-5.08-2P | C8465 |
-| Q1 | P-FET, −30 V, ±20 V gate | Alpha & Omega AO3407A | C15155 |
-| Q2 | N-FET, 60 V, logic level | onsemi 2N7002LT1G | C16338 |
-| R1–R4 | 2.2 k 1 % | Yageo RC0805FR-072K2L | C114561 |
-| R5, R7 | 100 k 1 % | Yageo RC0805FR-07100KL | C96346 |
-| R6 | 3.3 k 1 % | Yageo RC0805FR-073K3L | C114531 |
-| R8 | 10 k 1 % | Yageo RC0805FR-0710KL | C84376 |
-| SW1 | 6 mm tactile | Korean Hroparts K2-1102DP-C4SW-04 | C110153 |
-| U1 | 3.3 V LDO, 44 V max in | Gainsil GS2401C-33CTR3 | C6283798 |
-| TP1–TP4 | test pads | bare copper, deliberately off the BOM | — |
+**Four of those notes are still marked "Needs a human eye"**, all of them pin
+mappings taken from footprint geometry or distributor symbol data rather than
+from a manufacturer drawing. One says in plain words that the board may short
+3V3 to GND if its assumption is wrong. `checks/test_parts.py` tracks the list;
+clearing it is a precondition for ordering.
 
-## The port off atopile
+## What the gates caught
 
-The design source has been moved off **atopile**, whose authors abandoned the
-open-source project — no commits since 2026-03-11, every service except
-telemetry switched off, the successor a sign-in-only browser product. The
-replacement is **SKiDL**: MIT, maintained since 2016, with no company behind it
-and nothing to switch off. `../README.md` has the evidence.
+Eight real defects so far, and the split is the interesting part.
 
-Only the design source changed. The layout engine, the checks, the simulation
-and CI all stayed, and the board came out the same — same parts at the same
-coordinates, same copper, same simulated numbers to every digit.
+**Five came from the gates as they were built:** a bulk capacitor that was a
+6.3 V part on a 12 V rail; a reverse-polarity FET rated ±8 V gate-source in a
+circuit that puts 13.2 V across it; LED series resistors dissipating 104 % of
+their rating, because 680 Ω is a 5 V habit; a regulator rated 15 V behind a TVS
+clamping at 19.9 V; and the TVS itself fitted backwards.
 
-| | |
-|---|---|
-| **S0** Spike, and freeze the reference | **done** |
-| **S1** Parts as Python data, symbol checks | **done** |
-| **S2** The board as `@SubCircuit` blocks | **done** |
-| **S3** The board writer, as text s-expressions | **done** |
-| **S4** Re-point the checks and simulation | **done** |
-| **S5** Remove atopile | **done** |
-| **S6** The gates SKiDL makes possible | **done** |
+**Three came from an adversarial review** that went looking for what the gates
+could *not* see — and all three were in the board, not the checks. The
+reverse-polarity FET was wired source-to-supply, so its body diode conducted
+under reverse polarity: a two-diode short from ground to the reversed input,
+simulated at 69 A. The TVS stood off 12 V on a 13.2 V rail. And neither FET's
+gate survived the clamp.
 
-The port is complete. One new gate came of it — electrical rule checking, which
-runs in the design source before anything is placed and fails the build on any
-message, warnings included. An unconnected pin is caught there now, rather than
-surviving to DRC or to the board. Schematic generation was tried and rejected;
-`../README.md` says why.
+The lesson worth carrying is the second one. The check meant to catch a part
+fitted backwards was *holding the FET backwards*, because its expected value was
+a hand-written table of what we believed. Correcting the board turned that check
+red. Expected values are derived from the netlist now, wherever they can be.
 
-`reference/` holds the board as atopile last built it, frozen before the port
-began: the fingerprint, the pad-level netlist, the BOM, the DRC report, the
-placement file and the rendered simulation decks. The SKiDL board reproduces
-them, with three deltas that were chosen rather than discovered — the four LED
-anode nets are named `LED1_A`…`LED4_A` instead of being de-duplicated, net
-numbering is alphabetical, and the `Value` strings are human (`47uF`, `red`)
-rather than carrying the unconstrained-parameter notation the old tool leaked
-into a silkscreen-adjacent field.
+## DRC
+
+Zero errors, against both the PCBWay fab limits and the board's own rules. Nine
+warnings remain, and neither group is about the design:
+
+- **Seven `lib_footprint_mismatch`**, one per rotated footprint — R1–R4, Q1, D6,
+  D7. `pcbnew` re-normalises a rotated footprint when it fills the pours. The
+  count moved from four to seven when three parts were rotated, which is how the
+  cause was established.
+- **Two silkscreen**, on `tp_gnd`'s reference. Two more were fixed by moving the
+  label off its own pad outline; these last two are not positional — every
+  offset tried leaves exactly them — and cannot be chased from the DRC report,
+  whose JSON gives a reference field's position as twice the offset written.
 
 ## The files
 
@@ -167,7 +108,7 @@ into a silkscreen-adjacent field.
 | `rules.kicad_dru` | design intent: track widths, clearances |
 | `sim/` | ngspice decks, device models and the bands each measurement must meet |
 | `parts/<LIB>/` | footprint, and the review note recording what a human checked |
-| `reference/` | the frozen golden set the port is measured against |
+| `reference/` | the board as the previous design source last built it, frozen |
 
-Everything else — how to build it, what each gate does, and what was learned
-about the tools — is in [`../README.md`](../README.md).
+How to change any of it, and what each gate does, is in
+[`../README.md`](../README.md).

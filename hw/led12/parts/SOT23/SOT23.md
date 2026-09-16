@@ -36,12 +36,8 @@ continuous at 25 °C (75 mA at 100 °C, 800 mA pulsed), P_D 225 mW.
 
 Carries all four LED branches, about 20 mA, so it runs at under a fifth of its
 continuous rating and drops about 0.15 V. That drop is part of the LED current
-calculation and is checked in `hw/checks/` and measured in `sim/led_branch.cir.in`,
-which bands it at 0.10 to 0.25 V.
-
-The 56 mA and 0.42 V this note carried until now were the 680 ohm figures, left
-behind when the series resistors went to 2.2 k. They contradicted both the check
-and the simulation for months, because nothing reads a review note.
+calculation, is checked in `hw/checks/`, and is measured in
+`sim/led_branch.cir.in`, which bands it at 0.10 to 0.25 V.
 
 ## Pin mapping
 

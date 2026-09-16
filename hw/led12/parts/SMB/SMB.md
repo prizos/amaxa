@@ -48,14 +48,13 @@ FET's divider both exceed ±20 V. See `parts/SOD123/SOD123.md`.
 
 ## `v_breakdown_max`, not `v_breakdown_min`
 
-The previous entry recorded 14.7 V for the SMBJ12A under the name
-`v_breakdown_min`. **14.7 V is the top of that part's breakdown band**, not the
-bottom — the SMBJ12A's V_BR is specified 13.3 to 14.7 V. The figure was right
-and the name was wrong, which is worse than not recording it, because a check
-written against the name would have reasoned from the wrong end.
+Distributors quote a single V_BR figure and do not say which end of the band it
+is. For this family it is the **top**: the SMBJ12A's V_BR is specified 13.3 to
+14.7 V, and 14.7 V is what gets listed.
 
-Distributors quote a single V_BR figure and do not say which end it is. This
-entry is named for what the number is.
+So the parameter is named for what the number actually is. Filing it under
+`v_breakdown_min` — which this library did — is worse than not recording it,
+because a check written against the name reasons from the wrong end of the band.
 
 ## Why not Littelfuse
 

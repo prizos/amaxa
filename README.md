@@ -5,13 +5,13 @@ compressors, and up through high-power drives.
 
 The architecture is one **digital control board** that generates every hard
 real-time signal, soldered onto **one analog power board** at a time. There are
-N power-board types, from a few tens of milliamps to hundreds of amps, AC or
-DC; the control board is the same in each case. It does the control in real-time
+N power-board types, from a few tens of milliamps to hundreds of amps, AC or DC;
+the control board is the same in each case. It does the control in real-time
 software on a single fast Arm core rather than in dedicated hardware, which is
 what keeps the silicon cheap.
 
-Nothing here is finished. What exists is the groundwork: the research that chose
-the parts, a firmware build that runs in an emulator, and a board design
+**Nothing here is finished.** What exists is the groundwork: the research that
+chose the parts, a firmware build that runs in an emulator, and a board design
 pipeline proven end to end on a deliberately trivial board.
 
 ## What is here
@@ -30,42 +30,7 @@ control board depends on it.
 
 ![led12](hw/led12/docs/board-top.png)
 
-It is worth the detour because of what the gates caught on something this
-simple: a 6.3 V capacitor on a 12 V rail, a FET whose gate rating was exceeded
-in normal operation, series resistors dissipating 104 % of their rating, a
-regulator rated below the voltage its own protection clamps at, and a TVS fitted
-backwards.
-
-Then an adversarial review went looking for what the gates could **not** see,
-and found three more on the same board: the reverse-polarity FET was wired
-source-to-supply, so its body diode conducted under reverse polarity and the
-board's one safety feature did nothing; the TVS stood off 12 V on a rail
-specified to 13.2 V, so the protection was a load at high line; and neither
-FET's gate survived the clamp. The check meant to catch a part fitted backwards
-was holding the FET backwards, because its expected value was a table of what we
-believed rather than anything derived.
-
-Eight defects now, and the interesting half came from assuming the gates were
-wrong rather than the board.
-
-Each gate has also been made to fail on purpose at least once. A gate that has
-never failed is not a gate.
-
-## The principle that has cost the most to learn
-
-**Do not let a tool's output format become your internal interface.**
-
-The hardware pipeline was built on atopile, whose authors abandoned the
-open-source project partway through — no public commits since March 2026, every
-service except telemetry switched off, and a successor that is a sign-in-only
-browser product. Moving to SKiDL took six steps and produced an identical board,
-to the coordinate and to the simulated digit, because the work that mattered —
-placement, routing, checks, simulation — was never written against atopile's
-output in the first place. The one place it was, we replaced with a schema we
-own.
-
-A build here reaches nothing over the network. No parts service, no registry, no
-account. `make tools` fetches a pinned toolchain; after that, nothing.
+It has never been fabricated. What is proven is the pipeline, not the board.
 
 ## Getting started
 
@@ -77,9 +42,7 @@ make -C firmware sim      # run it under Renode
 
 make -C hw tools          # pinned uv, Python and the design virtualenv
 make -C hw check          # build the board and run the design checks
-make -C hw sim            # run the ngspice decks against their limits
-make -C hw outputs        # rule-check it, then render and package it
 ```
 
-`hw/` also needs KiCad 9 and ngspice from your package manager; `hw/README.md`
-says why the version matters.
+`hw/` also needs KiCad 9 and ngspice from your package manager;
+[`hw/README.md`](hw/README.md) says why the version matters.
