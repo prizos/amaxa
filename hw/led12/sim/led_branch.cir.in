@@ -5,8 +5,8 @@
 * diode that actually curves. The two should agree; where they do not, one of
 * them is wrong, and that is the point of running both.
 *
-* Every value below comes from the build. @path:end@ is an atopile instance
-* path and which end of its resolved range to take.
+* Every value below comes from the build. @path:end@ is an instance path and
+* which end of its resolved range to take.
 
 .include ../models/led_red.lib
 

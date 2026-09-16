@@ -1,11 +1,10 @@
 """
 Shared fixtures for the board design checks.
 
-These read what a build produced — the variable report, the BOM and the KiCad
-board — and assert things about the design. They exist because atopile's own
-assertions only intersect intervals on a single parameter: anything relating
-two quantities, or anything about board geometry, has to be checked here.
-See hw/README.md, "What atopile's assertions actually check".
+These read what a build produced — `design.json`, the BOM and the KiCad board —
+and assert things about the design. They exist because the design source states
+values and nothing more: anything relating two quantities, or anything about
+board geometry, has to be checked here. See hw/README.md, "The checks".
 
 Run them with `make -C hw check`, which builds first.
 """

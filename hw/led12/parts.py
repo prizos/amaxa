@@ -152,7 +152,8 @@ TVS_12V = PartSpec(
 # --- semiconductors ----------------------------------------------------------
 
 # Transistor_FET, not Device: `Device:Q_PMOS_GSD` does not exist in any KiCad
-# library, which the .ato files named for months without anything noticing.
+# library, which the design source named for months without anything noticing,
+# because nothing resolved symbols. test_symbols.py is what notices now.
 # Both of these carry pins numbered 1=G, 2=S, 3=D, matching the SOT-23 pads.
 _SOT23 = dict(footprint="SOT23:SOT-23", prefix="Q")
 

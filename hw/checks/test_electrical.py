@@ -1,11 +1,11 @@
 """
 The electrical checks: claims that relate two quantities.
 
-None of these can live in the `.ato` source. atopile 0.15.9 only intersects
-intervals on a single parameter — an inequality is silently dropped and
-cross-parameter arithmetic does not propagate — so an `assert` there relating a
-rail voltage to a resistor value would look like a check and do nothing. See
-hw/README.md, "What atopile's assertions actually check".
+None of these can live in the design source. SKiDL carries part values but has
+no parameter solver at all, and the tool before it had one that silently dropped
+every inequality and never propagated arithmetic across two parameters — so an
+`assert` there relating a rail voltage to a resistor value would look like a
+check and do nothing. See hw/README.md, "Why not atopile".
 
 Every value below is read from the build, never written here. Worst cases are
 taken at the corners of each declared range, so a part swap that narrows or
@@ -225,4 +225,30 @@ def test_rail_parts_survive_the_tvs_clamp(spec, footprints):
     assert not weak, (
         f"Parts on the 12 V rail rated below the TVS clamping voltage "
         f"of {clamp:.1f} V:\n" + "\n".join(weak)
+    )
+
+
+def test_rail_meets_its_promise(spec):
+    """
+    The 3.3 V rail the board promises is a rail its regulator can actually hold.
+
+    `rail.power_out.voltage` is design intent — what anything hanging off this
+    rail is entitled to assume. `rail.ldo.v_out` is the part's own accuracy
+    band. The promise is only worth making if the part's band fits inside it,
+    at both ends.
+
+    This existed as a number in the design and was read by nothing for the
+    whole life of the board. `sim/rail3v3.cir.in` now measures the same rail
+    from the other direction, through a regulator model that drops out and
+    current-limits; between them the claim is checked analytically and by
+    simulation, which is how every other claim here is treated.
+    """
+    promised_low, promised_high = spec("rail.power_out", "voltage")
+    part_low, part_high = spec("rail.ldo", "v_out")
+
+    assert promised_low <= part_low and part_high <= promised_high, (
+        f"The regulator holds {part_low:.3f} to {part_high:.3f} V, which does "
+        f"not fit inside the {promised_low:.3f} to {promised_high:.3f} V the "
+        "board promises at rail.power_out. Either the promise is too tight for "
+        "the part, or the part is the wrong one for the promise."
     )

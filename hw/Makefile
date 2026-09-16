@@ -2,7 +2,7 @@
 #
 #   make tools       fetch pinned uv + Python, build the design virtualenv
 #   make versions    print every tool version and check the pinned ones
-#   make build       turn .ato source into KiCad files
+#   make build       turn the SKiDL design source into KiCad files
 #   make layout      apply the board's placement and routing, then fill the plane
 #   make check       run the design checks against what the build produced
 #   make reproducible  build twice and check both runs describe the same board
@@ -193,11 +193,11 @@ drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 check: layout ## Run the design checks against what the build produced
 	@$(PY) -m pytest checks/ -q --board $(BOARD)
 
-# The decks take their component values from the build's variable report, so
+# The decks take their component values from the build's design.json, so
 # there is no second copy of the design to fall out of step with the first.
 #
-# It depends on layout rather than build even though it only reads the variable
-# report, because build starts by deleting elec/ - so a target that stops at
+# It depends on layout rather than build even though it only reads
+# design.json, because build starts by deleting elec/ - so a target that stops at
 # build leaves the board generated but unplaced and unrouted, which is a
 # confusing thing to find in the tree afterwards.
 sim: layout ## Run the ngspice decks and check their measurements
@@ -225,6 +225,8 @@ outputs: drc ## Renders, 3D model, gerbers and drill files into out/
 		$(LAYOUT_DIR)/default.kicad_pcb
 	@$(KICAD_CLI) pcb export drill --format excellon --output $(OUT)/fab/ \
 		$(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb export ipcd356 \
+		--output $(OUT)/fab/$(BOARD).d356 $(LAYOUT_DIR)/default.kicad_pcb
 	@cp $(BOARD)/build/bom.csv $(OUT)/bom.csv
 	@echo "wrote $(OUT)/"
 	@ls -1 $(OUT) $(OUT)/fab | sed 's/^/    /'

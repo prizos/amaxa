@@ -7,9 +7,10 @@ Boards designed as code: **SKiDL** is the design source, **KiCad** holds the lay
 The first board, `led12`, is a 12 V LED board with no processor. It exists to prove the pipeline end to end before the STM32H743 control board depends on it.
 
 **Status:** the board builds from source, is placed and routed, passes KiCad DRC
-with no errors, and its analog behaviour is simulated. Thirty-one design checks
-and nine simulated measurements gate it, and CI runs all of it, publishing
-renders, a 3D model and a fab package.
+with no errors, and its analog behaviour is simulated. Thirty-three design checks
+and thirteen simulated measurements gate it, and CI runs all of it, publishing
+renders, a 3D model and a fab package. It has never been fabricated: what is
+proven is the pipeline, not the physical board.
 
 ## Quick start
 
@@ -57,9 +58,8 @@ hw/
 ├── checks/                  the design checks, as pytest
 ├── tools/                   the engines: board writer, layout, simulation
 └── led12/
-    ├── ato.yaml             build targets
     ├── parts/               one directory per footprint library
-    │   └── <LIB>/           footprint + <LIB>.ato + <LIB>.md review note
+    │   └── <LIB>/           footprint + <LIB>.md review note
     ├── led12.py             the circuit: the only file that knows SKiDL
     ├── parts.py             every part as data — symbol, footprint, part number
     ├── board.kicad_pro      netclasses and the clearances DRC enforces
@@ -71,11 +71,10 @@ hw/
 
 ## The checks
 
-`make check` is where the electrical reasoning lives. It reads `design.json` and
-the board file, and never hard-codes a value the design already states.
-It reads what the build produced — the variable report and the board file, which
-carries each part's number and every resolved parameter per instance — and never
-hard-codes a value that the design already states.
+`make check` is where the electrical reasoning lives. It reads what the build
+produced — `design.json`, which carries every resolved parameter per instance,
+and the board file, which carries each part's number and position — and never
+hard-codes a value the design already states.
 
 **`test_build_gates.py`** reads what was generated rather than what was
 described, because a part can be specified perfectly and still reach the board
@@ -112,8 +111,15 @@ catching, and this board sits at zero of both. A warning that appears later has
 to be silenced deliberately, on the net or pin that earns it, which is a line in
 a diff rather than a message nobody reads.
 
-**`test_check_count.py`** is the guard on the guards — removing a check fails the
-suite until the expected count is updated in the same commit.
+**`test_check_count.py`** is the guard on the guards, and covers the two ways a
+suite quietly stops checking. Removing a check fails until the expected count is
+updated in the same commit. And **every value in the design that is not a part
+parameter has to be read by a check or a deck** — intent is a promise the board
+makes, and one nobody reads is indistinguishable from one that passes. That is
+the same failure the previous design source had, where an `assert` could parse,
+resolve and do nothing; owning the schema does not make it stop being possible.
+It caught the 3.3 V rail, declared as 3.234 to 3.366 V and read by nothing at
+all for the whole life of the board.
 
 Each gate has been made to fail on purpose once. A gate that has never failed is
 not a gate. Three found real defects the first time they ran:
@@ -163,10 +169,10 @@ it is. A band with no reason behind it is a number somebody widens the next time
 it fails.
 
 **The decks do not restate the design.** Where a deck needs a component value it
-writes `@power.out.voltage:max@` — an instance path and which end of its
-range to take — and the runner fills it in from the build's variable
-report. Changing a resistor in a part definition moves the simulation with it,
-because there is no second copy of the design to fall out of step.
+writes `@power.out.voltage:max@` — an instance path and which end of its range
+to take — and the runner fills it in from the build's `design.json`. Changing a
+resistor in a part definition moves the simulation with it, because there is no
+second copy of the design to fall out of step.
 
 Several measurements deliberately restate what `hw/checks/` computes
 algebraically, so that a disagreement between the two methods fails rather than
@@ -182,9 +188,25 @@ circuit and leaves the capacitor to discharge through the pulldown alone — and
 deck that models the button as a voltage source gets the release badly wrong,
 because the source pulls the gate down instead of letting go of it.
 
+The 3.3 V deck is the newest and exists for a different reason: the rail's
+promised voltage was declared in the design and **read by nothing**. Its
+regulator model carries dropout and a current limit as well as a setpoint,
+because a model that merely held 3.3 V would report the setpoint under every
+condition — including ones the real part cannot survive — and the deck would
+prove nothing. Overload it and the rail folds back; starve its input and the
+output follows the input down.
+
 Models live in `sim/models/`, and `SOURCE.md` there records where each came from
 and how far it can be trusted. The LED's is a fit to the one number its
-datasheet states legibly, not a vendor model, and that is written down.
+datasheet states legibly, not a vendor model, and that is written down. So is
+what the regulator model leaves out: **startup, inrush into the output
+capacitor, loop stability, transient response and temperature are not simulated
+by anything here** and stay on the bring-up list.
+
+`sim/limits.py` is also the declaration of what must be simulated. A deck named
+there with no file to run fails, and so does a change in the total number of
+measurements — the same guard `test_check_count.py` is for the design checks,
+because deleting a deck used to just shrink the glob and pass.
 
 One trap worth knowing: **ngspice treats the first line of a deck as its title**,
 so a deck that starts with a component definition silently loses it.
@@ -225,9 +247,10 @@ one line.
 ## Releasing
 
 Pushing a tag builds the orderable package: gerbers for the nine layers that
-matter, Excellon drill data, the placement file, the BOM, renders, a STEP
-model, a record of what it was built from and the tool versions that built it,
-and the design fingerprint.
+matter, Excellon drill data, an IPC-D-356 netlist so the assembler can
+flying-probe the bare board against what we designed, the placement file, the
+BOM, renders, a STEP model, a record of what it was built from and the tool
+versions that built it, and the design fingerprint.
 
 It is published as a CI artifact rather than attached to a GitHub release,
 because the workflow should not create anything outward-facing on its own.
@@ -246,7 +269,7 @@ Two things that were considered and deliberately left out:
 
 ## What is committed
 
-The design: the `.ato` sources, the parts library with its review notes,
+The design: `led12.py` and `parts.py`, the parts library with its review notes,
 `layout.py`, and the rules files. Not the KiCad board.
 
 That is deliberate, and it was not the first answer. The board was committed to
@@ -316,7 +339,7 @@ for the version we were on, and no fixes ever.
 Undocumented, and reverse-engineered from `faebryk/libs/part_lifecycle.py`:
 
 - **A footprint file must sit in the same directory as the `.ato` file that declares the component.** atopile derives the KiCad library *name* from the footprint's parent directory but the library *path* from the declaring `.ato` file's directory. Keep a footprint anywhere else and the build fails with ``Footprint `X` doesn't exist in library `Y` ``.
-- Consequently every part lives at `parts/<LIB>/<LIB>.ato` with its footprint beside it. Directories matching that shape are registered as footprint libraries automatically on every build.
+- Consequently every part lived at `parts/<LIB>/<LIB>.ato` with its footprint beside it, and directories matching that shape were registered as footprint libraries on every build. The `parts/<LIB>/` shape survives — `tools/board.py` writes an `fp-lib-table` pointing at it — but the `.ato` files are gone.
 - A part with no supplier code needs `has_part_removed`, not an empty `has_part_picked` — otherwise it warns "No part found" and silently leaves the part off the BOM anyway. `has_part_removed` says "deliberately not purchased" and is how test pads stay off the BOM.
 - Only `lcsc` is accepted as a supplier id. Any other value raises.
 - Names collide silently with the standard library. Our test pad was called `TestPoint`, which resolved to the stdlib `TestPoint` (it has `contact`, not `pad`) and failed with ``Field `tp_12v.pad` could not be resolved``.
@@ -354,10 +377,18 @@ Two consequences we rely on:
 | `make help` | List targets |
 | `make tools` | Fetch pinned uv and Python, build the design virtualenv |
 | `make versions` | Print every tool version and fail if a pinned one is wrong |
-| `make build` | Turn `.ato` source into KiCad files |
+| `make build` | Turn the SKiDL design source into KiCad files |
+| `make layout` | Apply the placement and routing, then fill the ground pour |
+| `make rules` | Regenerate the board's `.kicad_dru` from the fab and board rules |
 | `make check` | Run the design checks against what the build produced |
-| `make drift` | Fail if the committed board no longer matches its source |
+| `make drc` | Run KiCad DRC against the fab limits and the board's own rules |
+| `make sim` | Run the ngspice decks and check every measurement against its band |
+| `make reproducible` | Build twice and check both runs describe the same board |
+| `make outputs` | Renders, 3D model, gerbers, drill and netlist into `out/` |
 | `make clean` | Remove build outputs |
 | `make distclean` | Also remove the venv and downloaded tools |
+
+`make outputs` runs `drc`, not `check` or `sim`. CI runs all three; so should you
+before ordering.
 
 `BOARD=<name>` selects the board; it defaults to `led12`.

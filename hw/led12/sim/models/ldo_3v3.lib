@@ -1,0 +1,25 @@
+* Behavioural fixed-output LDO.
+*
+* Not a vendor model - see SOURCE.md for what it does and does not represent.
+* Three datasheet numbers shape it: the regulated output, the on-resistance
+* implied by the dropout point, and the rated output current.
+*
+*   vreg   the voltage the loop regulates to
+*   rpass  pass-element resistance, from dropout voltage / dropout current
+*   ilim   rated output current
+*
+.subckt ldo_3v3 in out params: vreg=3.3 rpass=6.5 ilim=0.15
+
+* The current the pass element actually delivers is the smallest of three
+* things: what the loop asks for to bring the output up to vreg, what the
+* device can push through its own on-resistance given the headroom it has,
+* and its rated limit. The second term is what makes this drop out when the
+* input falls towards the output; the third is what makes it fold back when
+* the load asks for more than the part can give. Without both, the model
+* would report vreg under every condition and the deck would prove nothing.
+Bpass in out I = min(min(1e4 * max(0, vreg - v(out)), max(0, (v(in) - v(out)) / rpass)), ilim)
+
+* A path to ground so the node is never floating when the pass element is off.
+Rleak out 0 1e9
+
+.ends ldo_3v3

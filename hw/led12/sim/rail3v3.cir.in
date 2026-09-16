@@ -1,0 +1,51 @@
+* led12: the 3.3 V rail across the input range.
+*
+* This deck exists because `rail.power_out.voltage` - what the board promises
+* at its 3.3 V rail - was declared in the design and read by nothing. A number
+* that looks like a gate and is not one is worse than no number.
+*
+* It is not a tautology only because the model carries the regulator's dropout
+* and its current limit as well as its setpoint: raise the load, or lower the
+* input towards 3.3 V, and the rail leaves the band. See models/SOURCE.md.
+*
+* Every value below comes from the build. @path:end@ is an instance path and
+* which end of its resolved range to take.
+
+.include ../models/ldo_3v3.lib
+
+* The regulator, set to the bottom of its own accuracy band - the pessimistic
+* end for a rail that has to stay above 3.234 V.
+Xldo in out ldo_3v3 vreg=@rail.ldo.v_out:min@
+
+* Input and output capacitors are present for completeness; a DC sweep does
+* not exercise them. Startup and stability are not simulated - SOURCE.md says
+* why, and they stay on the bring-up list.
+Cin in 0 @rail.c_in.capacitance:nom@
+Cout out 0 @rail.c_out.capacitance:nom@
+
+* The fixed load that exists so the rail is measurable at all. Through a
+* zero-volt source, which is how ngspice reads a current.
+Vsense out load 0
+Rload load 0 @rail.r_load.resistance:nom@
+
+Vin in 0 12
+
+* Swept a little past both ends, because a measurement taken exactly at the
+* edge of the sweep has nothing to interpolate against.
+.dc Vin @power.out.voltage:min-0.2@ @power.out.voltage:max+0.2@ 0.05
+
+* The rail itself, at both ends of the input range. Both must sit inside
+* `rail.power_out.voltage`.
+.meas dc v_rail_at_min_supply FIND v(out) WHEN v(in)=@power.out.voltage:min@
+.meas dc v_rail_at_max_supply FIND v(out) WHEN v(in)=@power.out.voltage:max@
+
+* Headroom over the regulator's dropout at the worst input. The part needs
+* 260 mV at 40 mA; this board has volts to spare, and the measurement is here
+* so that a future input range which does not is caught rather than assumed.
+.meas dc tmp_out_min FIND v(out) WHEN v(in)=@power.out.voltage:min@
+.meas dc v_dropout_headroom_at_min PARAM='@power.out.voltage:min@-tmp_out_min'
+
+* What the rail actually draws, against the regulator's 150 mA rating.
+.meas dc i_load_at_max_supply FIND i(Vsense) WHEN v(in)=@power.out.voltage:max@
+
+.end

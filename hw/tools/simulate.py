@@ -3,10 +3,10 @@
 Run the ngspice decks for a board and check their measurements.
 
 The decks do not restate the design. Where a deck needs a component value it
-writes `@power.out.voltage:max@` — an atopile instance path and which end of its
-range to take — and this fills it in from the variable report the build
-produced. Change a resistor in the source and the simulation changes with it;
-there is no second copy of the design to fall out of step.
+writes `@power.out.voltage:max@` — an instance path and which end of its range
+to take — and this fills it in from the `design.json` the build produced. Change
+a resistor in the source and the simulation changes with it; there is no second
+copy of the design to fall out of step.
 
 What the results are checked against lives in sim/limits.py, as bands with a
 sentence saying why each one is where it is.
@@ -108,7 +108,9 @@ def main() -> int:
 
     sys.path.insert(0, str(sim_dir))
     try:
-        limits = __import__("limits").LIMITS
+        module = __import__("limits")
+        limits = module.LIMITS
+        EXPECTED_MEASUREMENTS = module.EXPECTED_MEASUREMENTS
     except ModuleNotFoundError:
         sys.exit(f"no limits at {sim_dir / 'limits.py'}")
 
@@ -117,6 +119,30 @@ def main() -> int:
     work.mkdir(exist_ok=True)
 
     templates = sorted(sim_dir.glob("*.cir.in"))
+
+    # limits.py is the declaration of what must be simulated, so a deck named
+    # there and missing from the tree is a hole, not a shrug. Without this a
+    # deleted .cir.in just drops out of the glob and the run passes with fewer
+    # measurements - the same silent-skip the check-count guard exists to stop
+    # on the pytest side.
+    vanished = sorted(set(limits) - {t.name.removesuffix(".cir.in") for t in templates})
+    if vanished:
+        sys.exit(
+            "limits are written for decks that do not exist:\n"
+            + "\n".join(f"  {args.board}/sim/{name}.cir.in" for name in vanished)
+            + "\nA deck that stops existing takes its measurements with it. "
+            "Restore it, or delete its limits in the same commit."
+        )
+
+    declared = sum(len(m) for m in limits.values())
+    if declared != EXPECTED_MEASUREMENTS:
+        sys.exit(
+            f"{declared} measurements have limits, expected {EXPECTED_MEASUREMENTS}. "
+            "If this is intended, update EXPECTED_MEASUREMENTS in "
+            f"{args.board}/sim/limits.py in the same commit as the measurement "
+            "you added or removed."
+        )
+
     if args.decks:
         wanted = set(args.decks)
         templates = [t for t in templates if t.name.removesuffix(".cir.in") in wanted]

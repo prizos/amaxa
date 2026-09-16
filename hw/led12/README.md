@@ -39,7 +39,7 @@ be measured. Four test pads expose 12 V, 3.3 V, ground and the gate.
 
 ## What is checked, and what that caught
 
-Thirty-one checks, nine simulated measurements, electrical rule checking on the
+Thirty-three checks, thirteen simulated measurements, electrical rule checking on the
 circuit itself, and DRC against both the PCBWay fab limits and the board's own
 design rules. Each gate has been made to
 fail on purpose at least once — a gate that has never failed is not a gate.

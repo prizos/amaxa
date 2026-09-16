@@ -65,7 +65,9 @@ make -C firmware          # build the firmware
 make -C firmware sim      # run it under Renode
 
 make -C hw tools          # pinned uv, Python and the design virtualenv
-make -C hw outputs        # build the board, check it, simulate it, render it
+make -C hw check          # build the board and run the design checks
+make -C hw sim            # run the ngspice decks against their limits
+make -C hw outputs        # rule-check it, then render and package it
 ```
 
 `hw/` also needs KiCad 9 and ngspice from your package manager; `hw/README.md`

@@ -180,7 +180,7 @@ jobs:
       - name: Build the toolchain
         run: make tools
 
-      - name: Build, check and package
+      - name: Build and package
         run: make outputs
 
       - name: Record what it was built from

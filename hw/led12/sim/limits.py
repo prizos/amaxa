@@ -11,6 +11,12 @@ methods shows up as a failure rather than as nobody noticing.
 
 MILLI = 1e-3
 
+# The guard on the guards, as hw/checks/test_check_count.py is for the design
+# checks. A deck that quietly stops measuring something, or limits deleted
+# alongside the measurement they covered, leaves a suite that passes with less
+# coverage than it had. Update this in the same commit as the change.
+EXPECTED_MEASUREMENTS = 13
+
 LIMITS = {
     "led_branch": {
         "i_branch_at_min_supply": (
@@ -68,6 +74,36 @@ LIMITS = {
             0.0, 0.5,
             "Long after release the gate must be at ground, not floating near "
             "the threshold where the FET would sit half on.",
+        ),
+    },
+    "rail3v3": {
+        "v_rail_at_min_supply": (
+            3.234, 3.366,
+            "`rail.power_out.voltage` — what the board promises at its 3.3 V "
+            "rail. This band IS that number, so the deck fails if the rail the "
+            "design claims and the rail the parts produce ever part company. "
+            "Until this deck existed the claim was read by nothing at all.",
+        ),
+        "v_rail_at_max_supply": (
+            3.234, 3.366,
+            "The same at the top of the input range. A linear regulator should "
+            "not care, and the measurement is here to say so rather than to "
+            "assume it.",
+        ),
+        "v_dropout_headroom_at_min": (
+            7.0, 8.0,
+            "10.8 V in, about 3.27 V out. The regulator needs 260 mV at 40 mA, "
+            "so this is roughly thirty times its dropout. The band is narrow "
+            "enough that shrinking the input range, or raising the output, "
+            "shows up here before it shows up as a rail out of regulation.",
+        ),
+        "i_load_at_max_supply": (
+            0.9 * MILLI, 1.1 * MILLI,
+            "The fixed 3.3 kΩ load, which exists so the rail is measurable at "
+            "all. Against the regulator's 150 mA rating this is nothing, and "
+            "the measurement is what would catch a load resistor changed to "
+            "something the part cannot supply — the model folds back at its "
+            "current limit rather than pretending.",
         ),
     },
 }
