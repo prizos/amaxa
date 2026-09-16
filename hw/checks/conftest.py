@@ -160,3 +160,13 @@ def nets(footprints) -> dict[str, set[tuple[str, str]]]:
             if net:
                 out.setdefault(net, set()).add((fp["designator"], pad))
     return out
+
+
+def pytest_collection_modifyitems(config, items):
+    """Record how many checks were collected, for the check-count guard."""
+    config.collected_check_count = len(items)
+
+
+@pytest.fixture(scope="session")
+def collected_check_count(pytestconfig) -> int:
+    return getattr(pytestconfig, "collected_check_count", 0)

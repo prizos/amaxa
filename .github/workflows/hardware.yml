@@ -62,3 +62,38 @@ jobs:
             make versions
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate the board from source
+        run: make build
+
+      # The committed KiCad files must be what the .ato source produces. If a
+      # rebuild moves the board, the commit is stale.
+      - name: Check the committed board is up to date
+        run: make drift
+
+      - name: Design checks
+        run: make check
+
+      - name: Bill of materials
+        run: |
+          {
+            echo '### Bill of materials'
+            echo ''
+            sed -e 's/^/| /' -e 's/$/ |/' -e 's/,/ | /g' \
+              led12/build/builds/default/default.bom.csv | head -1
+            echo '| --- | --- | --- | --- | --- | --- | --- |'
+            sed -e 's/^/| /' -e 's/$/ |/' -e 's/,/ | /g' \
+              led12/build/builds/default/default.bom.csv | tail -n +2
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build outputs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: led12-build
+          path: |
+            hw/led12/build/builds/default/*.csv
+            hw/led12/build/builds/default/*.json
+            hw/led12/build/builds/default/*.md
+            hw/led12/elec/layout/default/*.kicad_pcb
+          if-no-files-found: error
