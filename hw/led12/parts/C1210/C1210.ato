@@ -1,0 +1,34 @@
+"""
+1210 bulk ceramic capacitor.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `C1210`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in C1210.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import Capacitor
+import is_atomic_part
+import has_part_picked
+
+component CapBulk from Capacitor:
+    """
+    Bulk capacitance on the protected 12 V rail.
+
+    47 uF, not the 100 uF first drawn: 100 uF at 25 V does not exist in a 1210
+    MLCC. The largest actually purchasable is 47 uF, and the part originally
+    chosen for it (Samsung CL32A107MQVNNNE) is a 6.3 V part, which would have
+    failed immediately on a 12 V rail.
+
+    This is the nominal value. X5R loses a large fraction of it under 12 V DC
+    bias; the derated figure belongs in simulation, not here.
+    """
+    trait is_atomic_part<manufacturer="Chinocera", partnumber="HGC1210R5476M250NSVK", footprint="C_1210_3225Metric.kicad_mod", symbol="Device:C">
+    trait has_part_picked<manufacturer="Chinocera", partno="HGC1210R5476M250NSVK", supplier_partno="C7432791", supplier_id="lcsc">
+    assert capacitance within 47uF +/- 20%
+    assert max_voltage within 25V
+    unnamed[0] ~ pin 1
+    unnamed[1] ~ pin 2

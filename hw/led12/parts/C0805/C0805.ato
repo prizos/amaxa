@@ -1,0 +1,41 @@
+"""
+0805 ceramic capacitors.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `C0805`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in C0805.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import Capacitor
+import is_atomic_part
+import has_part_picked
+
+component _Cap0805 from Capacitor:
+    """Shared package body: pad mapping. Not used directly."""
+    unnamed[0] ~ pin 1
+    unnamed[1] ~ pin 2
+
+component Cap100n from _Cap0805:
+    """100 nF 50 V X7R — high-frequency decoupling."""
+    trait is_atomic_part<manufacturer="YAGEO", partnumber="CC0805KRX7R9BB104", footprint="C_0805_2012Metric.kicad_mod", symbol="Device:C">
+    trait has_part_picked<manufacturer="YAGEO", partno="CC0805KRX7R9BB104", supplier_partno="C49678", supplier_id="lcsc">
+    assert capacitance within 100nF +/- 10%
+    assert max_voltage within 50V
+
+component Cap1u from _Cap0805:
+    """1 uF 50 V X7R — debounce capacitor."""
+    trait is_atomic_part<manufacturer="Samsung", partnumber="CL21B105KBFNNNE", footprint="C_0805_2012Metric.kicad_mod", symbol="Device:C">
+    trait has_part_picked<manufacturer="Samsung", partno="CL21B105KBFNNNE", supplier_partno="C28323", supplier_id="lcsc">
+    assert capacitance within 1uF +/- 10%
+    assert max_voltage within 50V
+
+component Cap10u from _Cap0805:
+    """10 uF 25 V X5R — regulator output capacitor."""
+    trait is_atomic_part<manufacturer="Samsung", partnumber="CL21A106KAYNNNE", footprint="C_0805_2012Metric.kicad_mod", symbol="Device:C">
+    trait has_part_picked<manufacturer="Samsung", partno="CL21A106KAYNNNE", supplier_partno="C15850", supplier_id="lcsc">
+    assert capacitance within 10uF +/- 20%
+    assert max_voltage within 25V

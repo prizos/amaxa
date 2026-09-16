@@ -1,0 +1,128 @@
+
+# parts (28)
+  C1 power.c_bulk C1210:C_1210_3225Metric at (7, -13) rot 0 = 47µF ±20% [C7432791]
+  C2 power.c_hf C0805:C_0805_2012Metric at (11.5, -13) rot 0 = 100nF ±10% [C49678]
+  C3 rail.c_in C0805:C_0805_2012Metric at (11.5, -6) rot 0 = 1µF ±10% [C28323]
+  C4 rail.c_out C0805:C_0805_2012Metric at (19.5, -8) rot 0 = 10µF ±20% [C15850]
+  C5 switch.c_debounce C0805:C_0805_2012Metric at (-6, 17) rot 0 = 1µF ±10% [C28323]
+  D1 leds[0].led LED0805:LED_0805_2012Metric at (6, 3) rot 0 =  [C2943978]
+  D2 leds[1].led LED0805:LED_0805_2012Metric at (6, 7) rot 0 =  [C2943978]
+  D3 leds[2].led LED0805:LED_0805_2012Metric at (6, 11) rot 0 =  [C2943978]
+  D4 leds[3].led LED0805:LED_0805_2012Metric at (6, 15) rot 0 =  [C2943978]
+  D5 power.tvs SMB:D_SMB at (0.3, -13) rot 0 = Vf {ℝ+}V [C111091]
+  F1 power.fuse FUSE_1206:Fuse_1206_3216Metric at (-10.4, -13) rot 0 = It 1A [C45157]
+  J1 power.terminal TERM_2P5008:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal at (-21.5, -13) rot 0 =  [C8465]
+  Q1 power.q_rpp SOT23:SOT-23 at (-5.8, -13) rot 0 = Vgs ℝ+V [C15155]
+  Q2 switch.q_switch SOT23:SOT-23 at (-1, 12) rot 0 = Vgs 1.75V [C16338]
+  R1 leds[0].resistor R0805:R_0805_2012Metric at (12, 3) rot 180 = 2.2kΩ ±1% [C114561]
+  R2 leds[1].resistor R0805:R_0805_2012Metric at (12, 7) rot 180 = 2.2kΩ ±1% [C114561]
+  R3 leds[2].resistor R0805:R_0805_2012Metric at (12, 11) rot 180 = 2.2kΩ ±1% [C114561]
+  R4 leds[3].resistor R0805:R_0805_2012Metric at (12, 15) rot 180 = 2.2kΩ ±1% [C114561]
+  R5 power.r_gate R0805:R_0805_2012Metric at (-9.5, -17) rot 0 = 100kΩ ±1% [C96346]
+  R6 rail.r_load R0805:R_0805_2012Metric at (19.5, -5) rot 0 = 3.3kΩ ±1% [C114531]
+  R7 switch.r_pulldown R0805:R_0805_2012Metric at (-6, 14) rot 0 = 100kΩ ±1% [C96346]
+  R8 switch.r_series R0805:R_0805_2012Metric at (-11, 10.5) rot 0 = 10kΩ ±1% [C84376]
+  SW1 switch.button SW6MM:SW_PUSH_6mm at (-22, 6) rot 0 =  [C110153]
+  TP1 tp_3v3 TP15:TestPoint_Pad_1.5x1.5mm at (19.5, -2) rot 0 =  [no supplier part]
+  TP2 tp_12v TP15:TestPoint_Pad_1.5x1.5mm at (15.5, -2) rot 0 =  [no supplier part]
+  TP3 tp_gate TP15:TestPoint_Pad_1.5x1.5mm at (-6, 10) rot 0 =  [no supplier part]
+  TP4 tp_gnd TP15:TestPoint_Pad_1.5x1.5mm at (11, -2) rot 0 =  [no supplier part]
+  U1 rail.ldo SOT223:SOT-223-3_TabPin2 at (18.5, -13) rot 0 =  [C6283798]
+
+# nets (14)
+  0 
+  1 LED_A
+  10 VIN_RAW
+  11 3V3
+  12 BTN
+  13 GATE
+  2 leds[1]-LED_A
+  3 12V
+  4 LED_RETURN
+  5 leds[2]-LED_A
+  6 leds[3]-LED_A
+  7 GND
+  8 VIN_FUSED
+  9 RPP_GATE
+
+# tracks (63)
+  net 1 F.Cu (6.9375, 3) -> (11.0875, 3) width 0.25
+  net 10 F.Cu (-11.8, -9.5) -> (-11.8, -13) width 1
+  net 10 F.Cu (-21.5, -13) -> (-21.5, -9.5) width 1
+  net 10 F.Cu (-21.5, -9.5) -> (-11.8, -9.5) width 1
+  net 11 F.Cu (15.35, -13) -> (21.65, -13) width 0.25
+  net 11 F.Cu (18.55, -8) -> (18.5875, -5) width 0.25
+  net 11 F.Cu (18.55, -9.8) -> (18.55, -8) width 0.25
+  net 11 F.Cu (18.5875, -5) -> (18.59, -2) width 0.25
+  net 11 F.Cu (18.59, -2) -> (19.5, -2) width 0.25
+  net 11 F.Cu (21.65, -13) -> (21.65, -9.8) width 0.25
+  net 11 F.Cu (21.65, -9.8) -> (18.55, -9.8) width 0.25
+  net 12 F.Cu (-22, 10.5) -> (-11.9125, 10.5) width 0.25
+  net 13 F.Cu (-10.0875, 10.5) -> (-3.5, 10.5) width 0.25
+  net 13 F.Cu (-3.5, 10.5) -> (-3.5, 11.05) width 0.25
+  net 13 F.Cu (-3.5, 11.05) -> (-1.9375, 11.05) width 0.25
+  net 13 F.Cu (-6.9125, 14) -> (-6.91, 10.5) width 0.25
+  net 13 F.Cu (-6.95, 17) -> (-6.9125, 14) width 0.25
+  net 2 F.Cu (6.9375, 7) -> (11.0875, 7) width 0.25
+  net 3 F.Cu (-1.85, -13) -> (-1.85, -16.5) width 0.5
+  net 3 F.Cu (-22, -5) -> (-22, 6) width 0.5
+  net 3 F.Cu (-22, 6) -> (-15.5, 6) width 0.5
+  net 3 F.Cu (-4.86, -16.5) -> (13.6, -16.5) width 0.5
+  net 3 F.Cu (-4.86, -5) -> (-22, -5) width 0.5
+  net 3 F.Cu (-4.8625, -13) -> (-4.86, -16.5) width 0.5
+  net 3 F.Cu (-4.8625, -13) -> (-4.86, -5) width 0.5
+  net 3 F.Cu (10.55, -13) -> (10.55, -16.5) width 0.5
+  net 3 F.Cu (10.55, -6) -> (10.55, -13) width 0.5
+  net 3 F.Cu (12.9125, 11) -> (15.5, 11) width 0.5
+  net 3 F.Cu (12.9125, 15) -> (15.5, 15) width 0.5
+  net 3 F.Cu (12.9125, 3) -> (15.5, 3) width 0.5
+  net 3 F.Cu (12.9125, 7) -> (15.5, 7) width 0.5
+  net 3 F.Cu (13.6, -10.7) -> (13.6, -4) width 0.5
+  net 3 F.Cu (13.6, -10.7) -> (15.35, -10.7) width 0.5
+  net 3 F.Cu (13.6, -16.5) -> (13.6, -10.7) width 0.5
+  net 3 F.Cu (13.6, -4) -> (15.5, -4) width 0.5
+  net 3 F.Cu (15.5, -4) -> (15.5, 15) width 0.5
+  net 3 F.Cu (5.525, -13) -> (5.52, -16.5) width 0.5
+  net 4 F.Cu (-0.0625, 12) -> (3, 12) width 0.5
+  net 4 F.Cu (3, 11) -> (5.0625, 11) width 0.5
+  net 4 F.Cu (3, 15) -> (5.0625, 15) width 0.5
+  net 4 F.Cu (3, 3) -> (3, 15) width 0.5
+  net 4 F.Cu (3, 3) -> (5.0625, 3) width 0.5
+  net 4 F.Cu (3, 7) -> (5.0625, 7) width 0.5
+  net 5 F.Cu (6.9375, 11) -> (11.0875, 11) width 0.25
+  net 6 F.Cu (6.9375, 15) -> (11.0875, 15) width 0.25
+  net 7 F.Cu (-1.9375, 12.95) -> (-1.94, 14.5) width 0.5
+  net 7 F.Cu (-5.05, 17) -> (-3.2, 17) width 0.5
+  net 7 F.Cu (-5.0875, 14) -> (-3.6, 14) width 0.5
+  net 7 F.Cu (-8.5875, -17) -> (-8.59, -15.2) width 0.5
+  net 7 F.Cu (11, -2) -> (11, 0.5) width 0.5
+  net 7 F.Cu (12.45, -13) -> (12.45, -10.5) width 0.5
+  net 7 F.Cu (12.45, -6) -> (12.45, -3.5) width 0.5
+  net 7 F.Cu (15.35, -15.3) -> (17.5, -15.3) width 0.5
+  net 7 F.Cu (2.45, -13) -> (2.45, -9.5) width 0.5
+  net 7 F.Cu (20.4125, -5) -> (22.5, -5) width 0.5
+  net 7 F.Cu (20.45, -8) -> (22.5, -8) width 0.5
+  net 7 F.Cu (8.475, -13) -> (8.48, -9.5) width 0.5
+  net 8 F.Cu (-7.6, -12.05) -> (-6.7375, -12.05) width 0.5
+  net 8 F.Cu (-7.6, -13) -> (-7.6, -12.05) width 0.5
+  net 8 F.Cu (-9, -13) -> (-7.6, -13) width 0.5
+  net 9 F.Cu (-10.41, -18.7) -> (-10.4125, -17) width 0.25
+  net 9 F.Cu (-6.7375, -13.95) -> (-6.74, -18.7) width 0.25
+  net 9 F.Cu (-6.74, -18.7) -> (-10.41, -18.7) width 0.25
+
+# vias (12)
+  (-1.94, 14.5) size 0.6 drill 0.3
+  (-3.2, 17) size 0.6 drill 0.3
+  (-3.6, 14) size 0.6 drill 0.3
+  (-8.59, -15.2) size 0.6 drill 0.3
+  (11, 0.5) size 0.6 drill 0.3
+  (12.45, -10.5) size 0.6 drill 0.3
+  (12.45, -3.5) size 0.6 drill 0.3
+  (17.5, -15.3) size 0.6 drill 0.3
+  (2.45, -9.5) size 0.6 drill 0.3
+  (22.5, -5) size 0.6 drill 0.3
+  (22.5, -8) size 0.6 drill 0.3
+  (8.48, -9.5) size 0.6 drill 0.3
+
+# zones (1)
+  GND on B.Cu: 396 points

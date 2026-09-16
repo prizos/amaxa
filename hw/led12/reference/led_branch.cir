@@ -1,0 +1,51 @@
+* led12: LED branch current across the supply range.
+*
+* The design checks in hw/checks/ compute this current from a straight line
+* through the LED's datasheet forward-voltage band. This does it again with a
+* diode that actually curves. The two should agree; where they do not, one of
+* them is wrong, and that is the point of running both.
+*
+* Every value below comes from the build. @path:end@ is an atopile instance
+* path and which end of its resolved range to take.
+
+.include ../models/led_red.lib
+
+Vrail rail 0 DC 12
+
+* Four branches. The first carries a zero-volt source as an ammeter; the others
+* are identical and are here because they share the low-side switch, whose drop
+* depends on the total.
+Vsense rail n1 DC 0
+R1 n1 a1 2200.0
+D1 a1 ret LED_RED
+
+R2 rail a2 2200.0
+D2 a2 ret LED_RED
+
+R3 rail a3 2200.0
+D3 a3 ret LED_RED
+
+R4 rail a4 2200.0
+D4 a4 ret LED_RED
+
+* The low-side FET, fully on. See models/SOURCE.md for why this is a resistor.
+Rfet ret 0 7.5
+
+* Swept a little past both ends: a measurement taken exactly at the edge of the
+* sweep has nothing to interpolate against and ngspice reports it out of range.
+.dc Vrail 10.600000000000001 13.4 0.05
+
+* i(Vsense) is positive into the branch, so it reads negative here.
+.meas dc i_branch_at_min_supply FIND i(Vsense) WHEN v(rail)=10.8
+.meas dc i_branch_at_max_supply FIND i(Vsense) WHEN v(rail)=13.200000000000001
+* The LED's own forward voltage is the difference between two nodes, which
+* .meas cannot take directly, so it is measured in pieces and subtracted.
+.meas dc tmp_a1_min FIND v(a1) WHEN v(rail)=10.8
+.meas dc tmp_ret_min FIND v(ret) WHEN v(rail)=10.8
+.meas dc v_led_at_min_supply PARAM='tmp_a1_min-tmp_ret_min'
+.meas dc tmp_a1_max FIND v(a1) WHEN v(rail)=13.200000000000001
+.meas dc tmp_ret_max FIND v(ret) WHEN v(rail)=13.200000000000001
+.meas dc v_led_at_max_supply PARAM='tmp_a1_max-tmp_ret_max'
+.meas dc v_fet_drop_at_max FIND v(ret) WHEN v(rail)=13.200000000000001
+
+.end

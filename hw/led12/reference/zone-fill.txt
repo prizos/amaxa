@@ -1,0 +1,1 @@
+filled GND on B.Cu: 1876.5 mm2

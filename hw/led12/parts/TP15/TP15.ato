@@ -1,0 +1,31 @@
+"""
+1.5 mm test pad.
+
+Hand-written part definitions. The footprint file beside this one is the KiCad
+library `TP15`, which atopile registers from this directory's name. Datasheet
+revision and the pin mapping checked against it are recorded in TP15.md.
+
+Each part asserts its own datasheet values, so a board that asks for something
+this part cannot do resolves to an `<empty>` spec, which the build gate rejects.
+"""
+
+
+import is_atomic_part
+import has_designator_prefix
+import has_part_removed
+
+component TestPad:
+    """
+    1.5 mm square test pad.
+
+    Named TestPad, not TestPoint, because the latter is a standard-library type
+    and the name would silently resolve to it.
+
+    A square pad, not the round TestPoint_Pad_D1.5mm: atopile cannot compute a
+    bounding box for a footprint whose silkscreen is only a circle.
+    """
+    trait is_atomic_part<manufacturer="amaxa", partnumber="TP-1.5MM", footprint="TestPoint_Pad_1.5x1.5mm.kicad_mod", symbol="Connector:TestPoint">
+    trait has_designator_prefix<prefix="TP">
+    # Bare copper, not a purchasable part: kept off the BOM deliberately.
+    trait has_part_removed
+    signal pad ~ pin 1

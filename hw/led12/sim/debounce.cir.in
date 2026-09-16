@@ -1,0 +1,34 @@
+* led12: the debounce network, pressed and released.
+*
+* The design checks compute the two time constants algebraically. This runs the
+* network, which matters because the two directions are not symmetric: pressing
+* charges the capacitor through the series resistor with the pulldown in
+* parallel, and releasing opens the circuit entirely, leaving it to discharge
+* through the pulldown alone. A model that treats the button as a voltage
+* source gets the release badly wrong, because the source pulls the gate down
+* instead of letting go of it.
+
+Vrail rail 0 DC @power.out.voltage:nom@
+
+* The button. Closed from 5 ms to 105 ms; open before and after.
+Vpress ctl 0 PULSE(0 1 5m 1u 1u 100m 1)
+Sbtn rail btn ctl 0 SW_BUTTON
+.model SW_BUTTON SW(Ron=0.05 Roff=1e12 Vt=0.5 Vh=0.1)
+
+Rseries btn gate @switch.r_series.resistance:nom@
+Rpulldown gate 0 @switch.r_pulldown.resistance:nom@
+Cdebounce gate 0 @switch.c_debounce.capacitance:nom@
+
+.tran 50u 450m
+
+* Pressed at 5 ms: how long until the FET is properly on, and where the gate
+* settles. The threshold used is the highest the datasheet allows.
+.meas tran t_gate_reaches_threshold WHEN v(gate)=@switch.q_switch.gate_source_threshold_voltage:max@ RISE=1
+.meas tran v_gate_held_on FIND v(gate) AT=100m
+
+* Released at 105 ms: how long until the FET is certainly off, using the lowest
+* threshold the datasheet allows, which is the pessimistic direction.
+.meas tran t_gate_falls_below_threshold WHEN v(gate)=@switch.q_switch.gate_source_threshold_voltage:min@ FALL=1
+.meas tran v_gate_at_rest FIND v(gate) AT=440m
+
+.end

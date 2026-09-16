@@ -1,0 +1,12 @@
+* Everlight 17-21SURC/S530-A3/4T, red 0805 indicator LED.
+*
+* A first-order fit, not a vendor model - see SOURCE.md. Fitted so that the
+* forward voltage is 2.2 V at 20 mA, the midpoint of the datasheet's 2.0 to
+* 2.4 V band. At the 4 to 5 mA this board actually runs the LEDs at, it gives
+* about 2.0 V, which is the bottom of that band, as expected for a real diode.
+*
+* IS was solved from the 20 mA point with N = 1.8 and RS = 8, both typical of a
+* red AlGaInP emitter. Anyone replacing this with a vendor model should keep
+* the 20 mA point and expect the low-current end to move.
+
+.model LED_RED D(IS=1.8e-21 N=1.8 RS=8 EG=2.0 XTI=3)

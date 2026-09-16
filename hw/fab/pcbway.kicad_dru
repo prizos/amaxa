@@ -1,0 +1,51 @@
+(version 1)
+
+# PCBWay manufacturing limits, 2-layer, 1 oz copper.
+#
+# These are the fabricator's floor, not a design target. A board that only just
+# clears them is one the fab can make, not one that will come back reliably —
+# design rules that express intent belong in the board's own rules file, which
+# is concatenated after this one. See hw/README.md.
+#
+# Shared by every board, so nothing here may mention a net or a part.
+
+(rule "track width"
+	(constraint track_width (min 0.1mm))
+	(severity error))
+
+(rule "copper clearance"
+	(constraint clearance (min 0.1mm))
+	(severity error))
+
+(rule "drilled hole diameter"
+	(constraint hole_size (min 0.15mm))
+	(severity error))
+
+(rule "annular ring"
+	(constraint annular_width (min 0.15mm))
+	(severity error))
+
+# Copper too near the routed edge is exposed by the router's tolerance.
+(rule "copper to board edge"
+	(constraint edge_clearance (min 0.25mm))
+	(severity error))
+
+# Thinner silkscreen than this does not survive the screen.
+#
+# Scoped to the silkscreen layers, which is what the fab prints. Unscoped,
+# these also police the fabrication layers - where footprints carry small
+# annotation text that is never printed and has no minimum.
+(rule "silkscreen line width"
+	(condition "A.Layer == 'F.SilkS' || A.Layer == 'B.SilkS'")
+	(constraint text_thickness (min 0.15mm))
+	(severity error))
+
+(rule "silkscreen text height"
+	(condition "A.Layer == 'F.SilkS' || A.Layer == 'B.SilkS'")
+	(constraint text_height (min 0.8mm))
+	(severity error))
+
+# Two holes closer than this risk breaking into one another.
+(rule "hole to hole"
+	(constraint hole_to_hole (min 0.5mm))
+	(severity error))
