@@ -88,7 +88,10 @@ module PowerInput:
     q_rpp.gate ~> r_gate ~> out.lv
 
     # Surge clamp across the protected rail, then bulk and high-frequency caps.
-    out.hv ~> tvs ~> out.lv
+    # Connected by name, not bridged: `~>` runs anode to cathode, which would
+    # put the TVS across the rail the wrong way round, conducting at 0.7 V.
+    tvs.cathode ~ out.hv
+    tvs.anode ~ out.lv
     out.hv ~> c_bulk ~> out.lv
     out.hv ~> c_hf ~> out.lv
 

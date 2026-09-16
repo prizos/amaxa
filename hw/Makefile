@@ -3,6 +3,7 @@
 #   make tools       fetch pinned uv + Python, build the atopile venv
 #   make versions    print every tool version and check the pinned ones
 #   make build       turn .ato source into KiCad files
+#   make layout      apply the board's placement and routing, then fill the plane
 #   make check       run the design checks against what the build produced
 #   make drift       fail if the committed board no longer matches its source
 #   make help        list all targets
@@ -49,10 +50,13 @@ ATO    ?= $(VENV)/bin/ato
 # uv keeps its downloaded Pythons here, so nothing touches the system Python.
 export UV_PYTHON_INSTALL_DIR := $(abspath $(TOOLS_DIR)/pythons)
 
+LAYOUT_DIR := $(BOARD)/elec/layout/default
+DRU        := $(LAYOUT_DIR)/default.kicad_dru
+
 KICAD_CLI ?= $(shell command -v kicad-cli 2>/dev/null)
 NGSPICE   ?= $(shell command -v ngspice 2>/dev/null)
 
-.PHONY: help tools versions build rules check drc drift clean distclean
+.PHONY: help tools versions build layout rules check drc drift clean distclean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -114,12 +118,17 @@ versions: ## Print tool versions and check the pinned ones
 build: $(ATO) ## Turn .ato source into KiCad files for BOARD
 	@cd $(BOARD) && ../$(ATO) build
 
+# atopile leaves every part in a grid and nothing routed. This puts the board
+# together from $(BOARD)/layout.py, then fills the copper pours - kicad-cli
+# cannot fill them, and DRC reads whatever fill is already in the file, so an
+# unfilled plane reports every ground pad as unconnected.
+layout: build ## Apply the board's placement and routing, then fill the plane
+	@python3 tools/layout.py $(BOARD)
+	@python3 tools/fill_zones.py $(LAYOUT_DIR)/default.kicad_pcb
+
 # KiCad reads one rules file per board, named after it and beside it. Ours is
 # the shared fab limits followed by the board's own intent, so that a rule about
 # what PCBWay can etch lives in one place across every board.
-LAYOUT_DIR := $(BOARD)/elec/layout/default
-DRU        := $(LAYOUT_DIR)/default.kicad_dru
-
 rules: $(DRU) ## Regenerate the board's design-rules file
 
 $(DRU): fab/pcbway.kicad_dru $(BOARD)/rules.kicad_dru
@@ -136,17 +145,17 @@ $(DRU): fab/pcbway.kicad_dru $(BOARD)/rules.kicad_dru
 
 # KiCad's own rule checker: shorts, clearances, the fab limits and the board's
 # own rules. Exit code 5 means violations were found.
-drc: build $(DRU) ## Run KiCad DRC against the fab and board rules
+drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 	@$(KICAD_CLI) pcb drc --format json --severity-error --exit-code-violations \
 		--output $(LAYOUT_DIR)/drc.json $(LAYOUT_DIR)/default.kicad_pcb
 
 # Depends on build so the checks can never pass against stale output.
-check: build ## Run the design checks against what the build produced
+check: layout ## Run the design checks against what the build produced
 	@$(VENV)/bin/python -m pytest checks/ -q --board $(BOARD)
 
 # Ignores KiCad object UUIDs, which atopile regenerates for the board outline
 # on every build. See tools/check_drift.py.
-drift: build ## Fail if the committed board no longer matches its source
+drift: layout ## Fail if the committed board no longer matches its source
 	@python3 tools/check_drift.py --all
 
 clean: ## Remove build outputs

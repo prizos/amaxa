@@ -122,3 +122,45 @@ def test_led_returns_go_through_the_switch(net_parts):
     assert ret == expected, (
         f"LED return net is {sorted(ret)}, expected {sorted(expected)}"
     )
+
+
+# (address, pad, the net that pad must be on). Taken from each part's review
+# note, which records which pad number the datasheet calls what.
+POLARITY = [
+    ("power.tvs", "1", "12V"),       # cathode, to the rail it protects
+    ("power.tvs", "2", "GND"),       # anode
+    ("power.q_rpp", "1", "RPP_GATE"),
+    ("power.q_rpp", "2", "VIN_FUSED"),  # source, on the supply side
+    ("power.q_rpp", "3", "12V"),        # drain, on the protected side
+    ("switch.q_switch", "1", "GATE"),
+    ("switch.q_switch", "2", "GND"),       # source
+    ("switch.q_switch", "3", "LED_RETURN"),  # drain
+    ("rail.ldo", "1", "GND"),
+    ("rail.ldo", "2", "3V3"),   # output, and the tab
+    ("rail.ldo", "3", "12V"),   # input
+] + [(f"leds[{i}].led", "1", "LED_RETURN") for i in range(4)]
+
+
+def test_polarised_parts_face_the_right_way(net_members):
+    """
+    Every polarised part has the net the datasheet expects on each pin.
+
+    This is the check that catches a diode fitted backwards. atopile's `~>`
+    bridges a diode anode to cathode, so writing `rail.hv ~> tvs ~> rail.lv`
+    reads naturally and puts the protection device across the rail the wrong
+    way round, where it conducts at 0.7 V and shorts the supply. The build is
+    perfectly happy with it and so is every check that only asks which parts
+    are on a net rather than which pin.
+    """
+    actual = {
+        (address, pad): net
+        for net, members in net_members.items()
+        for address, pad in members
+    }
+    wrong = []
+    for address, pad, expected in POLARITY:
+        found = actual.get((address, pad))
+        if found != expected:
+            wrong.append(f"  {address} pad {pad}: on {found!r}, expected {expected!r}")
+
+    assert not wrong, "Parts wired the wrong way round:\n" + "\n".join(wrong)
