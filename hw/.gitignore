@@ -1,0 +1,11 @@
+# Pinned tool downloads and the atopile virtualenv
+/.tools/
+/.venv/
+# Generated build outputs
+*/build/
+/out/
+# KiCad local state
+*.kicad_prl
+*-backups/
+fp-info-cache
+*.lck
