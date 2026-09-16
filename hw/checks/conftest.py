@@ -287,3 +287,36 @@ def net_members(footprints) -> dict[str, set[tuple[str, str]]]:
 def net_parts(net_members) -> dict[str, set[str]]:
     """Net name -> the set of source addresses it touches, ignoring which pad."""
     return {net: {addr for addr, _ in members} for net, members in net_members.items()}
+
+
+@pytest.fixture(scope="session")
+def board_outline(pcb_text) -> tuple[float, float, float, float]:
+    """(min_x, min_y, max_x, max_y) of the board edge, in millimetres."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for head in ("gr_line", "gr_arc", "gr_rect"):
+        for block in _sexp_blocks(pcb_text, head):
+            if '(layer "Edge.Cuts")' not in block:
+                continue
+            for x, y in re.findall(r"\((?:start|end|mid) ([-\d.]+) ([-\d.]+)\)", block):
+                xs.append(float(x))
+                ys.append(float(y))
+    if not xs:
+        pytest.fail("the board has no Edge.Cuts outline")
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+@pytest.fixture(scope="session")
+def position(footprints):
+    """`position("power.c_bulk")` -> that part's (x, y) on the board."""
+    index = {
+        fp["properties"].get("atopile_address"): (fp["x"], fp["y"])
+        for fp in footprints
+    }
+
+    def lookup(address: str) -> tuple[float, float]:
+        if address not in index:
+            pytest.fail(f"no part at address {address}")
+        return index[address]
+
+    return lookup

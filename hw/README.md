@@ -4,8 +4,10 @@ Boards designed as code: **atopile** (`.ato`) is the design source, **KiCad** ho
 
 The first board, `led12`, is a 12 V LED board with no processor. It exists to prove the pipeline end to end before the STM32H743 control board depends on it.
 
-**Status:** the board builds from source, twelve checks gate it, and CI runs all
-of it. No layout yet — parts are placed but not positioned or routed.
+**Status:** the board builds from source, is placed and routed, and passes
+KiCad DRC with nothing reported at any severity. Twenty-eight checks gate it and
+CI runs all of it, publishing renders, a 3D model and a fab package. No
+simulation yet.
 
 ## Quick start
 
@@ -87,6 +89,10 @@ fuse really is first in the input path, that nothing bypasses the reverse
 polarity FET, that each LED has its own resistor, that every rail has a test
 point, and that the 12 V net reaches exactly the parts it should.
 
+**`test_geometry.py`** reads the placed board rather than the netlist, which is
+the only way to notice that a decoupling capacitor is on exactly the right net
+and 40 mm from the thing it decouples.
+
 **`test_parts.py`** keeps the library honest: every part has a review note, every
 declared footprint file exists, no note still describes a part that was replaced.
 
@@ -94,9 +100,37 @@ declared footprint file exists, no note still describes a part that was replaced
 suite until the expected count is updated in the same commit.
 
 Each gate has been made to fail on purpose once. A gate that has never failed is
-not a gate. Two of them found real defects the first time they ran: the LED
-series resistor was dissipating 104 % of its rated power at nominal, and the
-regulator is rated below the TVS clamping voltage.
+not a gate. Three found real defects the first time they ran:
+
+- the LED series resistor was dissipating 104 % of its rated power at nominal,
+  because 680 Ω is a 5 V habit and this is a 12 V rail;
+- the regulator was rated 15 V against a TVS that clamps at 19.9 V, so a surge
+  would have destroyed the part the protection exists to protect;
+- the TVS itself was fitted backwards. `~>` bridges a diode anode to cathode, so
+  `out.hv ~> tvs ~> out.lv` reads perfectly and shorts the rail through a
+  forward-biased diode. DRC caught it as a short once the board was routed.
+
+## Laying the board out
+
+`make layout` applies `led12/layout.py` — a placement table and a list of routes
+— to the board atopile generated, then fills the ground pour. Routes name pads
+symbolically, as `power.q_rpp:3`, so moving a part in the placement table moves
+the tracks that reach it; literal coordinates are only the corners in between.
+
+It refuses to run unless every part on the board is placed deliberately, so a
+part added to the source cannot quietly land at the origin. What it writes is
+tagged with a recognisable UUID prefix and removed before being written again,
+so the board reflects the description and never accumulated edits, and the UUIDs
+are derived from the objects themselves, so a rebuild that changes nothing
+produces no diff.
+
+Two things about zones are worth knowing. **`kicad-cli` cannot fill them**, and
+it runs DRC against whatever fill is already in the file — so an unfilled ground
+plane reports every ground pad as unconnected while the render looks perfect.
+Filling needs KiCad's own `pcbnew` Python module, which ships inside the `kicad`
+package. And **silkscreen needs deliberate placement**: atopile puts each
+designator on top of the part it names, the fab clips silk that lands on a pad,
+and the board comes back with unlabelled parts.
 
 `make drift` is separate: it fails if the committed KiCad files are no longer
 what the source produces. It ignores KiCad object UUIDs, which atopile
