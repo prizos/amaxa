@@ -245,6 +245,25 @@ Facts established while setting this up, worth not rediscovering.
 - **atopile's parts server is gone** (`components.atopileapi.com` no longer resolves), so its automatic part picker can't run. Parts are specified explicitly and committed instead, each with a review note.
 - **atopile's public repo has been frozen since March 2026** while releases keep appearing. It's MIT licensed, so the fallback is forking and pinning. Deciding that is a later milestone.
 
+### What atopile talks to
+
+Worth knowing before depending on it, and checked on this machine rather than
+read from the documentation:
+
+- **It reports telemetry by default on a developer's machine**, to
+  `telemetry.atopileapi.com`, a PostHog endpoint. It sends an installation id
+  (or the logged-in user id), a hashed project id, error logs, how long the
+  build took, the ato version, and **the git hash of the current commit**. It
+  already stays quiet when `CI` is set, so this was only ever local builds.
+  `make` turns it off via `FBRK_TELEMETRY`; pass `TELEMETRY=1` to allow it.
+- **Every other service of theirs is gone.** `components.atopileapi.com` (the
+  part picker), `packages.atopileapi.com` (the package registry that `ato`
+  dependencies come from) and `api.atopileapi.com` all fail to resolve.
+  `telemetry.atopileapi.com` resolves and answers.
+
+That the only surviving service is the one that collects rather than provides is
+the clearest signal available about where the project stands.
+
 ### How atopile wants parts laid out
 
 Undocumented, and reverse-engineered from `faebryk/libs/part_lifecycle.py`:

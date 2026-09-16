@@ -52,6 +52,16 @@ ATO    ?= $(VENV)/bin/ato
 # uv keeps its downloaded Pythons here, so nothing touches the system Python.
 export UV_PYTHON_INSTALL_DIR := $(abspath $(TOOLS_DIR)/pythons)
 
+# atopile reports to telemetry.atopileapi.com by default on a developer's
+# machine, sending an installation id, a hashed project id, error logs, build
+# duration, the ato version and *the git hash of the current commit*. It already
+# stays quiet when CI is set, so this only changes local builds.
+#
+# Turned off because a build tool should not be the thing that decides what
+# leaves this machine. Set TELEMETRY=1 to allow it.
+TELEMETRY ?= 0
+export FBRK_TELEMETRY := $(TELEMETRY)
+
 LAYOUT_DIR := $(BOARD)/elec/layout/default
 DRU        := $(LAYOUT_DIR)/default.kicad_dru
 
