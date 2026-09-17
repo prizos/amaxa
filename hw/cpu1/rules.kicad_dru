@@ -30,3 +30,27 @@
 	(condition "A.NetName == 'IA' || A.NetName == 'IB' || A.NetName == 'IC' || A.NetName == 'VDC' || A.NetName == 'VA' || A.NetName == 'VB' || A.NetName == 'VC' || A.NetName == 'AUX_FAST' || A.NetName == 'SLOW*' || A.NetName == 'BOARD_ID*' || A.NetName == 'OV_COMP'")
 	(constraint track_width (min 0.15mm))
 	(severity error))
+
+# The input rail, from the terminal to the 100 V buck. It carries the whole
+# board's current at the lowest input voltage - half an amp - and it is the one
+# rail a surge reaches, so it is the widest thing on the board.
+(rule "input rail"
+	(condition "A.NetName == 'VIN' || A.NetName == 'VIN_RAW' || A.NetName == 'VIN_FUSED'")
+	(constraint track_width (min 0.4mm))
+	(severity error))
+
+# The 5 V rail and both switch nodes. The switch nodes carry the same current as
+# the rail and swing the fastest edges on the board, so they are kept wide and
+# short rather than necked down.
+(rule "regulator power"
+	(condition "A.NetName == '5V' || A.NetName == 'SW_5V' || A.NetName == 'SW_3V3'")
+	(constraint track_width (min 0.3mm))
+	(severity error))
+
+# What sets each regulator: feedback, ripple injection, on-time, lockout and the
+# bootstrap. Microamps, but the on-time and feedback nodes are the two the
+# datasheets ask to keep short and away from the switch node.
+(rule "regulator signals"
+	(condition "A.NetName == 'FB_*' || A.NetName == 'BST_*' || A.NetName == 'RAMP' || A.NetName == 'RON' || A.NetName == 'UVLO' || A.NetName == 'PGOOD' || A.NetName == 'RPP_GATE'")
+	(constraint track_width (min 0.15mm))
+	(severity error))

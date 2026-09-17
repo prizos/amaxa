@@ -155,5 +155,254 @@ TEST_PAD = PartSpec(
 )
 
 
+# --- the input stage ---------------------------------------------------------
+#
+# 9 to 36 V in: a terminal, a fuse, a P-FET across the supply and a TVS on the
+# rail behind it. The order matters and is argued in cpu1.py.
+
+# The same Kangnex part as led12's, in KiCad's Phoenix MKDS footprint.
+SCREW_TERM_2 = PartSpec(
+    symbol="Connector:Screw_Terminal_01x02",
+    footprint="TERM_2P5008:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal",
+    prefix="J", manufacturer="Ningbo Kangnex", mpn="WJ500V-5.08-2P", lcsc="C8465",
+    value="9-36V",
+)
+
+# Slow-blow, and rated 63 V against a rail the TVS holds below 64.5 V only while
+# it conducts - so the fuse, not the TVS, is what a sustained overvoltage has to
+# open. led12 uses the same part; see FUSE_1206.md there and here.
+FUSE_1A = PartSpec(
+    symbol="Device:Fuse", footprint="FUSE_1206:Fuse_1206_3216Metric", prefix="F",
+    manufacturer="Littelfuse", mpn="0468001.NRHF", lcsc="C45157", value="1A",
+    params={
+        "trip_current": exact(1.0),
+        "max_voltage": exact(63.0),
+        "interrupt_rating": exact(50.0),
+    },
+)
+
+# 100 V, not led12's 30 V part: the TVS sits behind this FET, so a reversed
+# supply appears across it in full, and nothing clamps a negative transient
+# below ground. SOT-223 for the 250 mOhm: a SOT-23 100 V P-FET is 1 ohm.
+#
+# Pins 1 = G, 2 = D, 3 = S, and the tab is pin 2, which is why the symbol is
+# Q_PMOS_GDS and the footprint is TabPin2. See SOT223.md.
+PFET_RPP = PartSpec(
+    symbol="Transistor_FET:Q_PMOS_GDS", footprint="SOT223:SOT-223-3_TabPin2", prefix="Q",
+    manufacturer="Diodes Incorporated", mpn="DMP10H400SE-13", lcsc="C156277",
+    value="DMP10H400SE",
+    params={
+        "max_drain_source_voltage": exact(100.0),
+        "max_gate_source_voltage": exact(20.0),
+        "max_continuous_drain_current": exact(2.3),
+        "on_resistance": exact(0.25),                      # maximum at V_gs = -10 V
+        "gate_source_threshold_voltage": between(1.0, 3.0),
+    },
+)
+
+# Holds V_gs off the FET's +/-20 V rating. The gate sits at ground through
+# R_gate, so V_gs is the whole input voltage: 36 V in normal operation and up to
+# the TVS's 64.5 V clamp during a surge, both beyond the FET.
+#
+# Unlike led12's, this Zener conducts in normal operation - anything above 15 V
+# on a rail specified to 36 V does - and that is the intent, not a defect. The
+# current is (V_in - V_z) / R_gate, a fifth of a milliamp, and
+# test_power.py bounds the power in both parts. Same part as led12's; see
+# SOD123.md.
+ZENER_GATE_CLAMP = PartSpec(
+    symbol="Device:D_Zener", footprint="SOD123:D_SOD-123", prefix="D",
+    manufacturer="Jiangsu Changjing Electronics Technology",
+    mpn="BZT52C15", lcsc="C2104", value="15V",
+    params={
+        "zener_voltage": between(13.8, 15.6),
+        "max_power": exact(0.5),
+    },
+)
+
+# SMBJ40A and not the 36 A part: a TVS must stand off the top of the rail it
+# protects, and this board's input is specified to 36.0 V exactly. See SMB.md.
+TVS_40V = PartSpec(
+    symbol="Device:D_TVS", footprint="SMB:D_SMB", prefix="D",
+    manufacturer="BORN", mpn="SMBJ40A", lcsc="C152095", value="SMBJ40A",
+    params={
+        "reverse_working_voltage": exact(40.0),
+        "v_breakdown_max": exact(51.1),
+        "v_clamp_max": exact(64.5),
+    },
+)
+
+
+# --- the regulators ----------------------------------------------------------
+
+# 100 V-class, so the TVS's 64.5 V clamp is not the thing that decides whether
+# the board survives a surge. Constant on-time: the switching frequency comes
+# from R_on, and the feedback node needs its own ripple, which is what the
+# Type 3 network in cpu1.py is for. Figures from TI's datasheet SNVSAU4A
+# (January 2019), tables in section 6, as recorded in SO8EP.md.
+BUCK_100V = PartSpec(
+    symbol="Regulator_Switching:LM5164DDA",
+    footprint="SO8EP:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.514x3.2mm",
+    prefix="U", manufacturer="Texas Instruments", mpn="LM5164DDAR", lcsc="C477928",
+    value="LM5164",
+    params={
+        "v_in": between(6.0, 100.0),
+        "v_in_abs_max": exact(100.0),
+        "load_current_max": exact(1.0),
+        "v_feedback": between(1.181, 1.218),
+        # The on-time is inversely proportional to V_in. One characterised point
+        # fixes the constant; test_power.py derives the frequency from it and
+        # checks it against the datasheet's own 300 kHz worked example.
+        "on_time_at_reference": exact(2550e-9),
+        "on_time_reference_resistance": exact(75e3),
+        "on_time_reference_input_voltage": exact(12.0),
+        "on_time_min": exact(50e-9),
+        "switching_frequency_max": exact(1e6),
+        "peak_current_limit_min": exact(1.25),
+        "enable_threshold": between(1.45, 1.55),
+        # Section 8.2.2.6: 20 mV of ripple at the feedback pin at typical
+        # conditions, and never less than 12 mV at minimum input.
+        "feedback_ripple_target": exact(20e-3),
+        "feedback_ripple_min": exact(12e-3),
+        "bst_capacitance": between(1.5e-9, 2.5e-9),
+        "input_capacitance_min": exact(2.2e-6),
+        "pgood_pullup": between(10e3, 100e3),
+    },
+)
+
+# The 3V3 rail, from 5 V. D-CAP2, so no compensation and no ripple injection:
+# the recommended inductor and output capacitance come from the datasheet's
+# Table 2 row for a 3.3 V output. Figures from SLVSCB0B (August 2014), as
+# recorded in TSOT23_6.md.
+BUCK_3V3 = PartSpec(
+    symbol="Regulator_Switching:TPS562200", footprint="TSOT23_6:TSOT-23-6",
+    prefix="U", manufacturer="Texas Instruments", mpn="TPS562200DDCR", lcsc="C49757",
+    value="TPS562200",
+    params={
+        "v_in": between(4.5, 17.0),
+        "v_feedback": between(0.758, 0.772),
+        "switching_frequency": exact(650e3),
+        "current_limit_min": exact(2.5),
+        "bst_capacitance": exact(100e-9),
+        "input_capacitance_min": exact(10e-6),
+        "output_capacitance": between(20e-6, 68e-6),   # Table 2, V_out = 3.3 V
+        "inductance": between(2.2e-6, 4.7e-6),         # Table 2, V_out = 3.3 V
+    },
+)
+
+# VREF+ for the ADCs. A series reference, not a divider or the MCU's own
+# VREFBUF: 0.2 % initial and 75 ppm/degC is what the current and voltage
+# measurements are ultimately scaled by. Figures from TI's SBVS032F
+# (August 2008), as recorded in SOT23.md.
+VREF_3V0 = PartSpec(
+    symbol="Reference_Voltage:REF3030", footprint="SOT23:SOT-23", prefix="U",
+    manufacturer="Texas Instruments", mpn="REF3030AIDBZR", lcsc="C38423",
+    value="REF3030",
+    params={
+        "output_voltage": between(2.994, 3.006),
+        "v_in_max": exact(5.5),
+        "output_current_max": exact(25e-3),
+        "supply_bypass": exact(0.47e-6),
+        "temperature_drift": exact(75e-6),
+    },
+)
+
+
+# --- magnetics ---------------------------------------------------------------
+
+# Saturation current above the buck's own peak current limit, so the inductor
+# is never the thing that gives way first. See L_MWSA0603S.md.
+IND_33U = PartSpec(
+    symbol="Device:L", footprint="L_MWSA0603S:L_Sunlord_MWSA0603S", prefix="L",
+    manufacturer="Sunlord", mpn="MWSA0603S-330MT", lcsc="C408454", value="33uH",
+    params={
+        "inductance": pm(33e-6, 0.20),
+        "saturation_current": exact(2.5),
+        "rms_current": exact(2.0),
+        "dc_resistance": exact(0.27),
+    },
+)
+
+IND_3U3 = PartSpec(
+    symbol="Device:L", footprint="L_SWPA4030S:L_Sunlord_SWPA4030S", prefix="L",
+    manufacturer="Sunlord", mpn="SWPA4030S3R3MT", lcsc="C15269", value="3.3uH",
+    params={
+        "inductance": pm(3.3e-6, 0.20),
+        "saturation_current": exact(3.6),
+        "rms_current": exact(2.4),
+        "dc_resistance": exact(0.052),
+    },
+)
+
+
+# --- passives the power block needs ------------------------------------------
+
+# 100 V parts on the input: the datasheet asks for twice the maximum input
+# voltage on a ceramic, because capacitance falls with DC bias.
+CAP_2U2_100V_1210 = PartSpec(
+    symbol="Device:C", footprint="C1210:C_1210_3225Metric", prefix="C",
+    manufacturer="Samsung", mpn="CL32B225KCJSNNE", lcsc="C55151", value="2.2uF",
+    params={"capacitance": pm(2.2e-6, 0.10), "max_voltage": exact(100.0)},
+)
+CAP_100N_100V_0603 = PartSpec(
+    symbol="Device:C", footprint="C0603:C_0603_1608Metric", prefix="C",
+    manufacturer="YAGEO", mpn="CC0603KRX7R0BB104", lcsc="C113803", value="100nF",
+    params={"capacitance": pm(100e-9, 0.10), "max_voltage": exact(100.0)},
+)
+
+_C0805 = dict(symbol="Device:C", footprint="C0805:C_0805_2012Metric", prefix="C")
+CAP_10U_0805 = PartSpec(
+    **_C0805, manufacturer="Samsung", mpn="CL21A106KAYNNNE", lcsc="C15850", value="10uF",
+    params={"capacitance": pm(10e-6, 0.20), "max_voltage": exact(25.0)},
+)
+CAP_22U_0805 = PartSpec(
+    **_C0805, manufacturer="HRE", mpn="CGA0805X7R226M100MT", lcsc="C23692981", value="22uF",
+    params={"capacitance": pm(22e-6, 0.20), "max_voltage": exact(10.0)},
+)
+
+CAP_3N3_0402 = PartSpec(
+    **_C0402, manufacturer="YAGEO", mpn="CC0402KRX7R9BB332", lcsc="C107028", value="3.3nF",
+    params={"capacitance": pm(3.3e-9, 0.10), "max_voltage": exact(50.0)},
+)
+CAP_2N2_0402 = PartSpec(
+    **_C0402, manufacturer="YAGEO", mpn="CC0402KRX7R9BB222", lcsc="C106861", value="2.2nF",
+    params={"capacitance": pm(2.2e-9, 0.10), "max_voltage": exact(50.0)},
+)
+# C0G, because this one couples the ripple ramp into the feedback node and an
+# X7R's capacitance falls with bias. The datasheet asks for C0G by name.
+CAP_56P_0402 = PartSpec(
+    **_C0402, manufacturer="FH", mpn="0402CG560J500NT", lcsc="C1572", value="56pF",
+    params={"capacitance": pm(56e-12, 0.05), "max_voltage": exact(50.0)},
+)
+
+RES_226K_0402 = PartSpec(
+    **_R0402, mpn="0402WGF2263TCE", lcsc="C26999", value="226k",
+    params={"resistance": pm(226_000, 0.01), "max_power": exact(0.0625)},
+)
+RES_158K_0402 = PartSpec(
+    **_R0402, mpn="0402WGF1583TCE", lcsc="C99856", value="158k",
+    params={"resistance": pm(158_000, 0.01), "max_power": exact(0.0625)},
+)
+RES_121K_0402 = PartSpec(
+    **_R0402, mpn="0402WGF1213TCE", lcsc="C11693", value="121k",
+    params={"resistance": pm(121_000, 0.01), "max_power": exact(0.0625)},
+)
+RES_100K_0402 = PartSpec(
+    **_R0402, mpn="0402WGF1003TCE", lcsc="C25741", value="100k",
+    params={"resistance": pm(100_000, 0.01), "max_power": exact(0.0625)},
+)
+RES_49K9_0402 = PartSpec(
+    **_R0402, mpn="0402WGF4992TCE", lcsc="C25897", value="49.9k",
+    params={"resistance": pm(49_900, 0.01), "max_power": exact(0.0625)},
+)
+RES_33K2_0402 = PartSpec(
+    **_R0402, mpn="0402WGF3322TCE", lcsc="C122548", value="33.2k",
+    params={"resistance": pm(33_200, 0.01), "max_power": exact(0.0625)},
+)
+RES_31K6_0402 = PartSpec(
+    **_R0402, mpn="0402WGF3162TCE", lcsc="C11463", value="31.6k",
+    params={"resistance": pm(31_600, 0.01), "max_power": exact(0.0625)},
+)
+
+
 ALL: dict[str, PartSpec] = collect(globals())
 """Every part, by the name it is known by here. Used by the parts checks."""

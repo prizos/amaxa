@@ -122,12 +122,20 @@ def _decoupling() -> None:
         for address in DESIGN["parts"]
         if address.startswith(("core.dec.p", "core.vcap.p"))
     }
-    for number, address in served.items():
+    taken: dict[tuple[float, float], list[float]] = {}
+    for number, address in sorted(served.items(), key=lambda kv: int(kv[0])):
         pin = PINS[number]
-        across = 0.0
-        for neighbour in (str(int(number) - 1), str(int(number) + 1)):
-            if neighbour in served:
-                across += SPREAD if PINS[neighbour].centre_along < pin.centre_along else -SPREAD
+        lines = taken.setdefault(pin.normal, [])
+        # The first line far enough from every capacitor already on this side.
+        # Two pins apart is enough room; one is not, whether the pin between
+        # them carries a capacitor or - as at VREF+, between VSSA and VDDA -
+        # nothing at all.
+        for across in (0.0, SPREAD, -SPREAD, 2 * SPREAD, -2 * SPREAD):
+            if all(abs(pin.centre_along + across - line) >= 2 * SPREAD for line in lines):
+                break
+        else:
+            raise ValueError(f"no room for a capacitor on pin {number}")
+        lines.append(pin.centre_along + across)
         PLACEMENT[address] = (*pin.at(CAP_CENTRE, across), pin.facing())
         LABELS[address] = _label_beside(pin)
         path = [f"{MCU}:{number}"]
@@ -371,11 +379,274 @@ def _boot_and_console() -> None:
 
 
 
+# --- the power block ---------------------------------------------------------
+#
+# Along the bottom edge, left to right, in the order the current flows: terminal,
+# fuse, reverse-polarity FET, TVS, input capacitance, the 100 V buck, then the
+# 3V3 buck in the bottom-right corner.
+#
+# Everything on the input hangs off one horizontal track at BUS - the y of the
+# buck's own VIN pin - with its ground via straight below. Everything on 5 V
+# connects through a via instead: the second inner layer carries a 5 V island
+# inside the 3V3 plane, at a higher priority, so the two pours keep clear of
+# each other without either outline being drawn around the other.
+
+BUS = 29.36                        # the input rail, at the 100 V buck's VIN pin
+POWER = 0.4                        # the input rail, before any regulator
+RAIL = 0.3                         # 5 V and the switch nodes
+# The island stops short of the bottom edge: the power-good pull-up sits below
+# it, and a 3V3 via inside the island would reach nothing but a gap.
+ISLAND = (-9.0, 24.5, 33.0, 36.5)  # the 5 V island on In2.Cu: x0, y0, x1, y1
+
+
+def _power() -> None:
+    _input_stage()
+    _buck_5v()
+    _buck_3v3()
+    _reference()
+
+
+def _input_stage() -> None:
+    """Terminal, fuse, FET and TVS, in a line, with the gate network below."""
+    PLACEMENT["power.terminal"] = (-41.5, BUS, 180)
+    PLACEMENT["power.fuse"] = (-35.5, BUS, 0)
+    PLACEMENT["power.q_rpp"] = (-29.0, BUS - 3.15, 90)
+    PLACEMENT["power.r_gate"] = (-32.5, 33.0, 180)
+    PLACEMENT["power.d_gate_clamp"] = (-28.5, 33.0, 180)
+    PLACEMENT["buck5.c_in1"] = (-22.0, BUS - 1.48, 90)
+    PLACEMENT["buck5.c_in2"] = (-18.0, BUS - 1.48, 90)
+    PLACEMENT["power.tvs"] = (-14.0, BUS - 2.15, 90)
+    PLACEMENT["buck5.c_in_hf"] = (-10.5, BUS - 0.78, 90)
+    PLACEMENT["tp_vin"] = (-22.0, 36.0)
+    for address in ("power.terminal", "power.fuse", "power.q_rpp", "power.tvs",
+                    "power.r_gate", "power.d_gate_clamp", "buck5.c_in1",
+                    "buck5.c_in2", "buck5.c_in_hf", "tp_vin"):
+        LABELS[address] = (0.0, -2.6)
+
+    ROUTES.append(("VIN_RAW", POWER, F, ["power.terminal:1", "power.fuse:1"]))
+    # Around the FET rather than into it: its three leads are in a row on the
+    # line the rail runs along, and the gate comes first. So the fused rail
+    # goes under the package to the tab, and down the middle of the pads, which
+    # is the drain lead. KiCad numbers lead and tab alike and the netlist puts
+    # them on one net, but each is a pad of its own and each has to be reached.
+    ROUTES.append(("VIN_FUSED", POWER, F, [
+        "power.fuse:2", (-34.1, 25.0), (-29.0, 25.0),
+    ]))
+    ROUTES.append(("VIN_FUSED", POWER, F, [(-29.0, BUS), (-29.0, BUS - 6.3)]))
+
+    # The gate: to ground through R6, clamped to the source by D4.
+    ROUTES.append(("RPP_GATE", SIGNAL, F, [(-31.3, BUS), (-31.3, 33.0), "power.r_gate:1"]))
+    ROUTES.append(("RPP_GATE", SIGNAL, F, ["power.d_gate_clamp:2", "power.r_gate:1"]))
+    VIAS.append(("power.r_gate:2", (-34.2, 33.0), "GND", *VIA, SUPPLY))
+    ROUTES.append(("VIN", POWER, F, ["power.d_gate_clamp:1", (-26.85, 30.0)]))
+
+    # The rail behind the FET, out to the buck. Each part on it hangs below the
+    # line on its own pad and drops to the ground plane beyond.
+    ROUTES.append(("VIN", POWER, F, [(-26.7, BUS), "buck5.ic:2"]))
+    ROUTES.append(("VIN", POWER, F, ["tp_vin:1", (-22.0, BUS)]))
+    for address, via_y in (("buck5.c_in1", 25.1), ("buck5.c_in2", 25.1),
+                           ("power.tvs", 23.8), ("buck5.c_in_hf", 26.6)):
+        x = PLACEMENT[address][0]
+        VIAS.append((f"{address}:2", (x, via_y), "GND", *VIA, POWER))
+
+
+def _buck_5v() -> None:
+    """
+    The 100 V buck: on-time resistor, lockout divider, ripple network, feedback.
+
+    Its exposed pad is the part's only heat path, and it is a ground pad: four
+    vias under it reach the ground plane on the first inner layer.
+    """
+    PLACEMENT["buck5.ic"] = (-5.0, BUS + 0.64, 0)
+    PLACEMENT["buck5.r_uvlo_top"] = (-10.5, 32.0, 270)
+    PLACEMENT["buck5.r_uvlo_bottom"] = (-10.5, 34.5, 270)
+    PLACEMENT["buck5.r_on"] = (-7.64, 36.0, 270)
+    PLACEMENT["buck5.c_bst"] = (-0.5, 28.6, 270)
+    PLACEMENT["buck5.inductor"] = (5.5, 28.09, 0)
+    PLACEMENT["buck5.r_ramp"] = (2.0, 32.5, 0)
+    PLACEMENT["buck5.c_ramp"] = (5.0, 32.5, 0)
+    PLACEMENT["buck5.c_couple"] = (0.0, 34.5, 0)
+    PLACEMENT["buck5.r_fb_top"] = (-5.0, 33.6, 0)
+    PLACEMENT["buck5.r_fb_bottom"] = (-2.36, 34.4, 270)
+    PLACEMENT["buck5.r_pgood"] = (5.5, 37.5, 0)
+    PLACEMENT["tp_pgood"] = (2.0, 37.5)
+    PLACEMENT["buck5.c_out1"] = (11.5, 29.04, 90)
+    PLACEMENT["buck5.c_out2"] = (14.0, 29.04, 90)
+    PLACEMENT["tp_5v"] = (16.0, 26.0)
+    for address in ("buck5.ic", "buck5.r_uvlo_top", "buck5.r_uvlo_bottom", "buck5.r_on",
+                    "buck5.c_bst", "buck5.inductor", "buck5.r_ramp", "buck5.c_ramp",
+                    "buck5.c_couple", "buck5.r_fb_top", "buck5.r_fb_bottom",
+                    "buck5.r_pgood", "tp_pgood", "buck5.c_out1", "buck5.c_out2", "tp_5v"):
+        LABELS[address] = (0.0, -2.6)
+
+    for dx, dy in ((-0.6, -0.9), (0.6, -0.9), (-0.6, 0.9), (0.6, 0.9)):
+        VIAS.append((None, (-5.0 + dx, BUS + 0.64 + dy), "GND", *VIA))
+    # The ground lead is a pad of its own; it reaches the plane through the
+    # exposed pad beside it, which is where the vias are.
+    ROUTES.append(("GND", SUPPLY, F, ["buck5.ic:1", (-6.0, 28.6)]))
+
+    # Undervoltage lockout, straight down from the input's own high-frequency
+    # capacitor, and back up to EN clear of the on-time pin beside it.
+    ROUTES.append(("VIN", POWER, F, [(-10.5, BUS), "buck5.r_uvlo_top:1"]))
+    ROUTES.append(("UVLO", SIGNAL, F, ["buck5.r_uvlo_top:2", "buck5.r_uvlo_bottom:1"]))
+    ROUTES.append(("UVLO", SIGNAL, F, [
+        (-10.5, 33.2), (-9.0, 33.2), (-9.0, 30.64), "buck5.ic:3",
+    ]))
+    VIAS.append(("buck5.r_uvlo_bottom:2", (-10.5, 36.2), "GND", *VIA, SUPPLY))
+
+    # The on-time resistor, as short a trace as the datasheet asks for: straight
+    # down out of the pin.
+    ROUTES.append(("RON", SIGNAL, F, ["buck5.ic:4", "buck5.r_on:1"]))
+    VIAS.append(("buck5.r_on:2", (-7.64, 37.7), "GND", *VIA, SUPPLY))
+
+    # The switch node: bootstrap capacitor, then the inductor.
+    ROUTES.append(("SW_5V", POWER, F, ["buck5.ic:8", "buck5.c_bst:1"]))
+    ROUTES.append(("SW_5V", POWER, F, ["buck5.c_bst:1", "buck5.inductor:1"]))
+    ROUTES.append(("BST_5V", SIGNAL, F, ["buck5.ic:7", "buck5.c_bst:2"]))
+
+    # The ripple network: a ramp off the switch node into the feedback pin.
+    ROUTES.append(("SW_5V", RAIL, F, ["buck5.r_ramp:1", (1.49, 28.09)]))
+    ROUTES.append(("RAMP", SIGNAL, F, ["buck5.r_ramp:2", "buck5.c_ramp:1"]))
+    ROUTES.append(("RAMP", SIGNAL, F, ["buck5.c_couple:2", (2.51, 34.5), (2.51, 32.5)]))
+    ROUTES.append(("FB_5V", SIGNAL, F, ["buck5.ic:5", (-2.36, 33.2)]))
+    ROUTES.append(("FB_5V", SIGNAL, F, [(-2.36, 33.2), "buck5.r_fb_bottom:1"]))
+    ROUTES.append(("FB_5V", SIGNAL, F, ["buck5.r_fb_top:2", (-2.36, 33.2)]))
+    ROUTES.append(("FB_5V", SIGNAL, F, [
+        "buck5.c_couple:1", (-1.5, 34.5), (-1.5, 33.2), (-2.36, 33.2),
+    ]))
+    VIAS.append(("buck5.r_fb_bottom:2", (-2.36, 36.1), "GND", *VIA, SUPPLY))
+
+    # Everything on 5 V reaches the island underneath rather than each other.
+    for pad, at in (("buck5.inductor:2", (8.52, 28.09)), ("buck5.c_ramp:2", (6.2, 32.5)),
+                    ("buck5.r_fb_top:1", (-6.7, 33.6)), ("buck5.c_out1:1", (11.5, 31.2)),
+                    ("buck5.c_out2:1", (14.0, 31.2)), ("tp_5v:1", (17.2, 26.0))):
+        VIAS.append((pad, at, "5V", *VIA, POWER))
+    for pad, at in (("buck5.c_out1:2", (11.5, 26.9)), ("buck5.c_out2:2", (14.0, 26.9))):
+        VIAS.append((pad, at, "GND", *VIA, POWER))
+
+    # Power good: out from between two pins, under the switch node on the bottom
+    # layer, and up again where there is room for the pull-up and its pad.
+    out = (-0.9, 30.64)
+    path("PGOOD", SIGNAL, [
+        (F, ["buck5.ic:6", out]),
+        (B, [out, (-0.9, 39.0), (4.0, 39.0)]),
+        (F, [(4.0, 39.0), (4.0, 37.5), "buck5.r_pgood:1"]),
+    ])
+    ROUTES.append(("PGOOD", SIGNAL, F, ["tp_pgood:1", (4.0, 37.5)]))
+    VIAS.append(("buck5.r_pgood:2", (7.2, 37.5), "3V3", *VIA, SUPPLY))
+
+
+def _buck_3v3() -> None:
+    """
+    The 3V3 buck, in the corner, straddling the edge of the 5 V island.
+
+    Turned so its supply pins face the island and its switch node faces away:
+    everything on 5 V reaches the island through a via of its own, and the rail
+    it makes leaves to the right, past where the island ends, into the 3V3
+    plane that covers the rest of the board.
+    """
+    PLACEMENT["buck3v3.ic"] = (31.0, 29.0, 180)
+    PLACEMENT["buck3v3.c_bst"] = (31.0, 32.5, 180)
+    PLACEMENT["buck3v3.c_in"] = (26.0, 26.5, 90)
+    PLACEMENT["buck3v3.c_in_hf"] = (28.0, 26.5, 90)
+    PLACEMENT["buck3v3.inductor"] = (36.0, 29.0, 0)
+    PLACEMENT["buck3v3.c_out1"] = (38.0, 33.0, 270)
+    PLACEMENT["buck3v3.c_out2"] = (40.5, 33.0, 270)
+    PLACEMENT["buck3v3.r_fb_top"] = (36.0, 23.0, 180)
+    PLACEMENT["buck3v3.r_fb_bottom"] = (36.0, 25.0, 0)
+    for address in ("buck3v3.ic", "buck3v3.c_bst", "buck3v3.c_in", "buck3v3.c_in_hf",
+                    "buck3v3.inductor", "buck3v3.c_out1", "buck3v3.c_out2",
+                    "buck3v3.r_fb_top", "buck3v3.r_fb_bottom"):
+        LABELS[address] = (0.0, -2.6)
+
+    # 5 V in and the enable tied to it, each straight into the island.
+    ROUTES.append(("5V", RAIL, F, ["buck3v3.ic:3", (32.14, 26.5)]))
+    VIAS.append((None, (32.14, 26.5), "5V", *VIA))
+    ROUTES.append(("5V", RAIL, F, ["buck3v3.ic:5", (28.5, 29.0)]))
+    VIAS.append((None, (28.5, 29.0), "5V", *VIA))
+    for address, at in (("buck3v3.c_in", (26.0, 28.6)), ("buck3v3.c_in_hf", (28.0, 28.0))):
+        VIAS.append((f"{address}:1", at, "5V", *VIA, POWER))
+    for address, at in (("buck3v3.c_in", (26.0, 24.4)), ("buck3v3.c_in_hf", (28.0, 24.9))):
+        VIAS.append((f"{address}:2", at, "GND", *VIA, POWER))
+    VIAS.append(("buck3v3.ic:1", (32.14, 31.5), "GND", *VIA, SUPPLY))
+
+    # Switch node out to the right, with the bootstrap capacitor below.
+    ROUTES.append(("SW_3V3", RAIL, F, ["buck3v3.ic:2", "buck3v3.inductor:1"]))
+    ROUTES.append(("SW_3V3", RAIL, F, [
+        (33.6, 29.0), (33.6, 32.5), "buck3v3.c_bst:1",
+    ]))
+    ROUTES.append(("BST_3V3", SIGNAL, F, [
+        "buck3v3.ic:6", (29.86, 32.5), "buck3v3.c_bst:2",
+    ]))
+
+    # The rail out to its capacitors, and into the plane beyond the island.
+    ROUTES.append(("3V3", POWER, F, [
+        "buck3v3.inductor:2", (38.0, 29.0), "buck3v3.c_out1:1", "buck3v3.c_out2:1",
+    ]))
+    VIAS.append((None, (42.0, 32.05), "3V3", *VIA))
+    ROUTES.append(("3V3", POWER, F, ["buck3v3.c_out2:1", (42.0, 32.05)]))
+    VIAS.append(("buck3v3.c_out1:2", (38.0, 35.2), "GND", *VIA, POWER))
+    VIAS.append(("buck3v3.c_out2:2", (40.5, 35.2), "GND", *VIA, POWER))
+
+    # Feedback, above the package where nothing else runs, sensed at the plane.
+    ROUTES.append(("FB_3V3", SIGNAL, F, [
+        "buck3v3.ic:4", (29.86, 23.0), "buck3v3.r_fb_top:2",
+    ]))
+    ROUTES.append(("FB_3V3", SIGNAL, F, ["buck3v3.r_fb_top:2", "buck3v3.r_fb_bottom:1"]))
+    VIAS.append(("buck3v3.r_fb_top:1", (37.7, 23.0), "3V3", *VIA, SUPPLY))
+    VIAS.append(("buck3v3.r_fb_bottom:2", (37.7, 25.0), "GND", *VIA, SUPPLY))
+
+
+def _reference() -> None:
+    """
+    The 3.0 V reference, below the package's bottom-left corner.
+
+    VREF+ leaves its pin inward, like VDDA does, and crosses to the reference on
+    the bottom layer through the empty corner of the pad ring - the one place
+    where neither the plane vias inside the ring nor the capacitors outside it
+    leave anything in the way.
+    """
+    PLACEMENT["vref.ic"] = (-13.5, 19.0, 180)
+    PLACEMENT["vref.c_in"] = (-12.56, 22.0, 270)
+    PLACEMENT["core.vref.c1u"] = (-16.5, 19.0, 180)
+    PLACEMENT["tp_vref"] = (-7.5, 18.05)
+    for address in ("vref.ic", "vref.c_in", "core.vref.c1u", "tp_vref"):
+        LABELS[address] = (0.0, -2.6)
+
+    pin = PINS[VREF_PIN]
+    inward = pin.at(SUPPLY_RING_2)
+    VIAS.append((f"{MCU}:{VREF_PIN}", inward, "VREF+", *VIA, STUB))
+    surfaced = (-10.0, 18.05)
+    # Out through the corner well inside the ring, then down the one lane past
+    # the package's bottom-left corner that no via of any kind reaches: the
+    # inner vias stop at the last pin on each side, and the outer ones are
+    # further out still.
+    path("VREF+", SUPPLY, [
+        (B, [inward, (-6.5, 8.0), (-6.5, 10.5), (-10.0, 13.5), surfaced]),
+        (F, [surfaced, "vref.ic:2"]),
+    ])
+    ROUTES.append(("VREF+", SUPPLY, F, ["tp_vref:1", surfaced]))
+    ROUTES.append(("VREF+", SUPPLY, F, [
+        "vref.ic:2", (-12.56, 16.0), (-15.99, 16.0), "core.vref.c1u:1",
+    ]))
+    VIAS.append(("core.vref.c1u:2", (-18.2, 19.0), "GND", *VIA, SUPPLY))
+
+    # The reference's own supply, up from the island on the 5 V side.
+    ROUTES.append(("5V", RAIL, F, [(-6.0, 25.0), (-6.0, 21.49), "vref.c_in:1"]))
+    VIAS.append((None, (-6.0, 25.0), "5V", *VIA))
+    ROUTES.append(("5V", RAIL, F, ["vref.c_in:1", "vref.ic:1"]))
+    VIAS.append(("vref.c_in:2", (-12.56, 23.7), "GND", *VIA, SUPPLY))
+    VIAS.append(("vref.ic:3", (-14.44, 17.0), "GND", *VIA, SUPPLY))
+
+
+VREF_PIN = "32"
+
 _supply_vias()
 _decoupling()
 _analog_supply()
 _crystals()
 _placed()
+_power()
 
 
 def _pour_outline() -> list[tuple[float, float]]:
@@ -384,8 +655,14 @@ def _pour_outline() -> list[tuple[float, float]]:
     return [(-x, -y), (x, -y), (x, y), (-x, y)]
 
 
-# Ground on the first inner layer, 3V3 on the second. The 3V3 plane becomes
-# supply islands once the power block exists; for now it is the only supply.
+def _island_outline() -> list[tuple[float, float]]:
+    x0, y0, x1, y1 = ISLAND
+    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+
+# Ground on the first inner layer, and the supplies on the second: 3V3 over the
+# whole board, with the 5 V island cut out of it by priority rather than by
+# outline. KiCad fills the higher priority first and the 3V3 pour keeps clear.
 PLANES = [
     {
         "net": "GND",
@@ -400,6 +677,16 @@ PLANES = [
         "net": "3V3",
         "layer": "In2.Cu",
         "outline": _pour_outline(),
+        "pad_clearance": 0.3,
+        "min_thickness": 0.25,
+        "thermal_gap": 0.3,
+        "thermal_bridge": 0.4,
+    },
+    {
+        "net": "5V",
+        "layer": "In2.Cu",
+        "outline": _island_outline(),
+        "priority": 1,
         "pad_clearance": 0.3,
         "min_thickness": 0.25,
         "thermal_gap": 0.3,

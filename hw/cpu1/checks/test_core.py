@@ -108,7 +108,7 @@ def test_every_supply_pin_has_its_own_capacitor(design, silicon, pad_net, two_pa
     """
     Each MCU supply pin has a 100 nF capacitor to ground, its own, beside it.
 
-    Datasheet Figure 13: one 100 nF per VDD pin, and 100 nF on VDDA and on
+    Datasheet Figure 13: one 100 nF per VDD pin, and 100 nF on VDDA, VREF+,
     VDD33USB and VBAT. "Its own" is the part the netlist cannot say: every VDD
     pin is on the same 3V3 net, so one capacitor on that net would satisfy a
     check that only looked at nets. So pins and capacitors are matched one to
@@ -117,7 +117,7 @@ def test_every_supply_pin_has_its_own_capacitor(design, silicon, pad_net, two_pa
     """
     supply_pins = [
         number
-        for name in ("VDD", "VDD33_USB", "VBAT", "VDDA")
+        for name in ("VDD", "VDD33_USB", "VBAT", "VDDA", "VREF+")
         for number in silicon.pins[name].positions
     ]
     candidates = {}
@@ -145,14 +145,14 @@ def test_every_supply_pin_has_its_own_capacitor(design, silicon, pad_net, two_pa
 
 def test_supplies_have_their_bulk_capacitance(design, two_pad_parts, spec):
     """
-    The logic rail carries a 4.7 uF, and the logic rail and VDDA each a 1 uF.
+    The logic rail carries a 4.7 uF, and it, VDDA and VREF+ each a 1 uF.
 
     Datasheet Figure 13's "1 x 4.7 uF" on VDD and "100 nF + 1 x 1 uF" pairs. Which
     supply pins those pairs sit on is not legible in the extracted figure, so
     this holds both rails to a 1 uF and the review note records the doubt.
     """
     missing = []
-    for net, value in (("3V3", 4.7e-6), ("3V3", 1e-6), ("VDDA", 1e-6)):
+    for net, value in (("3V3", 4.7e-6), ("3V3", 1e-6), ("VDDA", 1e-6), ("VREF+", 1e-6)):
         found = [
             a for a in capacitors_between(design, two_pad_parts, net, "GND")
             if _contains(spec(a, "capacitance"), value)

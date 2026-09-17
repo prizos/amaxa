@@ -395,10 +395,18 @@ def board_outline(spec: dict) -> list[str]:
 
 
 def ground_plane(board: Board, plane: dict) -> str:
-    """A filled copper pour, so the return path is a plane and not a track."""
+    """
+    A filled copper pour, so the return path is a plane and not a track.
+
+    Two pours may share a layer if one has the higher `priority`: KiCad fills
+    that one first and the other keeps clear of it. That is how a rail gets an
+    island inside another rail's plane without either outline having to be
+    drawn around the other.
+    """
     board.require_layer(plane["layer"], f'the {plane["net"]} plane')
     net = board.nets[plane["net"]]
     corners = "\n".join(f"\t\t\t\t\t(xy {x:g} {y:g})" for x, y in plane["outline"])
+    priority = plane.get("priority", 0)
     return (
         f'\t(zone\n'
         f'\t\t(net {net})\n'
@@ -406,7 +414,8 @@ def ground_plane(board: Board, plane: dict) -> str:
         f'\t\t(layers "{plane["layer"]}")\n'
         f'\t\t(uuid "{stable_uuid(TAG, "zone", plane["net"], plane["layer"])}")\n'
         f'\t\t(name "{TAG}")\n'
-        f'\t\t(hatch edge 0.5)\n'
+        + (f'\t\t(priority {priority})\n' if priority else "")
+        + f'\t\t(hatch edge 0.5)\n'
         f'\t\t(connect_pads\n'
         f'\t\t\t(clearance {plane["pad_clearance"]:g})\n'
         f'\t\t)\n'
