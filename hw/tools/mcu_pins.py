@@ -51,7 +51,20 @@ class Pin:
     direction: str = ""
     """For `GPIO` only: `in` or `out`."""
 
+    net: str = ""
+    """
+    The copper node, when it is not this pin's own name.
+
+    Two pins can share one node - both timers' break inputs come from one latch
+    output - and then each still needs its own name, because the firmware
+    header has a macro per pin. This is what keeps those two facts apart.
+    """
+
     note: str = ""
+
+    @property
+    def net_name(self) -> str:
+        return self.net or self.name
 
 
 # --- loading ------------------------------------------------------------------

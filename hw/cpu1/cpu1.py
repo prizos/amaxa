@@ -11,7 +11,9 @@ Built one block at a time. What exists so far:
   three LEDs, a button and test pads on the console;
 - the power block: 9 to 36 V in through a fuse, a reverse-polarity FET and a
   TVS, a 100 V buck to 5 V, a second buck to 3V3, and the series reference that
-  drives VREF+.
+  drives VREF+;
+- the safety chain: the trip latch, the two octal buffers every PWM output
+  passes through, and the digital header to the power board.
 
 Everything a pin will eventually connect to lands in a later block, and until it
 does that net is *pending*: `_MILESTONES` below names the block that will
@@ -80,18 +82,38 @@ INTENT: dict[str, tuple[float, float]] = {
     # An indicator LED that can be seen in a lit room, at the least current the
     # tolerances allow.
     "leds.visible_current": (0.5e-3, 20e-3),
+    # What the power board's fault outputs may sit at while asserting. This is
+    # an interface promise, not a measurement: the fault lines are open-drain,
+    # and the trip bus reaches them through a Schottky, so what they pull down
+    # to plus a diode drop has to still read as a low here.
+    "header.fault_output_low": (0.0, 0.4),
+    # The dead time firmware will insert between a bridge's two sides. Not a
+    # board parameter either, but everything the board adds between an MCU pin
+    # and a gate has to be small against it, and this is what "small" is
+    # measured against.
+    "pwm.dead_time": (0.5e-6, 5e-6),
 }
 
 # Which later block connects the other end of each net. Matched in order; a net
 # matching none of these is an error, so a new pin cannot slip in unexplained.
 _MILESTONES = [
-    (r"^(PWM\w*|TRIP\w*|FAULT\w*|GATE_ENABLE|RELAY_\w+|STO\d_\w+|ID_STRAP\d|DAC_S\w+|ENC_\w+|HALL_\d)$",
-     "M5: the safety chain and the headers to the power board"),
+    (r"^(DAC_S\w+|OV_COMP)$",
+     "M5b: the current comparators and the DAC that sets their thresholds"),
+    (r"^(ENC_\w+|HALL_\d)$",
+     "M8: the motion-feedback connector, once the encoder type is settled"),
     (r"^(IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$",
      "M6: the ADC input networks and comparator taps"),
     (r"^(USB_\w+|CAN_\w+|ETH_\w+|RS485_\w+)$",
      "M7: USB, CAN FD, Ethernet and RS-485"),
 ]
+
+
+# Nets this file already connects at both ends. Everything else has to name the
+# block that will, so a pin cannot be added without saying where it goes.
+_CONNECTED = re.compile(
+    r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
+    r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d)$"
+)
 
 
 def waiting_for(net: str) -> str:
@@ -137,12 +159,17 @@ def build() -> Net:
 
     used = set()
     for p in PINMAP.PINS:
-        nets[p.name] = Net(p.name)
-        nets[p.name].connect(by_number[silicon.position(p.pin)])
+        # Two pins may share one node, so the net may already exist. Built by
+        # hand rather than with setdefault, which would construct a second Net
+        # every time and leave it dangling.
+        if p.net_name not in nets:
+            nets[p.net_name] = Net(p.net_name)
+        nets[p.net_name].connect(by_number[silicon.position(p.pin)])
         used.add(p.pin)
 
     mcu_core(silicon, mcu, by_number, v3v3, gnd, nets)
     power_block(v3v3, gnd, nets)
+    safety_chain(v3v3, gnd, nets)
 
     # Unused I/O is left unconnected on purpose, and said so. Firmware sets these
     # to analog mode, the lowest-leakage state.
@@ -467,13 +494,166 @@ def power_block(v3v3, gnd, nets) -> None:
     nets["VREF+"] += part(parts.TEST_PAD, "tp_vref", "TP9")[1]
 
 
-def pending(circuit_nets: list[str]) -> dict[str, str]:
+def safety_chain(v3v3, gnd, nets) -> None:
+    """
+    What stands between an MCU pin and a gate driver.
+
+    Two things have to be true for a PWM edge to leave this board: the MCU must
+    be holding PWM_ENABLE_N low, and the trip latch must be clear. Either one
+    failing takes every output high-impedance, where a pull-down at the
+    connector holds it low.
+
+    The latch is the part that makes this more than an enable line. It is set by
+    anything that trips - a gate-driver fault, and in a later block the current
+    comparators - and by NRST, so the board comes out of power-on and out of
+    every reset already tripped. Nothing clears it but PG5, deliberately.
+    """
+    # The trip bus. Everything that trips pulls it low through a diode of its
+    # own, so three sources share one node without sharing a net: a fault line
+    # stays its own net all the way to the MCU pin that reports it.
+    trip_set = Net("TRIP_SET_N")
+    pull_up = part(parts.RES_10K_0402, "safety.r_trip_pullup", "R16")
+    v3v3 += pull_up[1]
+    trip_set += pull_up[2]
+
+    # Pins 1 and 2 are the cathodes and pin 3 the common anode, so the anode is
+    # the bus and each cathode reaches the thing that pulls it down.
+    faults = part(parts.SCHOTTKY_DUAL, "safety.d_faults", "D6")
+    trip_set += faults[3]
+    nets["FAULT1_N"] += faults[1]
+    nets["FAULT2_N"] += faults[2]
+    reset = part(parts.SCHOTTKY_DUAL, "safety.d_reset", "D7")
+    trip_set += reset[3]
+    nets["NRST"] += reset[1]
+    reset[2] += NC  # noqa: F821 - one diode of the pair is spare
+
+    # Both fault lines idle high, so an unfitted power board is not a fault.
+    for address, net, ref in (
+        ("safety.r_fault1_pullup", "FAULT1_N", "R17"),
+        ("safety.r_fault2_pullup", "FAULT2_N", "R18"),
+    ):
+        resistor = part(parts.RES_10K_0402, address, ref)
+        v3v3 += resistor[1]
+        nets[net] += resistor[2]
+
+    # The latch: a D flip-flop with its clock and data tied low, used for its
+    # asynchronous preset and clear alone. Preset wins the board's power-on,
+    # because NRST is low then and PRE is what NRST reaches.
+    latch = part(parts.LATCH_DFF, "safety.latch", "U7")
+    v3v3 += latch["VCC"]
+    gnd += latch["GND"], latch["D"], latch["C"]
+    trip_set += latch["~{PRE}"]
+    nets["TRIP_CLEAR_N"] += latch["~{CLR}"]
+    clear_pull_up = part(parts.RES_10K_0402, "safety.r_clear_pullup", "R20")
+    v3v3 += clear_pull_up[1]
+    nets["TRIP_CLEAR_N"] += clear_pull_up[2]
+
+    # Q is high when tripped, which is what the buffers' second enable wants.
+    # Q-bar is low when tripped, which is what a break input wants: one output,
+    # one node, both timers. No series resistor between them - an open circuit
+    # in a safety path is worse than the ringing one would damp.
+    tripped = Net("TRIPPED")
+    tripped += latch["Q"]
+    nets["TRIP_N"] += latch["~{Q}"]
+
+    # The enable the MCU holds. Pulled up, so a pin that is not being driven -
+    # during reset, or with no firmware at all - is a pin that says "off".
+    enable_pull_up = part(parts.RES_10K_0402, "safety.r_enable_pullup", "R19")
+    v3v3 += enable_pull_up[1]
+    nets["PWM_ENABLE_N"] += enable_pull_up[2]
+
+    header = part(parts.HEADER_2X20, "header.digital", "J3")
+    pins = PINMAP.header_pins(PINMAP.HEADER_DIGITAL, PINMAP.HEADER_GROUND, 40)
+
+    buffered = {}
+    reference = 21
+    for index, (address, ref, channels) in enumerate((
+        # Channel order is the order the MCU's pins leave the package, so the
+        # eight tracks into each buffer run side by side and never cross. The
+        # header table downstream follows the same order for the same reason.
+        ("safety.buffer1", "U5", [
+            "PWM1_BRAKE", "PWM1_C_HIGH", "PWM1_C_LOW", "PWM1_B_HIGH",
+            "PWM1_B_LOW", "PWM1_A_HIGH", "PWM1_A_LOW", "GATE_ENABLE",
+        ]),
+        ("safety.buffer2", "U6", [
+            "PWM2_PFC", "PWM2_C_HIGH", "PWM2_B_HIGH", "PWM2_A_HIGH",
+            "PWM2_A_LOW", "PWM2_C_LOW", "PWM2_B_LOW", None,
+        ]),
+    )):
+        buffer = part(parts.BUF_OCTAL, address, ref)
+        v3v3 += buffer["VCC"]
+        gnd += buffer["GND"]
+        nets["PWM_ENABLE_N"] += buffer["G1"]
+        tripped += buffer["G2"]
+        for channel, name in enumerate(channels):
+            if name is None:
+                # An unused input is tied low rather than left to float, and
+                # its output goes nowhere on purpose.
+                gnd += buffer[f"A{channel}"]
+                buffer[f"Y{channel}"] += NC  # noqa: F821
+                continue
+            nets[name] += buffer[f"A{channel}"]
+            series = part(parts.RES_33R_0402, f"safety.series.{name.lower()}", f"R{reference}")
+            reference += 1
+            Net(f"{name}_B").connect(buffer[f"Y{channel}"], series[1])
+            buffered[f"{name}_OUT"] = Net(f"{name}_OUT")
+            buffered[f"{name}_OUT"] += series[2]
+
+    # Every buffered output holds itself low when the buffer is not driving it.
+    # This is the whole point of the series resistor being before it: the
+    # pull-down is at the connector, where a gate driver reads it.
+    for name, net in buffered.items():
+        pull_down = part(parts.RES_10K_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
+        reference += 1
+        net += pull_down[1]
+        gnd += pull_down[2]
+
+    # The relays are not buffered - they are not in the PWM path - but they are
+    # pulled down for the same reason: a pin nobody is driving must not close a
+    # contactor.
+    for name in ("RELAY_PRECHARGE", "RELAY_MAIN"):
+        pull_down = part(parts.RES_10K_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
+        reference += 1
+        nets[name] += pull_down[1]
+        gnd += pull_down[2]
+
+    # Board identification: the power board grounds whichever straps it wants,
+    # so an unfitted board reads all ones.
+    for name in ("ID_STRAP0", "ID_STRAP1", "ID_STRAP2", "ID_STRAP3"):
+        pull_up = part(parts.RES_10K_0402, f"safety.pullup.{name.lower()}", f"R{reference}")
+        reference += 1
+        v3v3 += pull_up[1]
+        nets[name] += pull_up[2]
+
+    # Safe-torque-off feedback reads low when nothing is driving it, and low
+    # means "not permitted to run". A disconnected cable is not a permission.
+    for name in ("STO1_FEEDBACK", "STO2_FEEDBACK"):
+        pull_down = part(parts.RES_10K_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
+        reference += 1
+        nets[name] += pull_down[1]
+        gnd += pull_down[2]
+
+    for number, name in pins.items():
+        if name == "GND":
+            gnd += header[number]
+        elif name == "3V3":
+            v3v3 += header[number]
+        elif name in buffered:
+            buffered[name] += header[number]
+        else:
+            nets[name] += header[number]
+
+    for address, ref in (("safety.buffer1", "C26"), ("safety.buffer2", "C27"),
+                         ("safety.latch", "C28")):
+        cap = part(parts.CAP_100N_0402, f"{address}.decoupling", ref)
+        v3v3 += cap[1]
+        gnd += cap[2]
+
+
+def pending(names: list[str]) -> dict[str, str]:
     """Every net with only the MCU on it, and the block that will change that."""
-    return {net: waiting_for(net) for net in circuit_nets if net not in ("3V3", "GND")}
+    return {net: waiting_for(net) for net in names if not _CONNECTED.match(net)}
 
 
 if __name__ == "__main__":
-    # Nets the MCU core connects are no longer waiting for anything.
-    core = re.compile(r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d)$")
-    names = [p.name for p in PINMAP.PINS if not core.match(p.name)]
-    sys.exit(run(build, HERE, INTENT, pending(names)))
+    sys.exit(run(build, HERE, INTENT, pending(sorted({p.net_name for p in PINMAP.PINS}))))

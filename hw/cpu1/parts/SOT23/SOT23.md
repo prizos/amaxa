@@ -1,10 +1,10 @@
-# SOT23 — the voltage reference
+# SOT23 — the voltage reference and the trip-bus diodes
 
 | | |
 |---|---|
-| Component | `VREF_3V0` |
-| Manufacturer | Texas Instruments |
-| Part number | `REF3030AIDBZR` |
+| Component | `VREF_3V0` `SCHOTTKY_DUAL` |
+| Manufacturer | Texas Instruments / LRC |
+| Part number | `REF3030AIDBZR, LBAT54ALT1G` |
 | LCSC | [C38423](https://www.lcsc.com/product-detail/C38423.html) |
 | Footprint | `SOT-23` |
 
@@ -52,3 +52,37 @@ inherits the same numbering from `REF3012`. Two sources, agreeing: no doubt
 here.
 
 **Footprint.** KiCad stock `Package_TO_SOT_SMD:SOT-23`, unmodified.
+
+## The trip-bus diodes
+
+`LBAT54ALT1G`, [C12743](https://www.lcsc.com/product-detail/C12743.html), a
+BAT54A: two Schottky diodes with their **anodes joined**, 30 V, 200 mA, in the
+same SOT-23. Stock 255,381. Two of them on the board.
+
+They are what lets three separate things pull the trip bus low without any of
+them being wired to each other. Each fault line reaches the bus through its own
+diode and keeps its own net all the way to the MCU pin that reports it; reset
+reaches it the same way, without the bus being able to pull on NRST in return.
+
+| Figure | Value | Where |
+|---|---|---|
+| Forward voltage | 0.22 / 0.24 V at 0.1 mA | Electrical characteristics |
+| | 0.29 / 0.32 V at 1 mA | |
+| Reverse voltage | 30 V | Maximum ratings |
+| Forward current | 200 mA | Maximum ratings |
+
+**Schottky, not silicon, and this is the reason.** The latch calls anything
+under 0.8 V a low. A fault output sitting at 0.4 V plus 0.24 V across the diode
+leaves the bus at 0.64 V, which is a low with 0.16 V to spare. A silicon
+diode's 0.7 V would put it at 1.1 V, and the latch would never see the fault at
+all. `test_the_trip_bus_reaches_a_valid_low_through_its_diodes` is that
+sentence as a check.
+
+## Pin mapping for the BAT54A
+
+Pins 1 and 2 are the cathodes and pin 3 the common anode, from the datasheet's
+own marking diagram ("3 ANODE, CATHODE 1, 2 CATHODE").
+
+**Needs a human eye** against the manufacturer's package drawing: a common-anode
+part fitted where a common-cathode one belongs would tie both fault lines
+together, and the board would look right until two faults arrived.

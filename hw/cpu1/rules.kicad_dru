@@ -54,3 +54,12 @@
 	(condition "A.NetName == 'FB_*' || A.NetName == 'BST_*' || A.NetName == 'RAMP' || A.NetName == 'RON' || A.NetName == 'UVLO' || A.NetName == 'PGOOD' || A.NetName == 'RPP_GATE'")
 	(constraint track_width (min 0.15mm))
 	(severity error))
+
+# The safety chain's own nets: the buffered copies of every PWM output, the
+# gate enable that travels with them, and the latch's three. The buffered side
+# drives a cable to a gate driver, so it is wider than the MCU-side signal it
+# copies; the latch's nets are short and on-board.
+(rule "safety chain"
+	(condition "A.NetName == 'GATE_ENABLE_B' || A.NetName == 'GATE_ENABLE_OUT' || A.NetName == 'TRIP_SET_N' || A.NetName == 'TRIPPED'")
+	(constraint track_width (min 0.2mm))
+	(severity error))

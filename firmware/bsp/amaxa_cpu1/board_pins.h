@@ -225,7 +225,7 @@
 #define PIN_PWM2_PFC_PIN GPIO_PIN_9
 #define PIN_PWM2_PFC_AF GPIO_AF3_TIM8
 
-/* TRIP2_N: TIM8_BKIN on PG2, pin 87. from the hardware trip latch, active low */
+/* TRIP2_N: TIM8_BKIN on PG2, pin 87. one latch output, one node, both timers */
 #define PIN_TRIP2_N_PORT GPIOG
 #define PIN_TRIP2_N_PIN GPIO_PIN_2
 #define PIN_TRIP2_N_AF GPIO_AF3_TIM8
@@ -371,9 +371,9 @@
 #define PIN_PWM_ENABLE_N_PORT GPIOG
 #define PIN_PWM_ENABLE_N_PIN GPIO_PIN_4
 
-/* TRIP_CLEAR: GPIO output on PG5, pin 90. the only way to clear the trip latch */
-#define PIN_TRIP_CLEAR_PORT GPIOG
-#define PIN_TRIP_CLEAR_PIN GPIO_PIN_5
+/* TRIP_CLEAR_N: GPIO output on PG5, pin 90. the only way to clear the trip latch; pulled up, so a reset pin does not clear it */
+#define PIN_TRIP_CLEAR_N_PORT GPIOG
+#define PIN_TRIP_CLEAR_N_PIN GPIO_PIN_5
 
 /* DAC_SDA: I2C2_SDA on PF0, pin 10. trip-threshold DAC */
 #define PIN_DAC_SDA_PORT GPIOF

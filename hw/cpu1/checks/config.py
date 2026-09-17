@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 71
+EXPECTED_CHECKS = 89
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -37,6 +37,30 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "to compare it against until the ADC input networks exist and the "
         "error budget has a second term in it. M6"
     ),
+    ("safety.buffer1", "enable_time_max"): (
+        "7 ns from the enable going low to the outputs driving again. Turning "
+        "on is not time-critical - firmware chooses when - and the number that "
+        "is, turning off, is disable_time_max, which the trip budget uses"
+    ),
+    ("safety.buffer2", "enable_time_max"): "as buffer1: turning on is not timed",
+    ("safety.buffer2", "disable_time_max"): (
+        "both buffers are the same part, so the trip budget is worked with one "
+        "of them. This is the second copy of the same 7 ns"
+    ),
+    ("safety.buffer1", "input_low_voltage_max"): (
+        "0.8 V, against what the MCU's pins drive low to - which the pages of "
+        "ST's datasheet read for this board do not state. The high side is "
+        "checked; this end waits for V_OL, and for the same measurement at "
+        "bring-up that VDDA's current needs"
+    ),
+    ("safety.buffer2", "input_low_voltage_max"): "as buffer1",
+    ("safety.buffer2", "propagation_delay_max"): (
+        "both buffers are the same part; the skew check works with one set of "
+        "timings and this is the second copy"
+    ),
+    ("safety.buffer2", "output_skew_max"): "as buffer1's, and the same part",
+    ("safety.buffer2", "output_current_max"): "as buffer1's, and the same part",
+    ("safety.buffer2", "total_output_current_max"): "as buffer1's, and the same part",
     ("buck5.c_couple", "capacitance"): (
         "the coupling capacitor into the feedback node. Its value comes from "
         "the LM5164 datasheet's Equation 26, which is a figure with no text "
@@ -65,5 +89,10 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
         "came from LCSC's symbol; getting it wrong puts the gate on the supply"
     ),
     "SMB": "pad 1 is the cathode, the banded end",
+    "SOT23": (
+        "the BAT54A's common anode on pin 3, from its marking diagram rather "
+        "than a package drawing. A common-cathode part in its place would tie "
+        "both fault lines together"
+    ),
     "SOD123": "pad 1 is the cathode, from the package drawing not the maker's",
 }

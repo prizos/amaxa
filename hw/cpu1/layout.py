@@ -32,6 +32,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))
 
 from layout_lib import qfp_pins  # noqa: E402
+from mcu_pins import load_source  # noqa: E402
 
 # --- the board itself --------------------------------------------------------
 #
@@ -641,12 +642,6 @@ def _reference() -> None:
 
 VREF_PIN = "32"
 
-_supply_vias()
-_decoupling()
-_analog_supply()
-_crystals()
-_placed()
-_power()
 
 
 def _pour_outline() -> list[tuple[float, float]]:
@@ -693,3 +688,137 @@ PLANES = [
         "thermal_bridge": 0.4,
     },
 ]
+
+
+# --- the safety chain --------------------------------------------------------
+#
+# The right-hand third of the board, in the order a PWM edge travels: out of the
+# package, into an octal buffer, through a series resistor past a pull-down, and
+# onto the connector. The latch that can take all of it away sits between the
+# two buffers, where both enables are short.
+#
+# **Placed, not yet routed.** The connections are in design.json and the checks
+# in `checks/test_safety.py` read them from there; what is here is where every
+# part sits. Routing this block on its own turned into a fight with the escapes
+# of a package whose other three sides are already full, which is an argument
+# for doing it with the whole board in view - M8, which the plan already sets
+# aside for the full route. `board.mk` says `ROUTING := incomplete` until then,
+# so DRC still refuses anything drawn wrongly but does not demand what is not
+# drawn at all.
+#
+# Almost none of the placement is written as coordinates. The header's pin
+# numbers come from the same table the netlist is built from, each buffer
+# channel's position from the package's own pin geometry, and the thirty output
+# slots are a loop.
+
+HEADER_ORIGIN = (44.0, -24.0)    # pin 1; row 2 is 2.54 mm to the right
+HEADER_PITCH = 2.54
+INNER_SERIES, INNER_PULLDOWN = 36.4, 38.2   # channels on the header's second row
+OUTER_SERIES, OUTER_PULLDOWN = 40.0, 41.6   # channels on its first row
+BUFFER1, BUFFER2, LATCH = (30.0, 18.27), (30.0, 2.2), (26.0, 9.0)
+
+_TSSOP = 0.65                    # lead pitch of both buffers
+PINMAP = load_source(HERE / "pinmap.py", "cpu1_pinmap")
+HEADER_NET = PINMAP.header_pins(PINMAP.HEADER_DIGITAL, PINMAP.HEADER_GROUND, 40)
+HEADER_PIN = {net: number for number, net in HEADER_NET.items()}
+
+
+def _header_at(number: int) -> tuple[float, float]:
+    """Where pin `number` of a 2x20 odd/even header sits, with pin 1 at the origin."""
+    x, y = HEADER_ORIGIN
+    position = (number + 1) // 2 - 1
+    return (x + (0.0 if number % 2 else HEADER_PITCH), round(y + position * HEADER_PITCH, 4))
+
+
+def _lane_of(name: str) -> float:
+    """Where a static signal's parts sit, by its place in the header table."""
+    statics = [n for n in PINMAP.HEADER_DIGITAL[:11] if n != "3V3"]
+    return round(-38.6 + 1.4 * statics.index(name), 4)
+
+
+def _safety() -> None:
+    PLACEMENT["header.digital"] = (*HEADER_ORIGIN, 0)
+    LABELS["header.digital"] = (-3.0, -2.0)
+    PLACEMENT["safety.buffer1"] = (*BUFFER1, 0)
+    PLACEMENT["safety.buffer2"] = (*BUFFER2, 0)
+    PLACEMENT["safety.latch"] = (*LATCH, 0)
+    LABELS["safety.buffer1"] = (0.0, -4.4)
+    LABELS["safety.buffer2"] = (0.0, -4.4)
+    LABELS["safety.latch"] = (0.0, -2.4)
+    for address, at in (("safety.buffer1", (BUFFER1[0], BUFFER1[1] - 5.6)),
+                        ("safety.buffer2", (BUFFER2[0], BUFFER2[1] - 5.6)),
+                        ("safety.latch", (19.0, LATCH[1]))):
+        PLACEMENT[f"{address}.decoupling"] = (*at, 0)
+        LABELS[f"{address}.decoupling"] = (0.0, -1.3)
+
+    # The trip chain: both diodes where the two fault lanes will run, and the
+    # pull-up that holds the bus high beside them.
+    PLACEMENT["safety.d_faults"] = (22.0, -28.0, 0)
+    PLACEMENT["safety.d_reset"] = (22.0, -32.0, 0)
+    PLACEMENT["safety.r_trip_pullup"] = (22.0, -24.0, 180)
+    PLACEMENT["safety.r_clear_pullup"] = (23.0, 17.0, 0)
+    PLACEMENT["safety.r_enable_pullup"] = (23.0, 15.0, 0)
+    for address in ("safety.d_faults", "safety.d_reset", "safety.r_trip_pullup",
+                    "safety.r_clear_pullup", "safety.r_enable_pullup"):
+        LABELS[address] = (2.6, 0.0)
+
+    _output_slots()
+    _static_pulls()
+
+
+def _output_slots() -> None:
+    """
+    Fifteen identical slots, one per buffered output, in the header's own order.
+
+    Each is a series resistor and the pull-down that holds the connector low
+    when the buffer is not driving it, in line with the pin they feed. There are
+    two columns because seven of the header's positions carry a signal in each
+    row, and those two slots would otherwise want the same place.
+    """
+    channels = []
+    for address, names in (("safety.buffer1", PINMAP.HEADER_DIGITAL[18:]),
+                           ("safety.buffer2", PINMAP.HEADER_DIGITAL[11:18])):
+        channels.extend((address, name) for name in names)
+
+    for address, name in channels:
+        number = HEADER_PIN[name]
+        slot = _header_at(number)[1]
+        first_row = bool(number % 2)
+        signal = name[: -len("_OUT")]
+        PLACEMENT[f"safety.series.{signal.lower()}"] = (
+            OUTER_SERIES if first_row else INNER_SERIES, slot, 0)
+        PLACEMENT[f"safety.pulldown.{name.lower()}"] = (
+            OUTER_PULLDOWN if first_row else INNER_PULLDOWN, slot, 270)
+        LABELS[f"safety.series.{signal.lower()}"] = (0.0, -1.3)
+        LABELS[f"safety.pulldown.{name.lower()}"] = (-1.6, 0.0)
+
+
+def _static_pulls() -> None:
+    """
+    The ten signals that are not PWM, each with its pull-up or pull-down.
+
+    They sit in a column at the end of the lane each will take across the board,
+    in the order the header table puts them - which is the order they leave the
+    package, furthest first.
+    """
+    pulls = {
+        "RELAY_PRECHARGE": "down", "RELAY_MAIN": "down",
+        "ID_STRAP0": "up", "ID_STRAP1": "up", "ID_STRAP2": "up", "ID_STRAP3": "up",
+        "FAULT1_N": "up", "FAULT2_N": "up",
+        "STO1_FEEDBACK": "down", "STO2_FEEDBACK": "down",
+    }
+    named = {"FAULT1_N": "safety.r_fault1_pullup", "FAULT2_N": "safety.r_fault2_pullup"}
+    for name, direction in pulls.items():
+        address = named.get(name, f"safety.{'pullup' if direction == 'up' else 'pulldown'}.{name.lower()}")
+        PLACEMENT[address] = (32.3, _lane_of(name), 0 if direction == "up" else 180)
+        LABELS[address] = (0.0, -1.3)
+
+
+
+_supply_vias()
+_decoupling()
+_analog_supply()
+_crystals()
+_placed()
+_power()
+_safety()

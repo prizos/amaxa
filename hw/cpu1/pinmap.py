@@ -78,7 +78,7 @@ PINS = [
     Pin("PE13", "TIM1_CH3", "PWM1_C_HIGH"),
     Pin("PE12", "TIM1_CH3N", "PWM1_C_LOW"),
     Pin("PE14", "TIM1_CH4", "PWM1_BRAKE", note="brake chopper"),
-    Pin("PE15", "TIM1_BKIN", "TRIP1_N", note="from the hardware trip latch, active low"),
+    Pin("PE15", "TIM1_BKIN", "TRIP1_N", net="TRIP_N", note="from the hardware trip latch, active low"),
     Pin("PE6", "TIM1_BKIN2", "FAULT1_N", note="gate-driver fault, active low"),
 
     # --- PWM: TIM8, a second bridge or a PFC stage -----------------------------
@@ -89,7 +89,7 @@ PINS = [
     Pin("PC8", "TIM8_CH3", "PWM2_C_HIGH"),
     Pin("PB15", "TIM8_CH3N", "PWM2_C_LOW"),
     Pin("PC9", "TIM8_CH4", "PWM2_PFC", note="PFC switch"),
-    Pin("PG2", "TIM8_BKIN", "TRIP2_N", note="from the hardware trip latch, active low"),
+    Pin("PG2", "TIM8_BKIN", "TRIP2_N", net="TRIP_N", note="one latch output, one node, both timers"),
     Pin("PG3", "TIM8_BKIN2", "FAULT2_N", note="gate-driver fault, active low"),
 
     # --- analog ------------------------------------------------------------------
@@ -122,7 +122,7 @@ PINS = [
 
     # --- safety chain and power-board control ----------------------------------------
     Pin("PG4", "GPIO", "PWM_ENABLE_N", "out", note="pulled up on the board, so off until driven"),
-    Pin("PG5", "GPIO", "TRIP_CLEAR", "out", note="the only way to clear the trip latch"),
+    Pin("PG5", "GPIO", "TRIP_CLEAR_N", "out", note="the only way to clear the trip latch; pulled up, so a reset pin does not clear it"),
     Pin("PF0", "I2C2_SDA", "DAC_SDA", note="trip-threshold DAC"),
     Pin("PF1", "I2C2_SCL", "DAC_SCL"),
     Pin("PD7", "GPIO", "GATE_ENABLE", "out"),
@@ -141,6 +141,63 @@ PINS = [
     Pin("PG7", "GPIO", "LED_COMMS", "out"),
     Pin("PC13", "GPIO", "BUTTON", "in"),
 ]
+
+# The digital header to the power board, as a sequence rather than a pinout: two
+# signals then a ground, all the way along, and the pin numbers fall out of the
+# order. J3 is a 2x20 with KiCad's odd/even numbering, so this list is read
+# straight through - pin 1, pin 2, pin 3 - across both rows.
+#
+# Every PWM name here is the *buffered* net, the one on the far side of the
+# octal buffer and its series resistor. The MCU's own net of the same name
+# without the suffix never reaches this connector, and a check says so.
+HEADER_GROUND = "GND"
+HEADER_DIGITAL = [
+    # The static signals first, at the end of the connector furthest from the
+    # buffers: straps and feedback, which change once a minute at most.
+    # In the order they leave the package, furthest first, for the same reason
+    # the buffered outputs are: ten tracks crossing the board without crossing
+    # each other.
+    "RELAY_PRECHARGE", "RELAY_MAIN",
+    "ID_STRAP0", "ID_STRAP1", "ID_STRAP2", "ID_STRAP3",
+    "FAULT1_N",
+    "STO1_FEEDBACK", "STO2_FEEDBACK",
+    "FAULT2_N",
+    "3V3",
+    # Then the buffered outputs, in the order their buffer presents them, which
+    # is the order the MCU's own pins come out of the package. Nothing here is
+    # grouped by phase, and that is deliberate: this order is what lets fifteen
+    # tracks cross the board without crossing each other, and the table is what
+    # makes it checkable rather than a drawing nobody dares touch.
+    "PWM2_PFC_OUT", "PWM2_C_HIGH_OUT", "PWM2_B_HIGH_OUT", "PWM2_A_HIGH_OUT",
+    "PWM2_A_LOW_OUT", "PWM2_C_LOW_OUT", "PWM2_B_LOW_OUT",
+    "PWM1_BRAKE_OUT", "PWM1_C_HIGH_OUT", "PWM1_C_LOW_OUT", "PWM1_B_HIGH_OUT",
+    "PWM1_B_LOW_OUT", "PWM1_A_HIGH_OUT", "PWM1_A_LOW_OUT", "GATE_ENABLE_OUT",
+]
+
+
+def header_pins(signals: list[str], ground: str, count: int) -> dict[int, str]:
+    """
+    Pin number -> net, for a header carrying `signals` with a ground every two.
+
+    The pattern is the point: nothing on this connector is more than one pin
+    from a return path, which is what makes a ribbon cable to a gate driver
+    survivable. Any pins left over at the end are ground as well.
+    """
+    out: dict[int, str] = {}
+    remaining = list(signals)
+    pin = 1
+    while pin <= count:
+        for _ in range(2):
+            if remaining and pin <= count:
+                out[pin] = remaining.pop(0)
+                pin += 1
+        if pin <= count:
+            out[pin] = ground
+            pin += 1
+    if remaining:
+        raise ValueError(f"{len(remaining)} signals do not fit on {count} pins: {remaining}")
+    return out
+
 
 # Pairs converted at the same instant, in dual regular simultaneous mode:
 # (on ADC1, on ADC2).

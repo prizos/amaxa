@@ -1,0 +1,58 @@
+# TSSOP20 — the PWM buffers
+
+| | |
+|---|---|
+| Component | `BUF_OCTAL` |
+| Manufacturer | Texas Instruments |
+| Part number | `SN74LVC541APWR` |
+| LCSC | [C113281](https://www.lcsc.com/product-detail/C113281.html) |
+| Footprint | `TSSOP-20_4.4x6.5mm_P0.65mm` |
+
+Octal buffer, two output enables, 1.65 to 3.6 V, ±24 mA. Stock 3,792, read from
+JLCPCB's component API on 2026-09-17. Two of them on the board.
+
+## Why LVC, and why a '541 rather than a '244
+
+**The '541 has two enables that both have to be low.** That is the whole
+circuit: one from the MCU, one from the trip latch, in series in silicon. A
+'244 has two enables as well, but each controls four outputs, so using it here
+would mean wiring both of them to both sources and losing the independence.
+
+**LVC because the interesting number is how fast it stops.** The trip budget is
+tens of nanoseconds, and this part's disable time is 7 ns of it. The same
+function in HC is four times that at 3.3 V, which would leave nothing for the
+comparators.
+
+## Figures used from the datasheet
+
+TI's *SN54LVC541A, SN74LVC541A*, SCAS298N (January 1993, revised June 2014),
+served by LCSC for C113281. At V_CC = 3.3 V ± 0.3 V, −40 to +85 °C.
+
+| Figure | Value | Where |
+|---|---|---|
+| Supply voltage | 1.65 to 3.6 V | §7.3 |
+| Propagation delay, A to Y | 1.5 to 5.1 ns | §7.7 |
+| Enable time, OE to Y | 1.5 to 7 ns | §7.7 |
+| Disable time, OE to Y | 1.5 to 7 ns | §7.7 |
+| Output-to-output skew | 1 ns | §7.7 |
+| Input thresholds | V_IH 2.0 V, V_IL 0.8 V | §7.3 |
+| Output current | 25 mA per output, 50 mA per part | §11.1 |
+
+The 1 ns skew is why a bridge's high and low sides go through the *same*
+package: between two parts the bound is each one's own 1.5 to 5.1 ns window,
+which is nearly four nanoseconds of shoot-through that dead time has to cover.
+`checks/test_safety.py::test_complementary_pwm_outputs_go_through_the_same_buffer`
+is what holds the channel assignment to that.
+
+## Pin mapping
+
+Pin 1 OE1, pins 2–9 A1–A8, pin 10 GND, pins 11–18 Y8–Y1, pin 19 OE2, pin 20
+V_CC, read from the datasheet's Pin Functions table in full.
+
+The symbol is KiCad's `74xx:74AHC541`, because no library carries an LVC541A.
+**Every pin number matches**; only the names differ, KiCad counting A0..A7 and
+Y0..Y7 where TI counts A1..A8 and Y1..Y8. This is the same substitution led12
+makes for its LDO, and for the same reason: the footprint and the numbering are
+what the board is built from.
+
+**Footprint.** KiCad stock `Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm`, unmodified.

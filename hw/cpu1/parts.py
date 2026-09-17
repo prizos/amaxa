@@ -404,5 +404,84 @@ RES_31K6_0402 = PartSpec(
 )
 
 
+# --- the safety chain --------------------------------------------------------
+#
+# The path from an MCU pin to a gate driver, and the two things that can break
+# it: an enable the MCU holds, and a latch nothing but the MCU can clear.
+
+# The symbol is KiCad's 74AHC541, because no library carries an LVC541A. Every
+# pin number matches - TI's Pin Functions table was read in full - and only the
+# input and output names differ, KiCad counting A0..A7 where TI counts A1..A8.
+# See TSSOP20.md.
+#
+# LVC and not AHC or HC: what this part is for is going high-impedance quickly
+# when the latch trips, and 7 ns of disable time is most of the trip budget's
+# margin. HC at 3.3 V is four times that.
+BUF_OCTAL = PartSpec(
+    symbol="74xx:74AHC541", footprint="TSSOP20:TSSOP-20_4.4x6.5mm_P0.65mm",
+    prefix="U", manufacturer="Texas Instruments", mpn="SN74LVC541APWR", lcsc="C113281",
+    value="74LVC541A",
+    params={
+        "supply_voltage": between(1.65, 3.6),
+        "propagation_delay_max": exact(5.1e-9),
+        "disable_time_max": exact(7e-9),
+        "enable_time_max": exact(7e-9),
+        "output_skew_max": exact(1e-9),
+        "output_current_max": exact(25e-3),          # per output, recommended
+        "total_output_current_max": exact(50e-3),
+        "input_low_voltage_max": exact(0.8),
+        "input_high_voltage_min": exact(2.0),
+    },
+)
+
+# The trip latch. A D flip-flop used as a set-reset: preset by anything that
+# trips, cleared only by the MCU, and holding its state with no clock at all.
+# The symbol is KiCad's 74AUP1G74, the same eight pins in the same order; see
+# VSSOP8.md.
+LATCH_DFF = PartSpec(
+    symbol="74xGxx:74AUP1G74", footprint="VSSOP8:VSSOP-8_2.3x2mm_P0.5mm",
+    prefix="U", manufacturer="Texas Instruments", mpn="SN74LVC1G74DCUR", lcsc="C70285",
+    value="74LVC1G74",
+    params={
+        "supply_voltage": between(1.65, 5.5),
+        "preset_to_output_max": exact(5.9e-9),
+        "output_current_max": exact(24e-3),
+        "input_low_voltage_max": exact(0.8),
+        "input_high_voltage_min": exact(2.0),
+    },
+)
+
+# Two Schottky diodes with their anodes joined, which is what lets three things
+# pull the trip bus low without any of them being wired to each other: each
+# reaches the bus through a diode and keeps its own net. Schottky and not
+# silicon because the whole budget is the 0.8 V the logic calls a low, and a
+# 0.7 V drop spends all of it. See SOT23.md.
+SCHOTTKY_DUAL = PartSpec(
+    symbol="Diode:BAT54A", footprint="SOT23:SOT-23", prefix="D",
+    manufacturer="LRC", mpn="LBAT54ALT1G", lcsc="C12743", value="BAT54A",
+    params={
+        "forward_voltage_max": exact(0.24),          # at 0.1 mA
+        "reverse_voltage_max": exact(30.0),
+        "forward_current_max": exact(200e-3),
+    },
+)
+
+# Series into every buffered output: enough to damp a ribbon cable's ringing
+# without dropping anything a CMOS gate driver would notice.
+RES_33R_0402 = PartSpec(
+    **_R0402, mpn="0402WGF330JTCE", lcsc="C25105", value="33R",
+    params={"resistance": pm(33, 0.01), "max_power": exact(0.0625)},
+)
+
+# Pin headers for now, by the user's decision: the connector to the power board
+# gets chosen when there is a power board to connect to.
+HEADER_2X20 = PartSpec(
+    symbol="Connector_Generic:Conn_02x20_Odd_Even",
+    footprint="HDR2X20:PinHeader_2x20_P2.54mm_Vertical", prefix="J",
+    manufacturer="HCTL", mpn="PZ254-2-20-Z-8.5", lcsc="C2894981", value="digital",
+    params={"current_rating": exact(3.0)},
+)
+
+
 ALL: dict[str, PartSpec] = collect(globals())
 """Every part, by the name it is known by here. Used by the parts checks."""
