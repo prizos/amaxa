@@ -14,7 +14,7 @@ Run them with `make -C hw check`, which builds first.
 """
 
 import csv
-import importlib.util
+import types
 import json
 import re
 import sys
@@ -322,7 +322,8 @@ def parts(board_dir):
 
 
 def _load(path: Path, name: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    """From source, never a cached `.pyc`: see `tools/pinmap.py`'s `load_source`."""
+    module = types.ModuleType(name)
+    module.__file__ = str(path)
+    exec(compile(path.read_text(), str(path), "exec"), module.__dict__)
     return module

@@ -1,0 +1,14 @@
+"""Board support for amaxa cpu1 (STM32H743ZIT6, LQFP144). In progress."""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Every MCU pin the board uses, with its alternate-function number and ADC
+# channel. GENERATED from hw/cpu1/pinmap.py - edit that, then run
+# `make -C hw pins-write BOARD=cpu1`. A hardware check fails if they differ.
+cc_library(
+    name = "board_pins",
+    hdrs = ["board_pins.h"],
+    includes = ["."],
+)

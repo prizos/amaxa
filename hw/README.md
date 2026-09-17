@@ -5,8 +5,8 @@ layout and runs the rule checks, **ngspice** simulates the analog behaviour, and
 CI gates all of it.
 
 The first board, [`led12`](led12/README.md), is a 12 V LED board with no
-processor. It exists to prove the pipeline before the STM32H743 control board
-depends on it.
+processor. It exists to prove the pipeline before the STM32H743 control board,
+[`cpu1`](cpu1/README.md), depends on it.
 
 **A build reaches nothing over the network** — no parts service, no registry, no
 account. `make offline` proves it, by running the design source with every route
@@ -92,6 +92,7 @@ pipeline read — so every place we read it was a place it could hurt us.
 
 | | Catches |
 |---|---|
+| **`make pins`**, boards with an MCU | The pin map against ST's data: a pin that cannot carry its signal, a missing alternate-function number, a half-used peripheral, ADC pairs that cannot be simultaneous, and a firmware header that no longer matches |
 | **ERC**, in the design source | Unconnected or undriven pins. Fails on warnings too, because SKiDL calls an unconnected passive pin a warning and that is the mistake worth catching |
 | **`make check`** | Everything relating two quantities: currents, power margins, gate drive against thresholds, ratings against the TVS clamp, debounce time constants, net shape, part placement, symbol-to-footprint pin agreement |
 | **`make sim`** | The analog behaviour, against bands in `led12/sim/limits.py` that each carry a sentence saying why |

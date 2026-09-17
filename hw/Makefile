@@ -4,6 +4,7 @@
 #   make versions    print every tool version and check the pinned ones
 #   make build       turn the SKiDL design source into KiCad files
 #   make layout      apply the board's placement and routing, then fill the plane
+#   make pins        check the MCU pin map against the silicon (boards with an MCU)
 #   make check       run the design checks against what the build produced
 #   make reproducible  build twice and check both runs describe the same board
 #   make sim         run the ngspice decks and check their measurements
@@ -61,7 +62,7 @@ DRU        := $(LAYOUT_DIR)/default.kicad_dru
 KICAD_CLI ?= $(shell command -v kicad-cli 2>/dev/null)
 NGSPICE   ?= $(shell command -v ngspice 2>/dev/null)
 
-.PHONY: help tools versions build layout rules check drc reproducible sim offline outputs clean distclean
+.PHONY: help tools versions build layout rules pins pins-write check drc reproducible sim offline outputs clean distclean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -196,6 +197,14 @@ drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 		echo "       run against no custom rules and pass regardless." >&2; exit 1; }
 	@$(KICAD_CLI) pcb drc --format json --severity-error --exit-code-violations \
 		--output $(LAYOUT_DIR)/drc.json $(LAYOUT_DIR)/default.kicad_pcb
+
+# The MCU pin map against ST's data, and the firmware header generated from it.
+# No build needed, so it runs on its own and before anything else is drawn.
+pins: $(PY) ## Check the board's MCU pin map against the silicon
+	@$(PY) -m pytest $(BOARD)/checks/test_pinmap.py -q --import-mode=importlib --board $(BOARD)
+
+pins-write: ## Regenerate the firmware pin header from the board's pin map
+	@python3 tools/pinmap.py $(BOARD)
 
 # Depends on build so the checks can never pass against stale output. Two
 # directories: hw/checks/ applies to every board, $(BOARD)/checks/ to this one.
