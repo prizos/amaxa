@@ -208,7 +208,30 @@ def _crystals() -> None:
     VIAS.append(("core.lse.c_out:2", (-17.3, -1.22), "GND", *VIA, SUPPLY))
 
 
-# --- everything else, placed near what it serves, routed later ------------------------
+def path(net: str, width: float, legs: list) -> None:
+    """
+    One route that changes layer, with a via at each change.
+
+    `legs` is [(layer, [points...]), ...]; consecutive legs must share their
+    meeting point, and that point becomes a through via on the net.
+    """
+    for layer, points in legs:
+        ROUTES.append((net, width, layer, points))
+    for (_, before), (_, after) in zip(legs, legs[1:]):
+        assert before[-1] == after[0], f"{net}: legs do not meet at {before[-1]} / {after[0]}"
+        VIAS.append((None, before[-1], net, *VIA))
+
+
+# --- everything else -------------------------------------------------------------------
+#
+# Debug, indicators, the button, reset and boot. Each sits where the pin it
+# serves comes out. The three debug signals leave the package on three different
+# sides, so they cross on the bottom layer, under the ring of supply vias, and
+# surface beside the Tag-Connect pads.
+
+SIGNAL = 0.15
+DEBUG_LEFT, DEBUG_RIGHT = 18.2, 21.8   # via columns either side of the SWD pads
+
 
 def _placed() -> None:
     # Bulk capacitance in the two top corners, where no pin escapes.
@@ -218,23 +241,134 @@ def _placed() -> None:
     PLACEMENT["core.usb_bulk"] = (13.5, -13.5, 0)
     VIAS.append(("core.usb_bulk:1", (12.5, -13.5), "3V3", *VIA, SUPPLY))
     VIAS.append(("core.usb_bulk:2", (14.5, -13.5), "GND", *VIA, SUPPLY))
+    _debug()
+    _indicators()
+    _button()
+    _boot_and_console()
 
-    PLACEMENT["core.swd"] = (16.0, -18.0, 0)
-    PLACEMENT["core.nrst.cap"] = (-18.0, 10.5, 0)
-    PLACEMENT["core.boot0.pulldown"] = (-5.75, -16.0, 90)
-    PLACEMENT["tp_boot0"] = (-5.75, -19.5)
-    PLACEMENT["tp_console_tx"] = (22.0, 4.0)
-    PLACEMENT["tp_console_rx"] = (22.0, 7.0)
-    PLACEMENT["tp_gnd"] = (22.0, 10.0)
-    PLACEMENT["tp_3v3"] = (22.0, 13.0)
-    for index, key in enumerate(("status", "fault", "comms")):
-        y = 20.0 + 3.0 * index
-        PLACEMENT[f"core.led.{key}.resistor"] = (-20.0, y, 0)
-        PLACEMENT[f"core.led.{key}.led"] = (-16.5, y, 0)
-    PLACEMENT["core.button.switch"] = (20.0, 20.0)
-    PLACEMENT["core.button.pulldown"] = (18.0, 17.0, 0)
-    for address in ("tp_console_tx", "tp_console_rx", "tp_gnd", "tp_3v3", "tp_boot0"):
-        LABELS[address] = (-2.6, 0.0)
+
+def _debug() -> None:
+    """
+    SWD on a Tag-Connect footprint, turned so its pads run in two columns.
+
+    Its own keepout forbids vias under the pads, so each pad reaches its net
+    through a via in the column beside it. 3V3 and ground need no route at all:
+    their vias land on the planes.
+    """
+    PLACEMENT["core.swd"] = (20.0, -20.0, 90)
+    LABELS["core.swd"] = (0.0, 3.2)
+    for pad, x, y, net in (
+        ("2", DEBUG_LEFT, -18.73, "SWDIO"), ("4", DEBUG_LEFT, -20.0, "SWCLK"),
+        ("6", DEBUG_LEFT, -21.27, "SWO"), ("1", DEBUG_RIGHT, -18.73, "3V3"),
+        ("3", DEBUG_RIGHT, -20.0, "NRST"), ("5", DEBUG_RIGHT, -21.27, "GND"),
+    ):
+        VIAS.append((f"core.swd:{pad}", (x, y), net, *VIA, SUPPLY if net in ("3V3", "GND") else SIGNAL))
+
+    # Out of the package, down to the bottom layer, across, and up to the pads.
+    for pin, net, pad_y in (("105", "SWDIO", -18.73), ("109", "SWCLK", -20.0), ("133", "SWO", -21.27)):
+        p = PINS[pin]
+        # SWDIO's pin is next to VCAP2, whose capacitor and ground via fill its
+        # line out to 14.4 mm; it steps onto the neighbouring line and surfaces
+        # beyond them.
+        legs = [f"{MCU}:{pin}"]
+        if pin == "105":
+            legs += [p.at(11.9), p.at(12.4, 0.65)]
+            out = p.at(15.6, 0.65)
+        else:
+            out = p.at(12.3)
+        path(net, SIGNAL, [
+            (F, legs + [out]),
+            (B, [out, (out[0], pad_y) if pin != "105" else (out[0], pad_y), (DEBUG_LEFT, pad_y)]),
+        ])
+
+    # NRST leaves inward - the 8 MHz crystal fills the outward side of its pin -
+    # crosses beneath the package, and picks up its capacitor on the way.
+    inward = PINS["25"].at(SUPPLY_RING_2)
+    VIAS.append((f"{MCU}:25", inward, "NRST", *VIA, STUB))
+    # Along the middle of the package and out to the right, clear of the three
+    # debug tracks running down to the pads.
+    PLACEMENT["core.nrst.cap"] = (24.6, -2.0, 0)
+    LABELS["core.nrst.cap"] = (0.0, -1.3)
+    VIAS.append(("core.nrst.cap:2", (26.2, -2.0), "GND", *VIA, SUPPLY))
+    cap_via = (23.2, -2.0)
+    path("NRST", SIGNAL, [
+        (B, [inward, (-6.5, 0.5), (23.2, 0.5), cap_via]),
+        (F, [cap_via, "core.nrst.cap:1"]),
+    ])
+    ROUTES.append(("NRST", SIGNAL, B, [cap_via, (23.2, -20.0), (DEBUG_RIGHT, -20.0)]))
+
+
+def _indicators() -> None:
+    """Each LED and its resistor on the line of the pin that drives it."""
+    apart = {"91": "92", "92": "91"}
+    for key, pin in (("status", "142"), ("fault", "91"), ("comms", "92")):
+        p = PINS[pin]
+        spread = 0.0
+        if pin in apart:
+            spread = 0.5 if PINS[apart[pin]].centre_along < p.centre_along else -0.5
+        resistor, led = f"core.led.{key}.resistor", f"core.led.{key}.led"
+        PLACEMENT[resistor] = (*p.at(13.6, spread), p.facing())
+        PLACEMENT[led] = (*p.at(16.8, spread * 3), p.facing(towards_package=False))
+        LABELS[resistor] = _label_beside(p)
+        LABELS[led] = _label_beside(p)
+        route = [f"{MCU}:{pin}"]
+        if spread:
+            route += [p.at(12.2), p.at(12.6, spread)]
+        ROUTES.append((f"LED_{key.upper()}", SIGNAL, F, route + [f"{resistor}:1"]))
+        ROUTES.append((f"LED_{key.upper()}_A", SIGNAL, F, [
+            f"{resistor}:2", p.at(15.0, spread), p.at(15.0, spread * 3), f"{led}:2",
+        ]))
+        VIAS.append((f"{led}:1", p.at(18.8, spread * 3), "GND", *VIA, SUPPLY))
+
+
+def _button() -> None:
+    """
+    The button sits clear of the crystals, which fill the package's left side.
+
+    Its leads are through holes, so the bottom-layer track reaches one pole
+    directly, and the pole tied to 3V3 meets that plane through its own holes.
+    """
+    PLACEMENT["core.button.switch"] = (-30.0, 14.0)
+    PLACEMENT["core.button.pulldown"] = (-26.5, 20.5, 0)
+    LABELS["core.button.switch"] = (3.2, -2.4)
+    LABELS["core.button.pulldown"] = (0.0, -1.3)
+    inward = PINS["7"].at(SUPPLY_RING_2)
+    VIAS.append((f"{MCU}:7", inward, "BUTTON", *VIA, STUB))
+    ROUTES.append(("BUTTON", SIGNAL, B, [
+        inward, (0.5, -7.0), (0.5, -11.5), (-12.6, -11.5), (-12.6, 12.0),
+        (-14.0, 16.0), "core.button.switch:2",
+    ]))
+    ROUTES.append(("BUTTON", SIGNAL, F, ["core.button.switch:2", "core.button.pulldown:1"]))
+    VIAS.append(("core.button.pulldown:2", (-25.0, 20.5), "GND", *VIA, SUPPLY))
+
+
+def _boot_and_console() -> None:
+    """BOOT0's pull-down and pad, and the console's pads, beside their pins."""
+    boot = PINS["138"]
+    PLACEMENT["core.boot0.pulldown"] = (*boot.at(15.5), boot.facing())
+    PLACEMENT["tp_boot0"] = boot.at(19.5)
+    LABELS["core.boot0.pulldown"] = _label_beside(boot)
+    LABELS["tp_boot0"] = (-2.6, 0.0)
+    ROUTES.append(("BOOT0", SIGNAL, F, [f"{MCU}:138", "core.boot0.pulldown:1"]))
+    ROUTES.append(("BOOT0", SIGNAL, F, [
+        "tp_boot0:1", (-7.0, -19.5), (-7.0, -15.02), "core.boot0.pulldown:1",
+    ]))
+    VIAS.append(("core.boot0.pulldown:2", boot.at(17.2), "GND", *VIA, SUPPLY))
+
+    # The console's pads follow its pins' order, so the tracks never cross.
+    PLACEMENT["tp_console_tx"] = (22.0, 6.75)
+    PLACEMENT["tp_console_rx"] = (22.0, 4.0)
+    PLACEMENT["tp_gnd"] = (22.0, 9.5)
+    PLACEMENT["tp_3v3"] = (22.0, 12.25)
+    for address in ("tp_console_tx", "tp_console_rx", "tp_gnd", "tp_3v3"):
+        LABELS[address] = (2.6, 0.0)
+    ROUTES.append(("CONSOLE_TX", SIGNAL, F, [f"{MCU}:77", "tp_console_tx:1"]))
+    ROUTES.append(("CONSOLE_RX", SIGNAL, F, [
+        f"{MCU}:78", (19.0, 6.25), (19.0, 4.0), "tp_console_rx:1",
+    ]))
+    VIAS.append(("tp_gnd:1", (23.6, 9.5), "GND", *VIA, SUPPLY))
+    VIAS.append(("tp_3v3:1", (23.6, 12.25), "3V3", *VIA, SUPPLY))
+
 
 
 _supply_vias()

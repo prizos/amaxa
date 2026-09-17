@@ -10,11 +10,13 @@ and a 32.768 kHz crystal, reset and boot, a Tag-Connect debug footprint, three
 LEDs, a button and test pads. 43 parts on four layers, with solid ground on In1
 and 3V3 on In2. It builds, passes ERC and 45 checks, and DRC finds no violations.
 
-**Not everything placed is routed.** The decoupling, the analog supply and both
-crystals are; debug, the LEDs, the button, the test pads, reset and boot are
-placed but not yet wired — 28 connections, counted by DRC because `board.mk` says
-routing is incomplete. The remaining 75 nets are *pending*, each naming the block
-that will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)).
+**All of it is routed**: 157 track segments and 72 vias, and DRC is held to the
+strict gate, so a connection left undrawn fails the build. The three debug
+signals leave the package on three different sides and cross on the bottom
+layer, under the ring of supply vias; NRST leaves inward, because the 8 MHz
+crystal fills the outward side of its pin. The 75 nets still waiting for later
+blocks are *pending*, each naming the block that will connect it (`_MILESTONES`
+in [`cpu1.py`](cpu1.py)).
 
 | | |
 |---|---|
@@ -64,7 +66,8 @@ coordinates ([`layout.py`](layout.py), with helpers in
 - **Each supply pin's capacitor goes outward**, turned so its first pad faces the
   pin, with its ground via beyond. Capacitors on neighbouring pins spread apart.
 
-VDDA's filter and both crystals are placed by hand.
+VDDA's filter, both crystals, debug, the indicators and the button are placed by
+hand, near the pins they serve.
 
 ## What the checks establish
 
@@ -93,7 +96,6 @@ could not be fetched and has not been read.
 
 ## Still to come
 
-- Routing for debug, the LEDs, the button, reset and boot.
 - Silkscreen that clears the crystals and vias — warnings today, not errors.
 - VREF+ and its external 3.0 V reference, with a 9–36 V input and a 100 V-class
   buck.
