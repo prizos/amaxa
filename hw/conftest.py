@@ -322,7 +322,7 @@ def parts(board_dir):
 
 
 def _load(path: Path, name: str):
-    """From source, never a cached `.pyc`: see `tools/pinmap.py`'s `load_source`."""
+    """From source, never a cached `.pyc`: see `tools/mcu_pins.py`'s `load_source`."""
     module = types.ModuleType(name)
     module.__file__ = str(path)
     exec(compile(path.read_text(), str(path), "exec"), module.__dict__)

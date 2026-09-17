@@ -69,10 +69,24 @@ def load_module(path: Path, name: str):
 
 # --- the board's fixed parts -------------------------------------------------
 
-LAYERS = """\t(layers
-\t\t(0 "F.Cu" signal)
-\t\t(2 "B.Cu" signal)
-\t\t(9 "F.Adhes" user "F.Adhesive")
+def copper_layers(board: dict) -> list[str]:
+    """Copper layer names, top to bottom: F.Cu, In1.Cu ... B.Cu."""
+    count = board.get("copper_layers", 2)
+    if count < 2 or count % 2:
+        sys.exit(f"copper_layers must be an even number of at least 2, not {count}")
+    return ["F.Cu"] + [f"In{i}.Cu" for i in range(1, count - 1)] + ["B.Cu"]
+
+
+def layer_id(name: str) -> int:
+    """KiCad 9's numbering: F.Cu 0, B.Cu 2, then In1.Cu 4, In2.Cu 6 and so on."""
+    if name == "F.Cu":
+        return 0
+    if name == "B.Cu":
+        return 2
+    return 2 * int(name[2:-3]) + 2
+
+
+_USER_LAYERS = """\t\t(9 "F.Adhes" user "F.Adhesive")
 \t\t(11 "B.Adhes" user "B.Adhesive")
 \t\t(13 "F.Paste" user)
 \t\t(15 "B.Paste" user)
@@ -89,56 +103,77 @@ LAYERS = """\t(layers
 \t\t(31 "F.CrtYd" user "F.Courtyard")
 \t\t(29 "B.CrtYd" user "B.Courtyard")
 \t\t(35 "F.Fab" user)
-\t\t(33 "B.Fab" user)
-\t)"""
+\t\t(33 "B.Fab" user)"""
+
+
+def layers(board: dict) -> str:
+    """The layer table: the board's copper, then KiCad's fixed user layers."""
+    # Physical order, top to bottom, as KiCad itself writes them. The IDs are
+    # not in that order - B.Cu is 2, In1.Cu 4 - and listing B.Cu second, by ID,
+    # loads as a board with one copper layer fewer than it has.
+    copper = copper_layers(board)
+    rows = "\n".join(f'\t\t({layer_id(name)} "{name}" signal)' for name in copper)
+    return f"\t(layers\n{rows}\n{_USER_LAYERS}\n\t)"
+
+
+def _dielectrics(board: dict) -> list[dict]:
+    """
+    What sits between each pair of copper layers, top to bottom.
+
+    A two-layer board is one core, as it always was. Anything thicker says so in
+    `BOARD["stack"]`: one entry per gap, each with a type (`core` or
+    `prepreg`), a thickness and its dielectric constant, taken from the fab's
+    published stackup rather than from KiCad's defaults.
+    """
+    count = board.get("copper_layers", 2)
+    if count == 2 and "stack" not in board:
+        return [{"type": "core", "thickness": board["core_thickness"], "epsilon_r": 4.5}]
+    stack = board["stack"]
+    if len(stack) != count - 1:
+        sys.exit(f"{count} copper layers need {count - 1} dielectrics in BOARD['stack'], not {len(stack)}")
+    return stack
 
 
 def stackup(board: dict) -> str:
-    """The physical construction: two layers of copper either side of a core."""
-    return f"""\t(setup
-\t\t(stackup
-\t\t\t(layer "F.SilkS"
-\t\t\t\t(type "Top Silk Screen")
-\t\t\t)
-\t\t\t(layer "F.Paste"
-\t\t\t\t(type "Top Solder Paste")
-\t\t\t)
-\t\t\t(layer "F.Mask"
-\t\t\t\t(type "Top Solder Mask")
-\t\t\t\t(color "{board["mask_colour"]}")
-\t\t\t\t(thickness 0.01)
-\t\t\t)
-\t\t\t(layer "F.Cu"
-\t\t\t\t(type "copper")
-\t\t\t\t(thickness {board["copper_thickness"]:g})
-\t\t\t)
-\t\t\t(layer "dielectric 1"
-\t\t\t\t(type "core")
-\t\t\t\t(thickness {board["core_thickness"]:g})
-\t\t\t\t(material "FR4")
-\t\t\t\t(epsilon_r 4.5)
-\t\t\t\t(loss_tangent 0.02)
-\t\t\t)
-\t\t\t(layer "B.Cu"
-\t\t\t\t(type "copper")
-\t\t\t\t(thickness {board["copper_thickness"]:g})
-\t\t\t)
-\t\t\t(layer "B.Mask"
-\t\t\t\t(type "Bottom Solder Mask")
-\t\t\t\t(color "{board["mask_colour"]}")
-\t\t\t\t(thickness 0.01)
-\t\t\t)
-\t\t\t(layer "B.Paste"
-\t\t\t\t(type "Bottom Solder Paste")
-\t\t\t)
-\t\t\t(layer "B.SilkS"
-\t\t\t\t(type "Bottom Silk Screen")
-\t\t\t)
-\t\t\t(copper_finish "{board["finish"]}")
-\t\t)
-\t\t(pad_to_mask_clearance 0)
-\t\t(allow_soldermask_bridges_in_footprints no)
-\t)"""
+    """The physical construction, from the board's own description."""
+    copper = copper_layers(board)
+    outer = board["copper_thickness"]
+    inner = board.get("inner_copper_thickness", outer)
+    rows = [
+        '\t\t\t(layer "F.SilkS"\n\t\t\t\t(type "Top Silk Screen")\n\t\t\t)',
+        '\t\t\t(layer "F.Paste"\n\t\t\t\t(type "Top Solder Paste")\n\t\t\t)',
+        f'\t\t\t(layer "F.Mask"\n\t\t\t\t(type "Top Solder Mask")\n'
+        f'\t\t\t\t(color "{board["mask_colour"]}")\n\t\t\t\t(thickness 0.01)\n\t\t\t)',
+    ]
+    for index, name in enumerate(copper):
+        thickness = outer if name in ("F.Cu", "B.Cu") else inner
+        rows.append(
+            f'\t\t\t(layer "{name}"\n\t\t\t\t(type "copper")\n'
+            f"\t\t\t\t(thickness {thickness:g})\n\t\t\t)"
+        )
+        if index < len(copper) - 1:
+            gap = _dielectrics(board)[index]
+            rows.append(
+                f'\t\t\t(layer "dielectric {index + 1}"\n'
+                f'\t\t\t\t(type "{gap["type"]}")\n'
+                f'\t\t\t\t(thickness {gap["thickness"]:g})\n'
+                f'\t\t\t\t(material "FR4")\n'
+                f'\t\t\t\t(epsilon_r {gap["epsilon_r"]:g})\n'
+                f"\t\t\t\t(loss_tangent 0.02)\n\t\t\t)"
+            )
+    rows += [
+        f'\t\t\t(layer "B.Mask"\n\t\t\t\t(type "Bottom Solder Mask")\n'
+        f'\t\t\t\t(color "{board["mask_colour"]}")\n\t\t\t\t(thickness 0.01)\n\t\t\t)',
+        '\t\t\t(layer "B.Paste"\n\t\t\t\t(type "Bottom Solder Paste")\n\t\t\t)',
+        '\t\t\t(layer "B.SilkS"\n\t\t\t\t(type "Bottom Silk Screen")\n\t\t\t)',
+        f'\t\t\t(copper_finish "{board["finish"]}")',
+    ]
+    return (
+        "\t(setup\n\t\t(stackup\n"
+        + "\n".join(rows)
+        + "\n\t\t)\n\t\t(pad_to_mask_clearance 0)\n"
+        "\t\t(allow_soldermask_bridges_in_footprints no)\n\t)"
+    )
 
 
 # --- footprints --------------------------------------------------------------
@@ -277,7 +312,7 @@ def write(board_dir: Path) -> Path:
         "\t\t(legacy_teardrops no)\n"
         "\t)\n"
         '\t(paper "A4")\n'
-        f"{LAYERS}\n"
+        f"{layers(board_spec)}\n"
         f"{stackup(board_spec)}\n"
         '\t(net 0 "")\n'
         f"{nets}\n"

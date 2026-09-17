@@ -16,7 +16,7 @@ pin header, so the board and the firmware cannot disagree about a pin without
 one of them failing to build or a check failing. The checks themselves live in
 the board's `checks/test_pinmap.py` and call the functions here.
 
-    python3 tools/pinmap.py cpu1            # regenerate the firmware header
+    python3 tools/mcu_pins.py cpu1            # regenerate the firmware header
 """
 
 import re
@@ -242,7 +242,7 @@ def render_header(board: str, module, silicon: Silicon) -> str:
         "/*",
         f" * {board} pin map for the {silicon.part} ({silicon.package}).",
         " *",
-        f" * GENERATED from hw/{board}/pinmap.py by hw/tools/pinmap.py. Do not edit:",
+        f" * GENERATED from hw/{board}/pinmap.py by hw/tools/mcu_pins.py. Do not edit:",
         " * a check fails if this file differs from what the pin map generates.",
         " * Regenerate with `make -C hw pins-write BOARD=" + board + "`.",
         " */",

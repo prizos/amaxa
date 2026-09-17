@@ -17,6 +17,9 @@ SKiDL. It is only ever imported by a board's design source.
     values   "address.parameter" -> [low, high], in SI units. Design intent that
              belongs to no part uses a path whose owner is not a part address.
     nets     net name -> [[address, pad], ...]
+    no_connect  [[address, pad], ...] left unconnected on purpose, by `NC`
+    pending  net name -> why its other end is not drawn yet. Present only on a
+             board still being designed; see `run()`.
 """
 
 import json
@@ -28,6 +31,7 @@ os.environ.setdefault("KICAD9_SYMBOL_DIR", "/usr/share/kicad/symbols")
 import skidl  # noqa: E402
 from skidl import ERC, KICAD9, Part, generate_netlist, set_default_tool  # noqa: E402
 from skidl.logger import erc_logger  # noqa: E402
+from skidl.net import NCNet  # noqa: E402
 
 set_default_tool(KICAD9)
 
@@ -73,7 +77,12 @@ def part(spec, address: str, ref: str) -> Part:
     return made
 
 
-def design(circuit, board: str, intent: dict[str, tuple[float, float]]) -> dict:
+def design(
+    circuit,
+    board: str,
+    intent: dict[str, tuple[float, float]],
+    pending: dict[str, str] | None = None,
+) -> dict:
     """The circuit as data: what each part is, what it does, and what joins it."""
     components = {}
     values = dict(intent)
@@ -94,6 +103,11 @@ def design(circuit, board: str, intent: dict[str, tuple[float, float]]) -> dict:
 
     nets = {}
     for net in circuit.nets:
+        # SKiDL's NC is a net like any other, holding every unconnected pin.
+        # Written as one, it would join all of them on the board and send DRC
+        # looking for copper between pins that must never meet.
+        if isinstance(net, NCNet):
+            continue
         nodes = sorted(
             (pin.part.address, str(pin.num))
             for pin in net.pins
@@ -102,19 +116,43 @@ def design(circuit, board: str, intent: dict[str, tuple[float, float]]) -> dict:
         if nodes:
             nets[net.name] = [list(node) for node in nodes]
 
-    return {
+    no_connect = sorted(
+        [made.address, str(pin.num)]
+        for made in _addresses.values()
+        for pin in made.pins
+        if any(isinstance(net, NCNet) for net in pin.nets)
+    )
+
+    out = {
         "board": board,
         "parts": components,
         "values": {key: list(value) for key, value in sorted(values.items())},
         "nets": dict(sorted(nets.items())),
     }
+    if no_connect:
+        out["no_connect"] = no_connect
+    if pending:
+        out["pending"] = dict(sorted(pending.items()))
+    return out
 
 
-def run(build, board_dir: Path, intent: dict[str, tuple[float, float]]) -> int:
+def run(
+    build,
+    board_dir: Path,
+    intent: dict[str, tuple[float, float]],
+    pending: dict[str, str] | None = None,
+) -> int:
     """
     Build a board's circuit, check it, and write what the pipeline reads.
 
     `build` assembles the circuit and returns any one of its nets.
+
+    `pending` is for a board built one block at a time: nets whose other end
+    belongs to a block not drawn yet, each with the reason. ERC is told to leave
+    exactly those nets alone, and nothing else. They are written into
+    design.json, where a check requires each still to have a single connection
+    — so a waiver cannot outlive the gap it covers — and a finished board to
+    have none.
 
     Warnings fail the build as well as errors. SKiDL calls an unconnected passive
     pin a warning, which is precisely the mistake worth catching. A warning that
@@ -127,15 +165,25 @@ def run(build, board_dir: Path, intent: dict[str, tuple[float, float]]) -> int:
     out.mkdir(exist_ok=True)
 
     circuit = build().circuit
+    by_name = {net.name: net for net in circuit.nets}
+    unknown = sorted(set(pending or {}) - set(by_name))
+    if unknown:
+        print(f"pending names nets the circuit does not have: {unknown}")
+        return 1
+    for name in pending or {}:
+        by_name[name].do_erc = False
     ERC()
     errors = erc_logger.error.count
     warnings = erc_logger.warning.count
     generate_netlist(file_=str(out / f"{board}.net"))
 
-    data = design(circuit, board, intent)
+    data = design(circuit, board, intent, pending)
     (out / "design.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
-    print(f"{len(data['parts'])} parts, {len(data['nets'])} nets, {len(data['values'])} values")
+    print(
+        f"{len(data['parts'])} parts, {len(data['nets'])} nets, {len(data['values'])} values"
+        + (f", {len(pending)} nets pending" if pending else "")
+    )
     if errors or warnings:
         print(f"\nERC: {errors} errors, {warnings} warnings. Both fail the build.")
         return 1

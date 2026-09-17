@@ -1,6 +1,16 @@
 (version 1)
 
-# PCBWay manufacturing limits, 2-layer, 1 oz copper.
+# PCBWay's standard manufacturing limits, for 2- and 4-layer boards.
+#
+# Source: pcbway.com/capabilities.html, read 2026-09-17. Its standard limits are
+# track and spacing 0.1 mm, minimum drill 0.15 mm, annular ring 0.15 mm, and they
+# are not stated separately for multilayer boards, so one file serves both. Not
+# published at the standard tier, and therefore not checked here: inner-layer
+# copper-to-hole clearance and hole-to-hole spacing. The values below for board
+# edge and hole-to-hole predate that reading and have no recorded source.
+#
+# The 4-layer stackup itself is PCBWay's published "regular" build, recorded in
+# each board's layout.py: pcbway.com/multi-layer-laminated-structure.html.
 #
 # These are the fabricator's floor, not a design target. A board that only just
 # clears them is one the fab can make, not one that will come back reliably —

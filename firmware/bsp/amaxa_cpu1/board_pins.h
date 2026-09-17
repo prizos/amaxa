@@ -1,7 +1,7 @@
 /*
  * cpu1 pin map for the STM32H743ZITx (LQFP144).
  *
- * GENERATED from hw/cpu1/pinmap.py by hw/tools/pinmap.py. Do not edit:
+ * GENERATED from hw/cpu1/pinmap.py by hw/tools/mcu_pins.py. Do not edit:
  * a check fails if this file differs from what the pin map generates.
  * Regenerate with `make -C hw pins-write BOARD=cpu1`.
  */

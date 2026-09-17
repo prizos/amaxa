@@ -26,10 +26,11 @@ __pycache__/
 
 # SKiDL writes an ERC report and a log beside wherever it is run
 *.erc
-skidl_*.log
-*/led12.log
 *.log
 
 # SKiDL schematic output, attempted and rejected; see README.md
 *.kicad_sch
 *-erc.rpt
+# SKiDL's cached copy of the symbols a board used. tools/skidl_design.py turns
+# off SKiDL's fallback to it, so nothing reads it; it is rewritten on every build.
+*/*_sklib.py

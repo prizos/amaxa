@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Apply a board's placement and routing to the KiCad file atopile generated.
+Apply a board's placement and routing to the KiCad file tools/board.py wrote.
 
-atopile decides what is connected to what; it drops every footprint on the
-canvas in a grid and leaves the board unrouted. This takes a placement and a
-set of routes written as data — see hw/led12/layout.py — and writes them in.
+The board writer decides what is connected to what; it leaves every footprint at
+the origin and the board unrouted. This takes a placement and a set of routes
+written as data — see hw/led12/layout.py — and writes them in.
 
 Two properties make it safe to run on every build:
 
@@ -14,9 +14,13 @@ Two properties make it safe to run on every build:
   - It is deterministic. Object UUIDs are derived from what the object is, not
     from randomness, so a rebuild that changes nothing produces no diff.
 
-Routes name pads symbolically, as `power.q_rpp:3` — the atopile address and the
+Routes name pads symbolically, as `power.q_rpp:3` — the part's address and the
 pad number — so moving a part in the placement table moves the tracks that
 reach it. Literal coordinates are for the corners in between.
+
+Every layer a route, via or plane names must exist on the board. A route on
+In1.Cu of a two-layer board is refused, not written into a layer KiCad will
+quietly drop.
 
     python3 tools/layout.py led12
 """
@@ -75,9 +79,16 @@ class Board:
             name: int(num)
             for num, name in re.findall(r'\(net (\d+) "([^"]*)"\)', self.text)
         }
+        table = re.search(r"\(layers\n([\s\S]*?)\n\t\)", self.text)
+        self.copper = re.findall(r'\(\d+ "([^"]+)" signal\)', table.group(1)) if table else []
+
+    def require_layer(self, layer: str, what: str) -> None:
+        """Refuse copper on a layer this board does not have."""
+        if layer not in self.copper:
+            sys.exit(f"{what} is on {layer}, but this board's copper layers are {self.copper}")
 
     def footprints(self) -> dict[str, dict]:
-        """atopile address -> {span, origin, rotation, pads}."""
+        """part address -> {span, origin, rotation, pads}."""
         out = {}
         for start, end in sexp_blocks(self.text, "footprint"):
             block = self.text[start:end]
@@ -133,7 +144,7 @@ def label(text: str, footprints: dict, placement: dict, labels: dict, font: dict
     """
     Put each reference designator where it can be read.
 
-    atopile drops them on top of the part they name, which puts silkscreen over
+    A stock footprint puts them on top of the part they name, which puts silkscreen over
     pads — the fab clips it away and the board comes back with unlabelled
     parts. Offsets here are in board millimetres and are converted into the
     footprint's own frame, so a part that is turned around keeps its label
@@ -230,6 +241,7 @@ def route(board: Board, footprints: dict, placement: dict, routes: list) -> list
     for net_name, width, layer, points in routes:
         if net_name not in board.nets:
             sys.exit(f"route names an unknown net: {net_name}")
+        board.require_layer(layer, f"a {net_name} route")
         net = board.nets[net_name]
         resolved = [resolve(p, footprints, placement) for p in points]
         for (x1, y1), (x2, y2) in zip(resolved, resolved[1:]):
@@ -254,16 +266,23 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
 
     Surface-mount pads live only on the top layer, so every one of them that
     belongs to the plane needs its own way down.
+
+    Each entry is `(pad, (x, y), net, via size, drill)`, with an optional sixth
+    field for the stub's width. It defaults to 0.5 mm, which suits an 0805 pad
+    and would short a 0.5 mm-pitch QFP pad to both of its neighbours.
     """
     objects = []
-    for pad_ref, (via_x, via_y), net_name, size, drill in vias:
+    top, bottom = board.copper[0], board.copper[-1]
+    for entry in vias:
+        pad_ref, (via_x, via_y), net_name, size, drill, *rest = entry
+        stub = rest[0] if rest else 0.5
         net = board.nets[net_name]
         pad_x, pad_y = absolute_pad(footprints, placement, pad_ref)
         objects.append(
             f'\t(segment\n'
             f'\t\t(start {pad_x:g} {pad_y:g})\n'
             f'\t\t(end {via_x:g} {via_y:g})\n'
-            f'\t\t(width 0.5)\n'
+            f'\t\t(width {stub:g})\n'
             f'\t\t(layer "F.Cu")\n'
             f'\t\t(net {net})\n'
             f'\t\t(uuid "{stable_uuid(TAG, "stub", pad_ref, via_x, via_y)}")\n'
@@ -274,7 +293,7 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
             f'\t\t(at {via_x:g} {via_y:g})\n'
             f'\t\t(size {size:g})\n'
             f'\t\t(drill {drill:g})\n'
-            f'\t\t(layers "F.Cu" "B.Cu")\n'
+            f'\t\t(layers "{top}" "{bottom}")\n'
             f'\t\t(net {net})\n'
             f'\t\t(uuid "{stable_uuid(TAG, "via", via_x, via_y)}")\n'
             f'\t)'
@@ -337,6 +356,7 @@ def board_outline(spec: dict) -> list[str]:
 
 def ground_plane(board: Board, plane: dict) -> str:
     """A filled copper pour, so the return path is a plane and not a track."""
+    board.require_layer(plane["layer"], f'the {plane["net"]} plane')
     net = board.nets[plane["net"]]
     corners = "\n".join(f"\t\t\t\t\t(xy {x:g} {y:g})" for x, y in plane["outline"])
     return (
@@ -398,7 +418,8 @@ def main() -> int:
     objects = board_outline(description.BOARD)
     objects += route(board, footprints, description.PLACEMENT, description.ROUTES)
     objects += stitch(board, footprints, description.PLACEMENT, description.VIAS)
-    objects.append(ground_plane(board, description.PLANE))
+    planes = getattr(description, "PLANES", None) or [description.PLANE]
+    objects += [ground_plane(board, plane) for plane in planes]
 
     closing = board.text.rstrip().rfind(")")
     board.text = (
@@ -411,7 +432,8 @@ def main() -> int:
     edges = sum(1 for o in objects if o.lstrip().startswith(("(gr_line", "(gr_arc")))
     print(
         f"placed {len(description.PLACEMENT)} parts, "
-        f"{tracks} track segments, {vias} vias, {edges} outline segments, 1 plane"
+        f"{tracks} track segments, {vias} vias, {edges} outline segments, "
+        f"{len(planes)} plane{'s' if len(planes) != 1 else ''}"
     )
     return 0
 

@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-from pinmap import Pin  # noqa: E402
+from mcu_pins import Pin  # noqa: E402
 
 PART = "STM32H743ZITx"
 SYMBOL = "MCU_ST_STM32H7:STM32H743ZITx"

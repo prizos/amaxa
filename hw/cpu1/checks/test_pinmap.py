@@ -18,7 +18,7 @@ import pytest
 HW_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HW_DIR / "tools"))
 
-import pinmap as pm  # noqa: E402
+import mcu_pins as pm  # noqa: E402
 from stm32 import Silicon  # noqa: E402
 
 

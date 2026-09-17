@@ -31,7 +31,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board: [led12]
+        # cpu1 is being built block by block: its board.mk declares routing
+        # incomplete and no simulation decks, and the Makefile holds it to that.
+        board: [led12, cpu1]
     env:
       BOARD: ${{ matrix.board }}
     defaults:

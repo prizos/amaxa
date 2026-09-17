@@ -1,0 +1,32 @@
+# cpu1 design rules: intent, not manufacturability.
+#
+# Concatenated after hw/fab/pcbway.kicad_dru into the board's own .kicad_dru.
+# Net names are matched with KiCad's * wildcard, grouped by what the nets carry;
+# a rule matching every net would say nothing, and a check rejects one.
+
+# The logic rail and ground carry the MCU's whole supply current.
+(rule "supply rails"
+	(condition "A.NetName == '3V3' || A.NetName == 'GND'")
+	(constraint track_width (min 0.2mm))
+	(severity error))
+
+# The MCU's own supply and reference pins: VDDA, VREF+ and the core regulator's
+# capacitor pins, short and never necked down to a signal width.
+(rule "mcu supply pins"
+	(condition "A.NetName == 'VDDA' || A.NetName == 'VREF+' || A.NetName == 'VCAP*'")
+	(constraint track_width (min 0.2mm))
+	(severity error))
+
+# Everything the MCU drives or reads: microamps to milliamps, so the width is
+# for etch tolerance, and 0.15 mm leaves room to escape a 0.5 mm-pitch package.
+(rule "mcu signals"
+	(condition "A.NetName == 'SW*' || A.NetName == 'HSE_*' || A.NetName == 'LSE_*' || A.NetName == 'BOOT0' || A.NetName == 'NRST' || A.NetName == 'CONSOLE_*' || A.NetName == 'LED_*' || A.NetName == 'BUTTON' || A.NetName == 'PWM*' || A.NetName == 'TRIP*' || A.NetName == 'FAULT*' || A.NetName == 'GATE_ENABLE' || A.NetName == 'RELAY_*' || A.NetName == 'STO*' || A.NetName == 'ID_STRAP*' || A.NetName == 'DAC_*' || A.NetName == 'ENC_*' || A.NetName == 'HALL_*' || A.NetName == 'USB_*' || A.NetName == 'CAN_*' || A.NetName == 'ETH_*' || A.NetName == 'RS485_*'")
+	(constraint track_width (min 0.15mm))
+	(severity error))
+
+# Analog inputs: the same width, named apart because their rules will diverge
+# once the input networks exist.
+(rule "analog inputs"
+	(condition "A.NetName == 'IA' || A.NetName == 'IB' || A.NetName == 'IC' || A.NetName == 'VDC' || A.NetName == 'VA' || A.NetName == 'VB' || A.NetName == 'VC' || A.NetName == 'AUX_FAST' || A.NetName == 'SLOW*' || A.NetName == 'BOARD_ID*' || A.NetName == 'OV_COMP'")
+	(constraint track_width (min 0.15mm))
+	(severity error))

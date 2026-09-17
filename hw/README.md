@@ -58,7 +58,31 @@ unread and why, and which pin mappings still need a person.
 `tools/skidl_design.py`'s `part()` and finished with its `run()`), `parts.py`
 (a list of `tools/partspec.py`'s `PartSpec`), `layout.py`, `rules.kicad_dru`,
 `board.kicad_pro`, `parts/<LIB>/` and `checks/config.py`. Then `BOARD=<board>`
-on every `make` target, and the board's name in the CI matrix.
+on every `make` target, and the board's name in the CI matrix. A board with an
+MCU adds `pinmap.py` and runs `make pins`.
+
+**A board is built one block at a time**, and says so rather than having its
+gates loosened:
+
+- `run()` takes `pending` — nets whose other end belongs to a block not drawn
+  yet, each with the block that will connect it. ERC leaves exactly those alone.
+  A check requires each to still have a single connection, so a waiver cannot
+  outlive its gap, and a board whose `checks/config.py` says `COMPLETE = True`
+  may have none.
+- Pins unused on purpose are marked `NC` in the design source, and recorded as
+  `no_connect`; any other pad without a net still fails.
+- `<board>/board.mk` may say `ROUTING := incomplete`, which lets DRC pass with
+  connections not yet routed — counted and printed — but still fails on any
+  violation. `SIM := none` says a board has no simulation decks.
+
+**Board layers** come from `layout.py`'s `BOARD`: `copper_layers`, and for more
+than two, a `stack` of the dielectrics between them, taken from the fab's
+published stackup. Every route, via and plane is refused on a layer the board
+does not have. Gerbers are exported for whatever copper the board has.
+
+**Design rules name nets with KiCad's `*` wildcard** — `'ETH_*'` — which KiCad
+matches on the whole name. A check requires every net to be matched by some
+rule, and refuses a pattern of `*` alone, which would choose nothing.
 
 **Two rules the router will not bend:** a track may not cross a pad of another
 net, which is why the power rails run on their own line above or below the parts

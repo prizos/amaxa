@@ -74,19 +74,21 @@ def test_designators_are_unique(footprints):
     assert not duplicates, f"Designators used more than once: {duplicates}"
 
 
-def test_no_unconnected_pads(footprints):
+def test_no_unconnected_pads(footprints, design):
     """
-    Every pad on every placed part belongs to a net.
+    Every pad on every placed part belongs to a net, or is declared unused.
 
     A pad with no net is a part whose connection was never drawn. It is not a
     DRC violation — DRC sees an unconnected pad as intentional — so it has to
-    be caught here.
+    be caught here. The only exception is a pin the design source marked `NC`,
+    which `design.json` records as `no_connect`: unused on purpose, and said so.
     """
+    declared = {tuple(node) for node in design.get("no_connect", [])}
     floating = [
         (fp["designator"], pad)
         for fp in footprints
         for pad, net in fp["pads"].items()
-        if not net
+        if not net and (fp["properties"].get("address"), pad) not in declared
     ]
     assert not floating, "Pads with no net:\n" + "\n".join(
         f"  {ref} pad {pad}" for ref, pad in floating
@@ -103,12 +105,63 @@ def test_every_net_has_a_track_width_rule(design, board_dir):
     renamed during the port and the rules file was not part of the rename.
 
     DRC cannot catch this. A rule that matches nothing passes.
+
+    Names may use KiCad's `*` wildcard, which matches the way KiCad does — on
+    the whole name. A pattern that is only `*` would cover every net and decide
+    nothing, so it is refused.
     """
+    import fnmatch
+    import re
+
     rules = (board_dir / "rules.kicad_dru").read_text()
-    unruled = sorted(net for net in design["nets"] if f"'{net}'" not in rules)
+    patterns = set(re.findall(r"A\.NetName == '([^']+)'", rules))
+    assert "*" not in patterns, (
+        f"{board_dir.name}/rules.kicad_dru has a rule matching every net, which "
+        "chooses no width for any of them"
+    )
+    unruled = sorted(
+        net
+        for net in design["nets"]
+        if not any(fnmatch.fnmatchcase(net, pattern) for pattern in patterns)
+    )
     assert not unruled, (
         "Nets with no track-width rule, so they get the fab minimum:\n"
         + "\n".join(f"  {net}" for net in unruled)
         + f"\nAdd them to {board_dir.name}/rules.kicad_dru, in the rule whose "
         "reasoning applies to them."
+    )
+
+
+def test_pending_nets_are_still_pending(design, board_config, board_dir):
+    """
+    A board still being drawn may leave nets half-connected, and only that.
+
+    Each pending net is exempt from ERC because its other end belongs to a block
+    not drawn yet. The exemption is only honest while that is true, so each must
+    still have exactly one connection: once the block lands, the waiver has to
+    go. And a board that declares itself complete may have none at all, nor
+    declare its routing incomplete.
+    """
+    pending = design.get("pending", {})
+    nets = design["nets"]
+    board_mk = board_dir / "board.mk"
+    routing_incomplete = board_mk.is_file() and "ROUTING := incomplete" in board_mk.read_text()
+
+    if board_config.COMPLETE:
+        assert not pending, (
+            f"{board_dir.name} declares itself complete but has pending nets: {sorted(pending)}"
+        )
+        assert not routing_incomplete, (
+            f"{board_dir.name} declares itself complete but board.mk still says ROUTING := incomplete"
+        )
+        return
+
+    outdated = [
+        f"  {name}: {len(nets.get(name, []))} connections — {why}"
+        for name, why in sorted(pending.items())
+        if len(nets.get(name, [])) != 1
+    ]
+    assert not outdated, (
+        "Pending nets that are no longer single-ended. Remove them from the board's "
+        "pending list; the block they waited for has landed:\n" + "\n".join(outdated)
     )

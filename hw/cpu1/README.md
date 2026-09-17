@@ -1,8 +1,22 @@
 # cpu1 — the control board
 
 The STM32H743ZIT6 board that generates every hard real-time signal, and is later
-soldered onto one analog power board. **In progress:** so far only its pin map
-exists.
+soldered onto one analog power board. **In progress,** and built one block at a
+time.
+
+What exists: the pin map; the MCU itself on a 4-layer board, with every used pin
+on its own named net, every unused pin marked no-connect, and its ground pads
+stitched to a solid ground plane on In1. It builds, passes ERC and every check,
+and DRC finds no violations — with the 3.3 V rail's pins not yet routed, because
+nothing supplies them until the power block lands. 94 nets are *pending*, each
+naming the block that will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)).
+
+| | |
+|---|---|
+| Stackup | PCBWay's published regular 4-layer build: 1 oz copper throughout, 7628 prepreg, 1.03 mm core, 1.51 mm finished |
+| Layers | F.Cu signal, In1.Cu solid ground, In2.Cu supply islands (to come), B.Cu signal |
+| Size | 100 × 80 mm, provisional until the blocks and power-board headers are placed |
+| MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at JLCPCB** on 2026-09-17; see [its review note](parts/LQFP144/LQFP144.md) |
 
 ## The pin map
 
@@ -33,7 +47,8 @@ NUCLEO has it costs COMP2's external inputs.
 
 ## Still to come
 
-A 4-layer stackup and the router extensions an LQFP-144 needs; the MCU core
+The router extensions a dense board needs — routes that change layer and
+generated fan-out and decoupling; the MCU core
 (crystals, reset, Tag-Connect, VDDA and VREF+); a 9–36 V input with a 100 V-class
 buck; the hardware trip chain (external comparators, a latch, and PWM buffers
 that are off until firmware deliberately enables them); the ADC input networks;

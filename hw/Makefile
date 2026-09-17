@@ -56,6 +56,14 @@ PY     ?= $(VENV)/bin/python
 # uv keeps its downloaded Pythons here, so nothing touches the system Python.
 export UV_PYTHON_INSTALL_DIR := $(abspath $(TOOLS_DIR)/pythons)
 
+# What a board declares about itself, if it needs to. `ROUTING := incomplete`
+# lets DRC pass on a board still being drawn, as long as nothing drawn is wrong;
+# `SIM := none` says the board has no simulation decks. Both have to be said,
+# in the board's own directory, rather than inferred from what is missing.
+ROUTING := complete
+SIM     := decks
+-include $(BOARD)/board.mk
+
 LAYOUT_DIR := $(BOARD)/elec/layout/default
 DRU        := $(LAYOUT_DIR)/default.kicad_dru
 
@@ -192,11 +200,23 @@ reproducible: layout ## Build twice and check both runs describe the same board
 
 # KiCad's own rule checker: shorts, clearances, the fab limits and the board's
 # own rules. Exit code 5 means violations were found.
+#
+# A board whose routing is declared incomplete still fails on any violation:
+# a short, a clearance, a hole too small. What it may have is connections not
+# yet drawn, and those are counted, not hidden.
 drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 	@test -s $(DRU) || { echo "ERROR: $(DRU) is missing or empty, so DRC would" >&2; \
 		echo "       run against no custom rules and pass regardless." >&2; exit 1; }
+ifeq ($(ROUTING),complete)
 	@$(KICAD_CLI) pcb drc --format json --severity-error --exit-code-violations \
 		--output $(LAYOUT_DIR)/drc.json $(LAYOUT_DIR)/default.kicad_pcb
+else ifeq ($(ROUTING),incomplete)
+	@$(KICAD_CLI) pcb drc --format json --severity-error \
+		--output $(LAYOUT_DIR)/drc.json $(LAYOUT_DIR)/default.kicad_pcb >/dev/null
+	@python3 tools/drc_report.py $(LAYOUT_DIR)/drc.json
+else
+	$(error ROUTING must be complete or incomplete, not $(ROUTING))
+endif
 
 # The MCU pin map against ST's data, and the firmware header generated from it.
 # No build needed, so it runs on its own and before anything else is drawn.
@@ -204,7 +224,7 @@ pins: $(PY) ## Check the board's MCU pin map against the silicon
 	@$(PY) -m pytest $(BOARD)/checks/test_pinmap.py -q --import-mode=importlib --board $(BOARD)
 
 pins-write: ## Regenerate the firmware pin header from the board's pin map
-	@python3 tools/pinmap.py $(BOARD)
+	@python3 tools/mcu_pins.py $(BOARD)
 
 # Depends on build so the checks can never pass against stale output. Two
 # directories: hw/checks/ applies to every board, $(BOARD)/checks/ to this one.
@@ -220,7 +240,11 @@ check: layout ## Run the common and board-specific design checks
 # build leaves the board generated but unplaced and unrouted, which is a
 # confusing thing to find in the tree afterwards.
 sim: layout ## Run the ngspice decks and check their measurements
+ifeq ($(SIM),none)
+	@echo "$(BOARD) declares no simulation decks (SIM := none in $(BOARD)/board.mk)"
+else
 	@python3 tools/simulate.py $(BOARD)
+endif
 
 OUT := out/$(BOARD)
 
@@ -239,8 +263,12 @@ outputs: drc ## Renders, 3D model, gerbers and drill files into out/
 		--output $(OUT)/$(BOARD).step $(LAYOUT_DIR)/default.kicad_pcb
 	@$(KICAD_CLI) pcb export pos --format csv --units mm --side both \
 		--output $(OUT)/positions.csv $(LAYOUT_DIR)/default.kicad_pcb
+	@# Every copper layer the board has, read from the board rather than listed:
+	@# a fixed F.Cu,B.Cu list silently leaves a 4-layer board's planes out of
+	@# the package the fab builds from.
 	@$(KICAD_CLI) pcb export gerbers --output $(OUT)/fab/ \
-		--layers F.Cu,B.Cu,F.Silkscreen,B.Silkscreen,F.Mask,B.Mask,F.Paste,B.Paste,Edge.Cuts \
+		--layers "$$(grep -oE '"(F|B|In[0-9]+)\.Cu" signal' $(LAYOUT_DIR)/default.kicad_pcb \
+			| cut -d'"' -f2 | paste -sd,),F.Silkscreen,B.Silkscreen,F.Mask,B.Mask,F.Paste,B.Paste,Edge.Cuts" \
 		$(LAYOUT_DIR)/default.kicad_pcb
 	@$(KICAD_CLI) pcb export drill --format excellon --output $(OUT)/fab/ \
 		$(LAYOUT_DIR)/default.kicad_pcb
