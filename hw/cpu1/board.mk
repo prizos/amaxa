@@ -7,4 +7,4 @@
 # full route, with the whole board in view, and this goes back to `complete`
 # there. Until then `make drc` reports how many connections are outstanding.
 ROUTING := incomplete
-SIM     := none
+SIM     := decks

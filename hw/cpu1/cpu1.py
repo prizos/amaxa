@@ -100,6 +100,25 @@ INTENT: dict[str, tuple[float, float]] = {
     # chosen here manage, and saying so is what makes the DAC's reference
     # choice a decision rather than an oversight.
     "trip.threshold_tolerance": (0.0, 0.10),
+    # Where each kind of channel rolls off. The fast ones carry what the control
+    # loop reads every PWM cycle: low enough to stop the switching node aliasing
+    # into the measurement, high enough that the measurement is of now.
+    "adc.fast_corner": (1.0e6, 2.0e6),
+    "adc.slow_corner": (1.0e3, 20.0e3),
+    # The sampling window firmware will use, and what the measurement is worth.
+    # 8.5 ADC cycles at 36 MHz is the shortest that makes sense for a current
+    # read inside a PWM period; the band's low end is what every settling check
+    # works to.
+    "adc.sampling_time": (236e-9, 458e-9),
+    "adc.resolution_bits": (12.0, 12.0),
+    "adc.settling_error": (0.0, 0.5),
+    # What the power board must drive these pins from: an op-amp output, which
+    # is what a current sensor's output stage is. The filter's corner depends on
+    # this as much as on its own resistor - a sensor with a hundred ohms of
+    # output impedance moves the corner by a decade with nothing on this board
+    # changing - so it is an interface promise rather than an assumption, and
+    # every corner and settling figure here is worked with it included.
+    "header.source_impedance": (0.0, 2.0),
 }
 
 # Which later block connects the other end of each net. Matched in order; a net
@@ -121,7 +140,8 @@ _MILESTONES = [
 _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
     r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d"
-    r"|IA_SENSE|IB_SENSE|IC_SENSE|VDC_SENSE|DAC_S\w+)$"
+    r"|\w+_SENSE|DAC_S\w+"
+    r"|IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$"
 )
 
 
@@ -181,6 +201,7 @@ def build() -> Net:
     safety_chain(v3v3, gnd, nets)
     analog_input(nets["5V"], gnd, nets)
     trip_comparators(v3v3, gnd, nets)
+    adc_inputs(v3v3, gnd, nets)
 
     # Unused I/O is left unconnected on purpose, and said so. Firmware sets these
     # to analog mode, the lowest-leakage state.
@@ -802,6 +823,62 @@ def trip_comparators(v3v3, gnd, nets) -> None:
                 outputs[ordered[position]] += diodes[pad]
             else:
                 diodes[pad] += NC  # noqa: F821
+
+
+def adc_inputs(v3v3, gnd, nets) -> None:
+    """
+    One RC between each signal as it arrives and the ADC pin that measures it.
+
+    Two jobs, and they pull in opposite directions. The filter has to roll off
+    what the converter would otherwise alias, and it has to leave the pin
+    settling fast enough to be sampled in a few hundred nanoseconds. A big
+    capacitor does the first and ruins the second.
+
+    What resolves it is that the capacitor is a *reservoir*, not a load: the
+    converter's own 4 pF steals a little charge from it at each sample and the
+    series resistor puts it back long before the window closes. ST's Equation 1
+    assumes no such reservoir and would reject every value here;
+    `checks/test_adc.py` works the settling out from the charge sharing
+    instead, and says why in as many words.
+
+    The fast channels are the ones the control loop reads every PWM cycle. The
+    slow ones are temperatures and housekeeping, and get a corner three decades
+    lower because nothing is waiting on them.
+    """
+    fast = ("IA", "IB", "IC", "VDC", "VA", "VB", "VC", "AUX_FAST")
+    slow = ("SLOW1", "SLOW2", "SLOW3", "SLOW4", "BOARD_ID1", "BOARD_ID2")
+
+    resistor_ref, capacitor_ref = 61, 40
+    for name in fast + slow:
+        quick = name in fast
+        series = part(parts.RES_10R_0402 if quick else parts.RES_1K_0402,
+                      f"adc.{name.lower()}.series", f"R{resistor_ref}")
+        shunt = part(parts.CAP_10N_0402 if quick else parts.CAP_100N_0402,
+                     f"adc.{name.lower()}.shunt", f"C{capacitor_ref}")
+        resistor_ref += 1
+        capacitor_ref += 1
+        nets[f"{name}_SENSE"] += series[1]
+        nets[name] += series[2], shunt[1]
+        gnd += shunt[2]
+
+    # The DC link again, into the MCU's own comparator. A second path to the
+    # same fact, taken from the same place the external comparators take it:
+    # ahead of everything, so it is fast, and independent of them so a fault in
+    # one is not a fault in both.
+    series = part(parts.RES_10R_0402, "adc.ov_comp.series", f"R{resistor_ref}")
+    shunt = part(parts.CAP_10N_0402, "adc.ov_comp.shunt", f"C{capacitor_ref}")
+    resistor_ref += 1
+    capacitor_ref += 1
+    nets["VDC_SENSE"] += series[1]
+    nets["OV_COMP"] += series[2], shunt[1]
+    gnd += shunt[2]
+
+    # The MCU's own DAC output, on a pad. Reserved for resolver excitation,
+    # which is a decision this board has not taken; until it does, a series
+    # resistor and somewhere to put a probe.
+    series = part(parts.RES_1K_0402, "adc.dac_test.series", f"R{resistor_ref}")
+    nets["DAC_TEST"] += series[1]
+    Net("DAC_TEST_OUT").connect(series[2], part(parts.TEST_PAD, "tp_dac_test", "TP11")[1])
 
 
 def pending(names: list[str]) -> dict[str, str]:

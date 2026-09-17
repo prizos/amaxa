@@ -868,6 +868,39 @@ def _trip() -> None:
         LABELS[address] = (0.0, -1.6)
 
 
+# --- the ADC input networks --------------------------------------------------
+#
+# Fifteen identical RC pairs in a grid above the package, between the connector
+# the signals arrive on and the pins that measure them. Nothing here is
+# hand-placed: the order is the order `cpu1.py` builds them in, which is the
+# order the pin map lists the channels.
+
+ADC_GRID = (-24.0, -37.0)        # first cell
+ADC_STEP = (5.0, 2.4)            # between columns, between rows
+ADC_ROWS = 5
+
+
+def _adc_inputs() -> None:
+    cells = sorted(
+        address.rsplit(".", 1)[0]
+        for address in DESIGN["parts"]
+        if address.startswith("adc.") and address.endswith(".shunt")
+    )
+    for index, cell in enumerate(cells):
+        column, row = divmod(index, ADC_ROWS)
+        x = round(ADC_GRID[0] + ADC_STEP[0] * column, 4)
+        y = round(ADC_GRID[1] + ADC_STEP[1] * row, 4)
+        PLACEMENT[f"{cell}.series"] = (x, y, 0)
+        PLACEMENT[f"{cell}.shunt"] = (round(x + 2.2, 4), y, 90)
+        LABELS[f"{cell}.series"] = (0.0, -1.3)
+        LABELS[f"{cell}.shunt"] = (-1.6, 0.0)
+
+    PLACEMENT["adc.dac_test.series"] = (-8.0, -31.0, 0)
+    PLACEMENT["tp_dac_test"] = (-8.0, -34.0)
+    LABELS["adc.dac_test.series"] = (0.0, -1.3)
+    LABELS["tp_dac_test"] = (0.0, -2.0)
+
+
 _supply_vias()
 _decoupling()
 _analog_supply()
@@ -876,3 +909,4 @@ _placed()
 _power()
 _safety()
 _trip()
+_adc_inputs()

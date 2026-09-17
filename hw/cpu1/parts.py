@@ -34,6 +34,9 @@ MCU_H743 = PartSpec(
         "lse_gm_crit_max": exact(2.7e-6),       # LSEDRV = 11, high drive
         "io_current_max": exact(20e-3),
         "nrst_capacitor": exact(100e-9),
+        # Table 84: what the converter presents at an analog pin.
+        "adc_sample_capacitance": exact(4e-12),
+        "adc_sample_resistance": exact(50.0),
     },
 )
 
@@ -532,6 +535,19 @@ HEADER_2X15 = PartSpec(
     footprint="HDR2X15:PinHeader_2x15_P2.54mm_Vertical", prefix="J",
     manufacturer="HCTL", mpn="PZ254-2-15-Z-8.5", lcsc="C3012255", value="analog",
     params={"current_rating": exact(3.0)},
+)
+
+# Series into every fast ADC channel. Ten ohms and not a hundred: with the
+# capacitor doing the filtering, the resistor's only other job is putting back
+# what the converter's sampling capacitor takes, and it has 236 ns to do it.
+RES_10R_0402 = PartSpec(
+    **_R0402, mpn="0402WGF100JTCE", lcsc="C25077", value="10R",
+    params={"resistance": pm(10, 0.01), "max_power": exact(0.0625)},
+)
+
+CAP_10N_0402 = PartSpec(
+    **_C0402, manufacturer="YAGEO", mpn="CC0402KRX7R9BB103", lcsc="C60133", value="10nF",
+    params={"capacitance": pm(10e-9, 0.10), "max_voltage": exact(50.0)},
 )
 
 RES_4K7_0402 = PartSpec(

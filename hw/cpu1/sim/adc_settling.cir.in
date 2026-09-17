@@ -1,0 +1,43 @@
+* cpu1: what one conversion costs the node it is taken from.
+*
+* The converter is a switch onto a 4 pF sampling capacitor through 50 ohms of
+* its own - ST's Table 84. When the switch closes, that capacitor takes its
+* share of the charge on the 10 nF at the pin, and the series resistor has one
+* sampling window to put it back.
+*
+* `checks/test_adc.py` works this out as charge sharing followed by a single
+* exponential, and deliberately does not use ST's Equation 1 - which asks a
+* different question and rejects every value that works here. This deck is the
+* check on that reasoning: the switch and the converter's own resistance are in
+* the circuit rather than assumed away.
+*
+* The worst case throughout: the smallest capacitor, the largest source
+* impedance, the largest sampling capacitor, and the shortest window.
+
+Vin in 0 DC 1
+Rsource in src @header.source_impedance:max@
+Rseries src pin @adc.ia.series.resistance:max@
+Cshunt pin 0 @adc.ia.shunt.capacitance:min@
+
+.model sampler SW(vt=0.5 vh=0 ron=1m roff=1g)
+Vgate gate 0 PWL(0 0 0.1n 1)
+Ssample pin adc gate 0 sampler
+Radc adc hold @mcu.adc_sample_resistance:nom@
+Cadc hold 0 @mcu.adc_sample_capacitance:max@
+
+* The previous conversion left the sampling capacitor at zero and this one is at
+* full scale, which is the most charge the sharing can move.
+.ic v(pin)=1 v(hold)=0
+
+.tran 0.1n @adc.sampling_time:min@ uic
+
+* What the converter is left holding when the window closes, and the same thing
+* as an error against full scale in LSB.
+.meas tran v_held FIND v(hold) AT=@adc.sampling_time:min@
+.meas tran settling_error_lsb PARAM='(1-v_held)*4096'
+
+* The node immediately after the sharing, before the resistor has put anything
+* back. This is the number the analytic check starts from.
+.meas tran v_pin_after_sharing FIND v(pin) AT=1n
+
+.end
