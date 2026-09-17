@@ -1,6 +1,10 @@
 """
 Shared fixtures for the board design checks.
 
+Two directories of checks run against a board: `hw/checks/`, which apply to
+every board, and `hw/<board>/checks/`, which are that board's own. This file sits
+above both so they share one set of fixtures.
+
 These read what a build produced — `design.json`, the BOM and the KiCad board —
 and assert things about the design. They exist because the design source states
 values and nothing more: anything relating two quantities, or anything about
@@ -18,14 +22,14 @@ from pathlib import Path
 
 import pytest
 
-HW_DIR = Path(__file__).resolve().parent.parent
+HW_DIR = Path(__file__).resolve().parent
 
 
 def pytest_addoption(parser):
     parser.addoption(
         "--board",
-        default="led12",
-        help="Board directory under hw/ to check (default: led12)",
+        required=True,
+        help="Board directory under hw/ to check",
     )
 
 
@@ -125,9 +129,11 @@ def footprints(pcb_text) -> list[dict]:
 
         pads = {}
         for pad_block in _sexp_blocks(block, "pad"):
-            name = re.match(r'\(pad "([^"]*)"', pad_block)
+            name = re.match(r'\(pad "([^"]*)" (\w+)', pad_block)
             net = re.search(r'\(net \d+ "([^"]*)"\)', pad_block)
-            if name:
+            # A non-plated hole has no number and can never carry a net, so it
+            # is not a pad to check for one.
+            if name and name.group(2) != "np_thru_hole" and name.group(1) != "":
                 pads[name.group(1)] = net.group(1) if net else None
 
         out.append(
@@ -184,6 +190,26 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture(scope="session")
 def collected_check_count(pytestconfig) -> int:
     return getattr(pytestconfig, "collected_check_count", 0)
+
+
+@pytest.fixture(scope="session")
+def parameters_read() -> set[tuple[str, str]]:
+    """Every (path, name) the checks have looked up so far. Read it last."""
+    return PARAMETERS_READ
+
+
+@pytest.fixture(scope="session")
+def board_config(board_dir):
+    """
+    The board's own declarations for the common checks: `<board>/checks/config.py`.
+
+    Its expected check count, the parameters it deliberately leaves unread and
+    why, and the pin mappings still waiting on a person.
+    """
+    path = board_dir / "checks" / "config.py"
+    if not path.is_file():
+        pytest.fail(f"no {path}. Every board declares what the common checks need.")
+    return _load(path, f"{board_dir.name}_checks_config")
 
 
 @pytest.fixture(scope="session")
@@ -292,7 +318,11 @@ def parts(board_dir):
     path = board_dir / "parts.py"
     if not path.is_file():
         pytest.fail(f"no {path}")
-    spec = importlib.util.spec_from_file_location(f"{board_dir.name}_parts", path)
+    return _load(path, f"{board_dir.name}_parts").ALL
+
+
+def _load(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.ALL
+    return module

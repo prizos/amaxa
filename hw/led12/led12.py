@@ -44,26 +44,24 @@ Two conventions carry the whole pipeline:
   materials a function of source ordering, so a part added next year would
   renumber the silkscreen of a board already in a drawer.
 
-Run it with `make -C hw build`.
+Run it with `make -C hw build`. `tools/skidl_design.py` checks it and writes
+`build/design.json`.
 """
 
-import json
-import os
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-os.environ.setdefault("KICAD9_SYMBOL_DIR", "/usr/share/kicad/symbols")
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "tools"))
 
-from skidl import ERC, KICAD9, POWER, Net, Part, SubCircuit  # noqa: E402
-from skidl.logger import erc_logger  # noqa: E402
-from skidl import generate_netlist  # noqa: E402
-from skidl import set_default_tool  # noqa: E402
+# skidl_design first: it points SKiDL at KiCad's symbol libraries, and that has
+# to happen before SKiDL is imported anywhere. The wrong order does not fail -
+# SKiDL quietly falls back to the backup library it cached on the last run.
+from skidl_design import part, run  # noqa: E402
+from skidl import POWER, Net, SubCircuit  # noqa: E402
 
 import parts  # noqa: E402
-
-set_default_tool(KICAD9)
 
 # Parameters that describe the design rather than any one component: what the
 # board expects at its input, and what its regulator is designed to deliver.
@@ -73,28 +71,6 @@ INTENT: dict[str, tuple[float, float]] = {
     "power.out.voltage": (10.8, 13.2),
     "rail.power_out.voltage": (3.234, 3.366),
 }
-
-_addresses: dict[str, object] = {}
-
-
-def part(spec: parts.PartSpec, address: str, ref: str) -> Part:
-    """One instance of a part, tagged with the address the rest of the tree uses."""
-    made = Part(
-        *spec.symbol.split(":"),
-        footprint=spec.footprint,
-        value=spec.value,
-        ref=ref,
-        tag=address,
-    )
-    made.fields["address"] = address
-    made.fields["Manufacturer"] = spec.manufacturer
-    made.fields["Partnumber"] = spec.mpn
-    if spec.lcsc:
-        made.fields["LCSC"] = spec.lcsc
-    made.spec = spec
-    made.address = address
-    _addresses[address] = made
-    return made
 
 
 # --- the blocks --------------------------------------------------------------
@@ -244,76 +220,5 @@ def build() -> Net:
     return rail
 
 
-# --- what the rest of the pipeline reads -------------------------------------
-
-
-def design(circuit) -> dict:
-    """The circuit as data: what each part is, what it does, and what joins it."""
-    components = {}
-    values = dict(INTENT)
-
-    for address, made in sorted(_addresses.items()):
-        spec = made.spec
-        components[address] = {
-            "ref": made.ref,
-            "value": spec.value,
-            "symbol": spec.symbol,
-            "footprint": spec.footprint,
-            "manufacturer": spec.manufacturer,
-            "mpn": spec.mpn,
-            "lcsc": spec.lcsc,
-        }
-        for name, (low, high) in spec.params.items():
-            values[f"{address}.{name}"] = [low, high]
-
-    nets = {}
-    for net in circuit.nets:
-        nodes = sorted(
-            (pin.part.address, str(pin.num))
-            for pin in net.pins
-            if hasattr(pin.part, "address")
-        )
-        if nodes:
-            nets[net.name] = [list(node) for node in nodes]
-
-    return {
-        "board": "led12",
-        "parts": components,
-        "values": {key: list(value) for key, value in sorted(values.items())},
-        "nets": dict(sorted(nets.items())),
-    }
-
-
-def main() -> int:
-    circuit = build().circuit
-
-    # Warnings fail the build as well as errors. SKiDL calls an unconnected
-    # passive pin a warning, which is precisely the mistake worth catching, and
-    # this board sits at zero of both. A warning that appears later has to be
-    # silenced deliberately - `do_erc = False` on the net or pin that earns it -
-    # which is a line in a diff rather than a message nobody reads.
-    ERC()
-    errors = erc_logger.error.count
-    warnings = erc_logger.warning.count
-    generate_netlist(file_=str(HERE / "build" / "led12.net"))
-    data = design(circuit)
-    (HERE / "build" / "design.json").write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-    )
-
-    print(
-        f"{len(data['parts'])} parts, {len(data['nets'])} nets, "
-        f"{len(data['values'])} values"
-    )
-    if errors or warnings:
-        print(
-            f"\nERC: {errors} errors, {warnings} warnings. Both fail the build; "
-            "see the note in main()."
-        )
-        return 1
-    return 0
-
-
 if __name__ == "__main__":
-    (HERE / "build").mkdir(exist_ok=True)
-    sys.exit(main())
+    sys.exit(run(build, HERE, INTENT))

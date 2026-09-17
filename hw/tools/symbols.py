@@ -78,11 +78,23 @@ def footprint_pads(path: Path) -> set[str]:
     Numbers repeat legitimately — a tactile switch has four holes numbered
     1, 1, 2, 2 for two poles, and a SOT-223 tab shares its number with the pin
     it is bonded to — so this is a set, not a count.
+
+    Non-plated holes are not pads. A USB-C receptacle's locating pegs and a
+    Tag-Connect footprint's clip holes are `np_thru_hole` with an empty number,
+    and their layer list still says `*.Cu`, so testing for copper alone counted
+    each one as a pad with no pin.
     """
     text = path.read_text()
     pads = set()
-    for match in re.finditer(r'\(pad "([^"]*)"', text):
+    for match in re.finditer(r'\(pad "([^"]*)" (\w+)', text):
+        if not is_electrical_pad(match.group(1), match.group(2)):
+            continue
         block = _block(text, match.start())
         if "Cu" in block:
             pads.add(match.group(1))
     return pads
+
+
+def is_electrical_pad(number: str, kind: str) -> bool:
+    """Whether a footprint pad can carry a net: not a mounting or locating hole."""
+    return kind != "np_thru_hole" and number != ""

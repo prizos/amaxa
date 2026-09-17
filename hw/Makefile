@@ -197,9 +197,11 @@ drc: layout $(DRU) ## Run KiCad DRC against the fab and board rules
 	@$(KICAD_CLI) pcb drc --format json --severity-error --exit-code-violations \
 		--output $(LAYOUT_DIR)/drc.json $(LAYOUT_DIR)/default.kicad_pcb
 
-# Depends on build so the checks can never pass against stale output.
-check: layout ## Run the design checks against what the build produced
-	@$(PY) -m pytest checks/ -q --board $(BOARD)
+# Depends on build so the checks can never pass against stale output. Two
+# directories: hw/checks/ applies to every board, $(BOARD)/checks/ to this one.
+# importlib mode lets two boards each have a test_electrical.py.
+check: layout ## Run the common and board-specific design checks
+	@$(PY) -m pytest checks/ $(BOARD)/checks/ -q --import-mode=importlib --board $(BOARD)
 
 # The decks take their component values from the build's design.json, so
 # there is no second copy of the design to fall out of step with the first.

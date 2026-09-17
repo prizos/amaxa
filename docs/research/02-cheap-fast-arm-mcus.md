@@ -1,4 +1,8 @@
-# Cheap, fast Arm MCUs (current shortlist)
+# Cheap, fast Arm MCUs (shortlist)
+
+> **Superseded by a decision.** The project uses the **STM32H743ZIT6**, which
+> this file ranks behind its two recommendations on unit price. See the decision
+> in [README.md](README.md#decision). The research below is unchanged.
 
 Every part here can run field-oriented motor control, a PFC front end and comms on a single core. The Cortex-M7 parts leave the most headroom for doing everything in software.
 

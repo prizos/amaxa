@@ -4,8 +4,9 @@ Every part on the led12 board, as data.
 Deliberately free of any SKiDL import: this is a description of what we buy and
 what its datasheet says, and it should stay readable, diffable and checkable
 without a design tool in the loop. `led12.py` turns these into SKiDL parts;
-`checks/test_parts.py` reads them to confirm each symbol exists and its pin
-numbers match its footprint's pads.
+`hw/checks/test_symbols.py` reads them to confirm each symbol exists and its pin
+numbers match its footprint's pads. `PartSpec` itself lives in
+`hw/tools/partspec.py`, shared by every board.
 
 Each part names a **KiCad symbol** and a **footprint in our own parts/ tree**.
 The symbol is what makes the design readable — pins gain names like `VI`, `VO`,
@@ -22,51 +23,12 @@ Every value here comes from the part's review note in `parts/<LIB>/<LIB>.md`,
 which records the datasheet it was read from and what a human confirmed.
 """
 
-from dataclasses import dataclass, field
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-# --- how a tolerance is written ---------------------------------------------
-
-
-def pm(nominal: float, fraction: float) -> tuple[float, float]:
-    """A nominal value with a symmetric tolerance: `pm(2200, 0.01)` is 2.2k ±1%."""
-    return nominal * (1 - fraction), nominal * (1 + fraction)
-
-
-def exact(value: float) -> tuple[float, float]:
-    """A single figure from a datasheet, with no stated spread."""
-    return value, value
-
-
-def between(low: float, high: float) -> tuple[float, float]:
-    """A range the datasheet states outright, such as a threshold voltage."""
-    return low, high
-
-
-@dataclass(frozen=True)
-class PartSpec:
-    """One purchasable part, or one deliberately unpurchased piece of copper."""
-
-    symbol: str
-    """KiCad symbol, `Library:Name`. Its pin numbers must match the footprint."""
-
-    footprint: str
-    """`<LIB>:<NAME>`, resolved against `parts/<LIB>/<NAME>.kicad_mod`."""
-
-    prefix: str
-    """Designator prefix we expect KiCad's symbol to assign."""
-
-    manufacturer: str
-    mpn: str
-
-    lcsc: str | None
-    """Supplier code, or None for something we deliberately do not buy."""
-
-    value: str
-    """What goes in the BOM's Value column and on the silkscreen."""
-
-    params: dict[str, tuple[float, float]] = field(default_factory=dict)
-    """Datasheet figures the checks and simulations reason about, in SI units."""
+from partspec import PartSpec, between, collect, exact, pm  # noqa: E402,F401
 
 
 # --- resistors, 0805, 1 %, 125 mW -------------------------------------------
@@ -139,15 +101,15 @@ FUSE_1A = PartSpec(
 
 # Breakdown and clamping voltage are not attributes of a generic diode, but the
 # whole 12 V rail is designed around them, so they are recorded here.
+#
 # SMBJ14A and not the SMBJ12A first drawn. A TVS's stand-off voltage is the most
 # it holds off while still counting as non-conducting, and the 12 A part stands
 # off 12.0 V on a rail this design allows to reach 13.2 V - so it sat in its own
 # knee at high line, and in full avalanche when cold, because breakdown voltage
 # falls with temperature. The protection was a load. See SMB.md.
 #
-# v_breakdown_max, not min: the distributor and the datasheet both quote the top
-# of the V_BR band, and the previous entry recorded 14.7 V under a name claiming
-# it was the bottom. A number filed under the wrong name is worse than no number.
+# v_breakdown_max, not min: distributors quote the top of the V_BR band without
+# saying so, and a number filed under the wrong end's name is worse than none.
 TVS_14V = PartSpec(
     symbol="Device:D_TVS", footprint="SMB:D_SMB", prefix="D",
     manufacturer="BORN", mpn="SMBJ14A", lcsc="C152106", value="SMBJ14A",
@@ -200,8 +162,8 @@ NFET_SWITCH = PartSpec(
 )
 
 # Clamps the reverse-polarity FET's gate-source voltage during a surge. Without
-# it V_gs follows the TVS clamp to 19.9 V against a +/-20 V part - 0.1 V of
-# margin, which is the Si2301 defect over again one layer down. 15 V is the
+# it V_gs follows the TVS clamp to 23.2 V against a +/-20 V part, which is the
+# Si2301 defect over again one layer down. 15 V is the
 # middle of the only window that exists: above the 13.2 V rail so it never
 # conducts in normal operation, below the FET's rating with room to spare.
 # See SOD123.md.
@@ -226,8 +188,8 @@ LED_RED = PartSpec(
 
 # The symbol is KiCad's LM1084-3.3, which carries the same pin numbering
 # (GND=1, VOUT=2, VIN=3). No symbol exists for the Gainsil part itself.
-# It replaced the AMS1117, whose 15 V maximum sat below the TVS clamp of
-# 19.9 V - the protection would have destroyed what it protects. See SOT223.md.
+# It replaced the AMS1117, whose 15 V maximum sat below the TVS clamp - then
+# 19.9 V, now 23.2 V - so the protection would have destroyed what it protects.
 LDO_3V3 = PartSpec(
     symbol="Regulator_Linear:LM1084-3.3", footprint="SOT223:SOT-223-3_TabPin2",
     prefix="U", manufacturer="Gainsil", mpn="GS2401C-33CTR3", lcsc="C6283798",
@@ -264,9 +226,5 @@ TEST_PAD = PartSpec(
 )
 
 
-ALL: dict[str, PartSpec] = {
-    name: value
-    for name, value in list(globals().items())
-    if isinstance(value, PartSpec)
-}
+ALL: dict[str, PartSpec] = collect(globals())
 """Every part, by the name it is known by here. Used by the parts checks."""

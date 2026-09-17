@@ -19,14 +19,34 @@ Research notes for selecting the MCU on the amaxa digital control board. The wor
 | [11-kicad-automation-and-ci.md](11-kicad-automation-and-ci.md) | KiCad 10 command-line checks, custom design rules, KiBot, and what the library layer can't verify |
 | [12-circuit-simulation.md](12-circuit-simulation.md) | ngspice as a regression test (measured), power-electronics simulators, thermal, and firmware co-simulation |
 | [13-hardware-ci-practice.md](13-hardware-ci-practice.md) | What hardware CI verifies in real projects, review artifacts, bring-up and test, residual risks |
+| [14-atopile-postmortem.md](14-atopile-postmortem.md) | **Written later, from experience**: why the hardware pipeline was built on atopile and then moved off it, and what it cost to reverse-engineer a tool whose documentation had been taken down |
 
-## Current direction
+## Decision
+
+**MCU: ST STM32H743ZIT6** — Cortex-M7, 2 MB flash, 1 MB RAM, LQFP-144. Confirmed
+2026-09-17.
+
+This is not the part file 02 recommends: 02 ranks the i.MX RT1062 and GD32H759
+ahead of it on unit price, and nothing below has been rewritten to agree. What is
+on record for the H743:
+
+- Renode's best model of the three — flash programming, CAN FD and Ethernet (02).
+- The firmware build and its emulator run already target it, on a NUCLEO-H743ZI2
+  with the same die and pinout ([`firmware/`](../../firmware/README.md)).
+- Flash is on the chip, unlike the RT1062's external QSPI.
+- A leaded package, so no X-ray inspection at assembly (13).
+
+The LQFP-144 is the NUCLEO's package, so the firmware's pin map carries over.
+Its pin budget for the control board — Ethernet, USB, CAN FD, RS-485, both
+advanced timers and fourteen ADC inputs — was checked against KiCad's symbol for
+the part before the board was planned; it fits, with three silicon conflicts
+resolved in the plan.
+
+## Direction before the decision
 - A cheap Arm Cortex-M MCU with a fast core, running most of the control in real-time software on a single core.
-- Leading candidates (details in [02](02-cheap-fast-arm-mcus.md)):
+- Leading candidates at the time (details in [02](02-cheap-fast-arm-mcus.md)):
   - **NXP i.MX RT1062:** Cortex-M7 at 600 MHz, $7.97 each at 1,200 units, and an emulator model is nearly ready.
   - **GigaDevice GD32H759:** Cortex-M7 at 600 MHz with more motor and CAN hardware. Its price is not verified, and it has no emulator model yet.
-
-| [14-atopile-postmortem.md](14-atopile-postmortem.md) | **Written later, from experience**: why the hardware pipeline was built on atopile and then moved off it, and what it cost to reverse-engineer a tool whose documentation had been taken down |
 
 ## Open decisions
 

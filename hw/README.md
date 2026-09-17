@@ -34,7 +34,7 @@ Four files, and which one you want depends on what you are changing.
 | A part — value, package, part number, datasheet figures | `led12/parts.py` | `make check sim` |
 | The circuit — what connects to what | `led12/led12.py` | `make check` |
 | The board — where parts sit, how they route, the pour | `led12/layout.py` | `make drc` |
-| What counts as correct | `checks/`, `led12/sim/limits.py`, `led12/rules.kicad_dru` | `make check sim drc` |
+| What counts as correct | `led12/checks/`, `led12/sim/limits.py`, `led12/rules.kicad_dru` | `make check sim drc` |
 
 Then `make outputs` for renders, gerbers and the fab package.
 
@@ -47,6 +47,18 @@ several checks require the note, and one requires it to name the part numbers
 Expect the checks to fail the first time, and read what they say. They are
 written to name the two quantities that disagree, because the point is to be
 told which assumption broke rather than that something did.
+
+**Checks live in two places.** `hw/checks/` applies to every board. A board's
+own reasoning — its electrical margins, its topology, anything naming its part
+addresses — lives in `<board>/checks/`, beside `<board>/checks/config.py`, which
+declares how many checks must run, which datasheet figures are deliberately left
+unread and why, and which pin mappings still need a person.
+
+**Adding a board** means a directory with `<board>.py` (the circuit, built from
+`tools/skidl_design.py`'s `part()` and finished with its `run()`), `parts.py`
+(a list of `tools/partspec.py`'s `PartSpec`), `layout.py`, `rules.kicad_dru`,
+`board.kicad_pro`, `parts/<LIB>/` and `checks/config.py`. Then `BOARD=<board>`
+on every `make` target, and the board's name in the CI matrix.
 
 **Two rules the router will not bend:** a track may not cross a pad of another
 net, which is why the power rails run on their own line above or below the parts
@@ -70,7 +82,8 @@ circuit and writes `design.json`; `tools/board.py` turns that into KiCad files.
 **Verify** — `kicad-cli`, pytest and ngspice consume what was generated. Only
 the first step needs the virtualenv.
 
-One file knows SKiDL exists. Everything downstream reads `design.json`, a schema
+One module knows SKiDL exists: `tools/skidl_design.py`, which every board's
+design source builds through. Everything downstream reads `design.json`, a schema
 we own, and KiCad files. That indirection is the lesson from the tool this
 replaced, whose printed output had quietly become the interface half the
 pipeline read — so every place we read it was a place it could hurt us.
@@ -136,6 +149,11 @@ upgrade. Ubuntu 26.04 ships 9.0.8; on 24.04 add `ppa:kicad/kicad-9.0-releases`.
   `layout.py` is where that is fixed.
 - **ngspice treats the first line of a deck as its title**, so a deck starting
   with a component definition silently loses it.
+- **SKiDL falls back to a cached copy of a symbol library it cannot find**, and
+  says so only as a warning, so a board keeps building from a library nobody is
+  looking at. `tools/skidl_design.py` turns the fallback off, which makes a
+  missing library a build failure. It is also why that module must be imported
+  before `skidl` is: it is what tells SKiDL where the libraries are.
 - **The generated rules file lives in a directory `make build` deletes.** Run
   `kicad-cli` by hand and you may be checking against no custom rules at all,
   and getting a clean report. `make drc` regenerates it and refuses to run if it

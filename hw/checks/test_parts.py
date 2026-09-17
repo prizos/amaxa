@@ -78,30 +78,16 @@ def test_review_notes_name_their_part(parts, board_dir):
     assert not stale, "Review notes out of date with the design:\n" + "\n".join(stale)
 
 
-# Review notes carrying an unresolved "Needs a human eye" marker. These are the
-# things no machine here can check — whether pad 1 is the pin the *datasheet*
-# calls pin 1 — and every one is a way to turn a board into scrap. The list is
-# pinned so that resolving one, or introducing another, is a visible act rather
-# than a drifting number nobody tracks.
-#
-# One of these says in plain words that the board may short 3V3 to GND if the
-# assumption is wrong. Clearing this list is a precondition for ordering.
-NEEDS_A_HUMAN_EYE = {
-    "LED0805": "pad 1 is the cathode, taken from the footprint rather than the drawing",
-    "SMB": "pad 1 is the cathode (banded end)",
-    "SOD123": "pad 1 is the cathode (banded end)",
-    "SOT223": "the tab is bonded to pin 2 (VOUT) and not to ground",
-    "SOT23": "the AO3407A pinout, taken from a distributor symbol",
-}
-
-
-def test_unresolved_human_review_is_tracked(part_dirs):
+def test_unresolved_human_review_is_tracked(part_dirs, board_config, board_dir):
     """
     The set of things still waiting on a person is exactly what is declared.
 
     A marker that appears without being added here is one nobody is tracking;
     one that disappears without being removed is a review that quietly stopped
     being required. Both are how a board gets ordered with an unverified pinout.
+
+    The declared list is the board's own `NEEDS_A_HUMAN_EYE`, in
+    `<board>/checks/config.py`; clearing it is a precondition for ordering.
     """
     found = {
         d.name
@@ -109,7 +95,7 @@ def test_unresolved_human_review_is_tracked(part_dirs):
         if (d / f"{d.name}.md").is_file()
         and "Needs a human eye" in (d / f"{d.name}.md").read_text()
     }
-    declared = set(NEEDS_A_HUMAN_EYE)
+    declared = set(board_config.NEEDS_A_HUMAN_EYE)
 
     new = sorted(found - declared)
     resolved = sorted(declared - found)
@@ -117,7 +103,7 @@ def test_unresolved_human_review_is_tracked(part_dirs):
         "The unresolved-review list does not match the notes.\n"
         f"  marked but not tracked: {new}\n"
         f"  tracked but no longer marked: {resolved}\n"
-        "Update NEEDS_A_HUMAN_EYE in checks/test_parts.py in the same commit."
+        f"Update NEEDS_A_HUMAN_EYE in {board_dir.name}/checks/config.py in the same commit."
     )
 
 

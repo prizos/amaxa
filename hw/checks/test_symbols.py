@@ -24,6 +24,8 @@ sys.path.insert(0, str(HW_DIR / "tools"))
 
 from symbols import SymbolNotFound, footprint_pads, symbol_pins  # noqa: E402
 
+STOCK_FOOTPRINTS = Path("/usr/share/kicad/footprints")
+
 
 def footprint_path(board_dir: Path, footprint: str) -> Path:
     library, _, name = footprint.partition(":")
@@ -104,3 +106,30 @@ def test_every_purchasable_part_has_a_supplier_code(parts):
         "purchased'; an empty string means someone meant to fill it in:\n"
         + "\n".join(blank)
     )
+
+
+def test_mounting_holes_are_not_pads():
+    """
+    A non-plated hole is not a pad, so it cannot be a pad with no pin.
+
+    Checked against stock KiCad footprints the control board uses rather than
+    against this board, because the mistake only shows on parts that have such
+    holes: a USB-C receptacle's locating pegs and a Tag-Connect footprint's clip
+    holes are numbered "" with a copper layer list, and were counted as pads.
+    """
+    cases = {
+        "Connector.pretty/Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical.kicad_mod":
+            {"1", "2", "3", "4", "5", "6"},
+        "Connector_USB.pretty/USB_C_Receptacle_HRO_TYPE-C-31-M-12.kicad_mod": None,
+    }
+    wrong = []
+    for relative, expected in cases.items():
+        path = STOCK_FOOTPRINTS / relative
+        if not path.is_file():
+            pytest.fail(f"stock footprint {path} is missing; KiCad 9 ships it")
+        pads = footprint_pads(path)
+        if "" in pads:
+            wrong.append(f"  {relative}: a numberless hole was counted as a pad")
+        if expected is not None and pads != expected:
+            wrong.append(f"  {relative}: pads {sorted(pads)}, expected {sorted(expected)}")
+    assert not wrong, "Mounting holes counted as pads:\n" + "\n".join(wrong)
