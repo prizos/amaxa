@@ -815,6 +815,59 @@ def _static_pulls() -> None:
 
 
 
+# --- the trip comparators and the analog connector ---------------------------
+#
+# The left-hand third, which the analog signals reach first. Seven comparators
+# in a column beside the connector they watch, their threshold DAC below them,
+# and the four dual Schottkys that carry seven outputs onto one trip bus.
+#
+# Placed, not routed, for the same reason the safety chain is: M8.
+
+ANALOG_HEADER = (-46.0, -18.0)
+
+
+def _trip() -> None:
+    PLACEMENT["header.analog"] = (*ANALOG_HEADER, 0)
+    LABELS["header.analog"] = (3.0, -2.0)
+
+    # One comparator per trip point, in the order the header presents them, so
+    # the two that watch one phase sit together.
+    for index, key in enumerate((
+        "ia_high", "ia_low", "ib_high", "ib_low", "ic_high", "ic_low", "vdc_high",
+    )):
+        y = round(-19.0 + 4.6 * index, 4)
+        PLACEMENT[f"trip.{key}"] = (-36.0, y, 0)
+        LABELS[f"trip.{key}"] = (0.0, -2.4)
+        PLACEMENT[f"trip.{key}.decoupling"] = (-36.0, y + 2.2, 0)
+        LABELS[f"trip.{key}.decoupling"] = (0.0, -1.3)
+
+    # The threshold DAC, below the comparators it feeds, with its own supply
+    # decoupling and the two pull-ups its bus needs.
+    PLACEMENT["trip.dac"] = (-38.0, -26.0, 0)
+    LABELS["trip.dac"] = (0.0, -3.0)
+    PLACEMENT["trip.dac.decoupling"] = (-38.0, -22.0, 0)
+    PLACEMENT["trip.dac.bulk"] = (-38.0, -30.0, 0)
+    PLACEMENT["trip.r_scl_pullup"] = (-32.0, -26.0, 0)
+    PLACEMENT["trip.r_sda_pullup"] = (-32.0, -28.0, 0)
+    PLACEMENT["tp_dac_spare"] = (-32.0, -22.0)
+    for address in ("trip.dac.decoupling", "trip.dac.bulk", "trip.r_scl_pullup",
+                    "trip.r_sda_pullup", "tp_dac_spare"):
+        LABELS[address] = (0.0, -1.6)
+
+    # The four dual Schottkys, in a column between the comparators and the bus.
+    for index in range(4):
+        PLACEMENT[f"trip.d_outputs{index + 1}"] = (-29.0, round(-17.0 + 4.0 * index, 4), 0)
+        LABELS[f"trip.d_outputs{index + 1}"] = (2.6, 0.0)
+
+    # The analog supply for the power board's own sensors: the 5 V rail through
+    # a bead, which is what VDDA gets and for the same reason.
+    PLACEMENT["analog.bead"] = (-40.5, 10.0, 0)
+    PLACEMENT["analog.bulk"] = (-40.5, 12.0, 0)
+    PLACEMENT["analog.decoupling"] = (-40.5, 14.0, 0)
+    for address in ("analog.bead", "analog.bulk", "analog.decoupling"):
+        LABELS[address] = (0.0, -1.6)
+
+
 _supply_vias()
 _decoupling()
 _analog_supply()
@@ -822,3 +875,4 @@ _crystals()
 _placed()
 _power()
 _safety()
+_trip()

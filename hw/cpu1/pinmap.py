@@ -175,6 +175,21 @@ HEADER_DIGITAL = [
 ]
 
 
+# The analog header, the same way. Every name here is the *raw* signal as it
+# arrives from the power board: the comparators tap it directly, and the
+# anti-alias filter between it and the MCU's own ADC pin is a later block. That
+# order is the point - a filter fast enough for the ADC is far too slow to trip
+# on.
+HEADER_ANALOG = [
+    "IA_SENSE", "IB_SENSE", "IC_SENSE",
+    "VDC_SENSE", "VA_SENSE", "VB_SENSE", "VC_SENSE",
+    "AUX_FAST_SENSE",
+    "SLOW1_SENSE", "SLOW2_SENSE", "SLOW3_SENSE", "SLOW4_SENSE",
+    "BOARD_ID1_SENSE", "BOARD_ID2_SENSE",
+    "VREF+", "5VA", "5VA",
+]
+
+
 def header_pins(signals: list[str], ground: str, count: int) -> dict[int, str]:
     """
     Pin number -> net, for a header carrying `signals` with a ground every two.

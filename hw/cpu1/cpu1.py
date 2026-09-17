@@ -13,7 +13,9 @@ Built one block at a time. What exists so far:
   TVS, a 100 V buck to 5 V, a second buck to 3V3, and the series reference that
   drives VREF+;
 - the safety chain: the trip latch, the two octal buffers every PWM output
-  passes through, and the digital header to the power board.
+  passes through, and the digital header to the power board;
+- the trip comparators: seven of them, their threshold DAC, and the analog
+  header the signals they watch arrive on.
 
 Everything a pin will eventually connect to lands in a later block, and until it
 does that net is *pending*: `_MILESTONES` below names the block that will
@@ -92,17 +94,23 @@ INTENT: dict[str, tuple[float, float]] = {
     # and a gate has to be small against it, and this is what "small" is
     # measured against.
     "pwm.dead_time": (0.5e-6, 5e-6),
+    # How well a trip point has to be known. It is a protective limit, not a
+    # measurement - you set it above the working maximum and what matters is
+    # that it is above it and below what breaks. Ten percent is what the parts
+    # chosen here manage, and saying so is what makes the DAC's reference
+    # choice a decision rather than an oversight.
+    "trip.threshold_tolerance": (0.0, 0.10),
 }
 
 # Which later block connects the other end of each net. Matched in order; a net
 # matching none of these is an error, so a new pin cannot slip in unexplained.
 _MILESTONES = [
-    (r"^(DAC_S\w+|OV_COMP)$",
-     "M5b: the current comparators and the DAC that sets their thresholds"),
     (r"^(ENC_\w+|HALL_\d)$",
      "M8: the motion-feedback connector, once the encoder type is settled"),
     (r"^(IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$",
      "M6: the ADC input networks and comparator taps"),
+    (r"^\w+_SENSE$",
+     "M6: the anti-alias filter between this and the ADC pin it belongs to"),
     (r"^(USB_\w+|CAN_\w+|ETH_\w+|RS485_\w+)$",
      "M7: USB, CAN FD, Ethernet and RS-485"),
 ]
@@ -112,7 +120,8 @@ _MILESTONES = [
 # block that will, so a pin cannot be added without saying where it goes.
 _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
-    r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d)$"
+    r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d"
+    r"|IA_SENSE|IB_SENSE|IC_SENSE|VDC_SENSE|DAC_S\w+)$"
 )
 
 
@@ -170,6 +179,8 @@ def build() -> Net:
     mcu_core(silicon, mcu, by_number, v3v3, gnd, nets)
     power_block(v3v3, gnd, nets)
     safety_chain(v3v3, gnd, nets)
+    analog_input(nets["5V"], gnd, nets)
+    trip_comparators(v3v3, gnd, nets)
 
     # Unused I/O is left unconnected on purpose, and said so. Firmware sets these
     # to analog mode, the lowest-leakage state.
@@ -320,7 +331,7 @@ def power_block(v3v3, gnd, nets) -> None:
     """
     vin = Net("VIN")
     vin.drive = POWER
-    v5 = Net("5V")
+    v5 = nets["5V"] = Net("5V")
     v5.drive = POWER
 
     # --- the input stage -----------------------------------------------------
@@ -511,7 +522,7 @@ def safety_chain(v3v3, gnd, nets) -> None:
     # The trip bus. Everything that trips pulls it low through a diode of its
     # own, so three sources share one node without sharing a net: a fault line
     # stays its own net all the way to the MCU pin that reports it.
-    trip_set = Net("TRIP_SET_N")
+    trip_set = nets["TRIP_SET_N"] = Net("TRIP_SET_N")
     pull_up = part(parts.RES_10K_0402, "safety.r_trip_pullup", "R16")
     v3v3 += pull_up[1]
     trip_set += pull_up[2]
@@ -650,10 +661,157 @@ def safety_chain(v3v3, gnd, nets) -> None:
         gnd += cap[2]
 
 
+def analog_input(v5, gnd, nets) -> None:
+    """
+    What arrives from the power board, before anything is done to it.
+
+    Every signal on this connector is raw: the comparators watch these nets
+    directly, and the anti-alias filter between each one and the MCU's own ADC
+    pin is a later block. The order matters more than it looks. A filter with a
+    corner low enough to be worth having on a 1 MSPS ADC costs hundreds of
+    nanoseconds, and the trip budget is fifty - so the trip has to be taken
+    from ahead of it or not at all.
+
+    The board also sends two things the other way: the reference everything is
+    measured against, so the power board's sensors can be ratiometric to it,
+    and an analog supply for them.
+    """
+    header = part(parts.HEADER_2X15, "header.analog", "J4")
+    pins = PINMAP.header_pins(PINMAP.HEADER_ANALOG, PINMAP.HEADER_GROUND, 30)
+
+    # 5 V through a bead, which is what VDDA gets and for the same reason. A
+    # low-noise LDO here would be better and is what the plan asks for; the
+    # bead is what this block needs to name the rail, and swapping it is one
+    # part.
+    bead = part(parts.FERRITE_600R_0402, "analog.bead", "FB2")
+    v5 += bead[1]
+    v5a = Net("5VA")
+    v5a += bead[2]
+    v5a.drive = POWER
+    for address, spec, ref in (("analog.bulk", parts.CAP_1U_0402, "C38"),
+                               ("analog.decoupling", parts.CAP_100N_0402, "C39")):
+        cap = part(spec, address, ref)
+        v5a += cap[1]
+        gnd += cap[2]
+
+    for number, name in pins.items():
+        if name == "GND":
+            gnd += header[number]
+        elif name == "5VA":
+            v5a += header[number]
+        else:
+            if name not in nets:
+                nets[name] = Net(name)
+            nets[name] += header[number]
+
+
+def trip_comparators(v3v3, gnd, nets) -> None:
+    """
+    Seven comparators, their thresholds, and how they reach the latch.
+
+    Each phase current is compared against two thresholds, because the signal
+    idles mid-scale and an over-current leaves that point in either direction.
+    The DC link gets one. Every one of them is wired so that **the output goes
+    low when the trip condition is true**, and pulls the trip bus down through a
+    Schottky of its own - the same arrangement the fault lines use, for the same
+    reason: seven sources share one node without sharing a net.
+
+    That polarity is also what makes an unprogrammed board safe. The DAC comes
+    out of reset at zero, so every high-side threshold is zero, so every phase
+    current sitting at its mid-scale idle is already above it and the board
+    trips the moment it powers up. The low-side comparators do not trip at zero,
+    and do not need to: nothing can run while the other three are asserting.
+    """
+    dac = part(parts.THRESHOLD_DAC, "trip.dac", "U15")
+    v3v3 += dac["VDD"]
+    gnd += dac["VSS"]
+    # Latch the outputs as they are written; nothing here needs four thresholds
+    # to change at one instant.
+    gnd += dac["~{LDAC}"]
+    # The busy flag matters only while writing the EEPROM, which this board
+    # never does - the power-up value has to stay the factory zero.
+    dac["RDY/~{BSY}"] += NC  # noqa: F821
+    nets["DAC_SCL"] += dac["SCL"]
+    nets["DAC_SDA"] += dac["SDA"]
+    for address, net, ref in (("trip.r_scl_pullup", "DAC_SCL", "R59"),
+                              ("trip.r_sda_pullup", "DAC_SDA", "R60")):
+        pull_up = part(parts.RES_4K7_0402, address, ref)
+        v3v3 += pull_up[1]
+        nets[net] += pull_up[2]
+
+    thresholds = {}
+    for channel, name in (("A", "I_TRIP_HIGH"), ("B", "I_TRIP_LOW"),
+                          ("C", "VDC_TRIP"), ("D", "DAC_SPARE")):
+        thresholds[name] = Net(name)
+        thresholds[name] += dac[f"VOUT{channel}"]
+    thresholds["DAC_SPARE"] += part(parts.TEST_PAD, "tp_dac_spare", "TP10")[1]
+
+    for address, spec, ref in (("trip.dac.decoupling", parts.CAP_100N_0402, "C29"),
+                               ("trip.dac.bulk", parts.CAP_1U_0402, "C30")):
+        cap = part(spec, address, ref)
+        v3v3 += cap[1]
+        gnd += cap[2]
+
+    outputs = {}
+    # Each comparator, and which way round its inputs go. "above" means the
+    # trip is the signal rising past the threshold, so the signal is on the
+    # inverting input and the output falls when it does.
+    for index, (signal, threshold, sense) in enumerate((
+        ("IA_SENSE", "I_TRIP_HIGH", "above"), ("IA_SENSE", "I_TRIP_LOW", "below"),
+        ("IB_SENSE", "I_TRIP_HIGH", "above"), ("IB_SENSE", "I_TRIP_LOW", "below"),
+        ("IC_SENSE", "I_TRIP_HIGH", "above"), ("IC_SENSE", "I_TRIP_LOW", "below"),
+        ("VDC_SENSE", "VDC_TRIP", "above"),
+    )):
+        key = f"{signal.split('_')[0].lower()}_{'high' if sense == 'above' else 'low'}"
+        comparator = part(parts.COMPARATOR, f"trip.{key}", f"U{8 + index}")
+        # From 5 V, not the logic rail. These parts guarantee their inputs only
+        # to 0.2 V below their supply, and the signals they watch reach VREF+ at
+        # 3.0 V - which on a 3.3 V rail at the bottom of its band is outside the
+        # range the datasheet covers. On 5 V there is nearly two volts of room.
+        # The outputs swing to 5 V with it, which the trip bus does not mind:
+        # each one reaches the bus through a diode that blocks when it is high.
+        nets["5V"] += comparator["V+"]
+        gnd += comparator["V-"]
+        # Held enabled. The pin is an input with no pull of its own, and a
+        # comparator idling in shutdown is a trip point that does not exist.
+        gnd += comparator["SHDN"]
+        if signal not in nets:
+            nets[signal] = Net(signal)
+        if sense == "above":
+            nets[signal] += comparator["-"]
+            thresholds[threshold] += comparator["+"]
+        else:
+            nets[signal] += comparator["+"]
+            thresholds[threshold] += comparator["-"]
+        outputs[f"TRIP_{key.upper()}"] = Net(f"TRIP_{key.upper()}")
+        outputs[f"TRIP_{key.upper()}"] += comparator[5]
+
+        cap = part(parts.CAP_100N_0402, f"trip.{key}.decoupling", f"C{31 + index}")
+        nets["5V"] += cap[1]
+        gnd += cap[2]
+
+    # Four dual Schottkys carry the seven outputs onto the trip bus. The spare
+    # diode is tied off rather than left to pick up whatever is near it.
+    ordered = list(outputs)
+    for index in range(4):
+        diodes = part(parts.SCHOTTKY_DUAL, f"trip.d_outputs{index + 1}", f"D{8 + index}")
+        nets["TRIP_SET_N"] += diodes[3]
+        for pad in (1, 2):
+            position = index * 2 + pad - 1
+            if position < len(ordered):
+                outputs[ordered[position]] += diodes[pad]
+            else:
+                diodes[pad] += NC  # noqa: F821
+
+
 def pending(names: list[str]) -> dict[str, str]:
     """Every net with only the MCU on it, and the block that will change that."""
     return {net: waiting_for(net) for net in names if not _CONNECTED.match(net)}
 
 
 if __name__ == "__main__":
-    sys.exit(run(build, HERE, INTENT, pending(sorted({p.net_name for p in PINMAP.PINS}))))
+    names = sorted(
+        {p.net_name for p in PINMAP.PINS}
+        | {name for name in PINMAP.HEADER_ANALOG if name.endswith("_SENSE")}
+    )
+    sys.exit(run(build, HERE, INTENT, pending(names)))

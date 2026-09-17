@@ -63,3 +63,19 @@
 	(condition "A.NetName == 'GATE_ENABLE_B' || A.NetName == 'GATE_ENABLE_OUT' || A.NetName == 'TRIP_SET_N' || A.NetName == 'TRIPPED'")
 	(constraint track_width (min 0.2mm))
 	(severity error))
+
+# What arrives from the power board, before anything has been done to it, and
+# the thresholds it is compared against. These are the measurement: an etch
+# tolerance on a 0.15 mm track is a percent of its resistance, and a percent of
+# a current-sense signal is a percent of every number the control loop sees.
+(rule "analog inputs from the power board"
+	(condition "A.NetName == '*_SENSE' || A.NetName == 'I_TRIP_HIGH' || A.NetName == 'I_TRIP_LOW' || A.NetName == 'VDC_TRIP' || A.NetName == 'DAC_SPARE'")
+	(constraint track_width (min 0.2mm))
+	(severity error))
+
+# The analog supply the power board's sensors run from, and the comparator
+# outputs on their way to the trip bus.
+(rule "analog supply")
+	(condition "A.NetName == '5VA'")
+	(constraint track_width (min 0.3mm))
+	(severity error))

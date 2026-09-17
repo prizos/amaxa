@@ -483,5 +483,62 @@ HEADER_2X20 = PartSpec(
 )
 
 
+# --- the trip comparators and their thresholds -------------------------------
+#
+# Seven trip points: each phase current in both directions, and the DC link's
+# over-voltage. Bipolar current sensing is why there are two per phase - the
+# signal idles mid-scale and leaves it either way.
+
+# Singles rather than the two quad comparators the plan called for, because a
+# quad this fast does not exist in stock: the choice was 4.5 ns in sevens or
+# 300 ns in fours, and 300 ns is six times the whole trip budget. Push-pull
+# output, so the seven reach the trip bus through Schottky diodes rather than
+# by being wired together. See SOT23_6.md.
+COMPARATOR = PartSpec(
+    symbol="Comparator:TLV3501AIDBV", footprint="SOT23_6:SOT-23-6", prefix="U",
+    manufacturer="Texas Instruments", mpn="TLV3501AIDBVR", lcsc="C193413",
+    value="TLV3501",
+    params={
+        "supply_voltage": between(2.7, 5.5),
+        # 20 mV of overdrive, over the whole temperature range. The 5 mV figure
+        # is half as fast again, which is what the tap network in M6 has to
+        # deliver against.
+        "propagation_delay_max": exact(7e-9),
+        "input_offset_voltage": exact(6.5e-3),
+        "input_hysteresis": exact(6e-3),
+        "common_mode_headroom": exact(0.2),      # from either rail
+        "output_swing_from_rail": exact(50e-3),  # at 1 mA
+    },
+)
+
+# Quad 12-bit, I2C, and its output range is its supply - which is why the trip
+# thresholds are ratiometric to the logic rail rather than to VREF, and why
+# test_power.py's rail band turns into a tolerance on every trip point. See
+# MSOP10.md, and the review note's warning about where its power-up value comes
+# from.
+THRESHOLD_DAC = PartSpec(
+    symbol="Analog_DAC:MCP4728", footprint="MSOP10:MSOP-10_3x3mm_P0.5mm", prefix="U",
+    manufacturer="Microchip Tech", mpn="MCP4728T-E/UN", lcsc="C478093",
+    value="MCP4728",
+    params={
+        "supply_voltage": between(2.7, 5.5),
+        "resolution_bits": exact(12),
+        "channels": exact(4),
+    },
+)
+
+HEADER_2X15 = PartSpec(
+    symbol="Connector_Generic:Conn_02x15_Odd_Even",
+    footprint="HDR2X15:PinHeader_2x15_P2.54mm_Vertical", prefix="J",
+    manufacturer="HCTL", mpn="PZ254-2-15-Z-8.5", lcsc="C3012255", value="analog",
+    params={"current_rating": exact(3.0)},
+)
+
+RES_4K7_0402 = PartSpec(
+    **_R0402, mpn="0402WGF4701TCE", lcsc="C25900", value="4.7k",
+    params={"resistance": pm(4_700, 0.01), "max_power": exact(0.0625)},
+)
+
+
 ALL: dict[str, PartSpec] = collect(globals())
 """Every part, by the name it is known by here. Used by the parts checks."""
