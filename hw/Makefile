@@ -246,6 +246,42 @@ else
 	@python3 tools/simulate.py $(BOARD)
 endif
 
+REVIEW := $(BOARD)/review
+
+# A snapshot of the board as pictures, committed so it can be looked at without
+# a KiCad install. `outputs` writes the same kind of thing into the gitignored
+# out/; this writes the few files worth keeping in the tree, and regenerating it
+# is how they stay honest - a stale picture of a board is worse than none.
+#
+# The copper layers are plotted one at a time rather than stacked, because a
+# stacked plot of a board with three filled planes is a solid rectangle.
+review: drc ## Per-layer plots and renders into <board>/review/, committed
+	@mkdir -p $(REVIEW)
+	@$(KICAD_CLI) pcb render --side top --width 1600 --height 1280 \
+		--quality high --output $(REVIEW)/top.png $(LAYOUT_DIR)/default.kicad_pcb
+	@$(KICAD_CLI) pcb render --side bottom --width 1600 --height 1280 \
+		--quality high --output $(REVIEW)/bottom.png $(LAYOUT_DIR)/default.kicad_pcb
+	@# Every copper layer the board has, read from the board rather than listed,
+	@# for the same reason the gerber list is.
+	@for layer in $$(grep -oE '"(F|B|In[0-9]+)\.Cu" signal' $(LAYOUT_DIR)/default.kicad_pcb \
+			| cut -d'"' -f2); do \
+		$(KICAD_CLI) pcb export svg --page-size-mode 2 --exclude-drawing-sheet \
+			--black-and-white --layers "$$layer,Edge.Cuts" \
+			--output $(REVIEW)/$$(echo $$layer | tr . _).svg \
+			$(LAYOUT_DIR)/default.kicad_pcb >/dev/null; \
+	done
+	@$(KICAD_CLI) pcb export svg --page-size-mode 2 --exclude-drawing-sheet \
+		--layers F.SilkS,F.Fab,Edge.Cuts \
+		--output $(REVIEW)/assembly.svg $(LAYOUT_DIR)/default.kicad_pcb >/dev/null
+	@# KiCad writes an SVG 1.1 DOCTYPE referencing a DTD on w3.org. Nothing here
+	@# needs it, it is one more thing that fetches over the network when a viewer
+	@# is strict about it, and some renderers refuse a file that carries one.
+	@for f in $(REVIEW)/*.svg; do \
+		python3 -c "import re,sys;p=sys.argv[1];t=open(p).read();open(p,'w').write(re.sub(r'\s*<!DOCTYPE[^>]*>\s*','\n',t,count=1))" $$f; \
+	done
+	@echo "wrote $(REVIEW)/"
+	@ls -1 $(REVIEW) | sed 's/^/    /'
+
 OUT := out/$(BOARD)
 
 # Everything a person or a fab needs to look at. Renders and the 3D model are
