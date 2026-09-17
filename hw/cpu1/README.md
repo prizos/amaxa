@@ -4,24 +4,20 @@ The STM32H743ZIT6 board that generates every hard real-time signal, and is later
 soldered onto one analog power board. **In progress,** and built one block at a
 time.
 
-What exists: the pin map, and the MCU with its core — every supply pin
-decoupled, the core regulator's capacitors, a filtered analog supply, an 8 MHz
-and a 32.768 kHz crystal, reset and boot, a Tag-Connect debug footprint, three
-LEDs, a button and test pads. 43 parts on four layers, with solid ground on In1
-and 3V3 on In2. It builds, passes ERC and 45 checks, and DRC finds no violations.
+**What is on it, and how much of it is drawn, is in
+[`review/README.md`](review/README.md)** — the board plotted layer by layer,
+every footprint and every net, with the counts read from the board file rather
+than written down. `make review BOARD=cpu1` regenerates it. This file is about
+*how* the board is built; that one is about what it currently is, and it cannot
+go stale.
 
-**All of it is routed**: 157 track segments and 72 vias, and DRC is held to the
-strict gate, so a connection left undrawn fails the build. The three debug
-signals leave the package on three different sides and cross on the bottom
-layer, under the ring of supply vias; NRST leaves inward, because the 8 MHz
-crystal fills the outward side of its pin. The 75 nets still waiting for later
-blocks are *pending*, each naming the block that will connect it (`_MILESTONES`
-in [`cpu1.py`](cpu1.py)).
+Nets still waiting for later blocks are *pending*, each naming the block that
+will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)); the review lists them.
 
 | | |
 |---|---|
 | Stackup | PCBWay's published regular 4-layer build: 1 oz copper throughout, 7628 prepreg, 1.03 mm core, 1.51 mm finished |
-| Layers | F.Cu signal, In1.Cu solid ground, In2.Cu supply islands (to come), B.Cu signal |
+| Layers | F.Cu signal, In1.Cu solid ground, In2.Cu supply islands, B.Cu signal |
 | Size | 100 × 80 mm, provisional until the blocks and power-board headers are placed |
 | MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at JLCPCB** on 2026-09-17; see [its review note](parts/LQFP144/LQFP144.md) |
 

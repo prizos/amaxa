@@ -257,10 +257,15 @@ REVIEW := $(BOARD)/review
 # stacked plot of a board with three filled planes is a solid rectangle.
 review: drc ## Per-layer plots and renders into <board>/review/, committed
 	@mkdir -p $(REVIEW)
+	@# `basic` rather than the `high` that out/ gets: the raytracer samples
+	@# randomly, so two runs over an unchanged board produce two different PNGs.
+	@# A committed file that churns on every regeneration cannot be diffed, and
+	@# "regenerate and check nothing moved" stops being a gate. On a board whose
+	@# parts have no 3D models to raytrace, it costs nothing to look at either.
 	@$(KICAD_CLI) pcb render --side top --width 1600 --height 1280 \
-		--quality high --output $(REVIEW)/top.png $(LAYOUT_DIR)/default.kicad_pcb
+		--quality basic --output $(REVIEW)/top.png $(LAYOUT_DIR)/default.kicad_pcb
 	@$(KICAD_CLI) pcb render --side bottom --width 1600 --height 1280 \
-		--quality high --output $(REVIEW)/bottom.png $(LAYOUT_DIR)/default.kicad_pcb
+		--quality basic --output $(REVIEW)/bottom.png $(LAYOUT_DIR)/default.kicad_pcb
 	@# Every copper layer the board has, read from the board rather than listed,
 	@# for the same reason the gerber list is.
 	@for layer in $$(grep -oE '"(F|B|In[0-9]+)\.Cu" signal' $(LAYOUT_DIR)/default.kicad_pcb \
@@ -273,13 +278,14 @@ review: drc ## Per-layer plots and renders into <board>/review/, committed
 	@$(KICAD_CLI) pcb export svg --page-size-mode 2 --exclude-drawing-sheet \
 		--layers F.SilkS,F.Fab,Edge.Cuts \
 		--output $(REVIEW)/assembly.svg $(LAYOUT_DIR)/default.kicad_pcb >/dev/null
-	@# KiCad writes an SVG 1.1 DOCTYPE referencing a DTD on w3.org. Nothing here
-	@# needs it, it is one more thing that fetches over the network when a viewer
-	@# is strict about it, and some renderers refuse a file that carries one.
-	@for f in $(REVIEW)/*.svg; do \
-		python3 -c "import re,sys;p=sys.argv[1];t=open(p).read();open(p,'w').write(re.sub(r'\s*<!DOCTYPE[^>]*>\s*','\n',t,count=1))" $$f; \
-	done
-	@echo "wrote $(REVIEW)/"
+	@# Two things KiCad's SVG needs before it can be read on a web page. The
+	@# DOCTYPE references a DTD on w3.org, which is a network fetch nobody asked
+	@# for and which some renderers refuse outright. And the plot is black lines
+	@# on a transparent ground, which vanishes against a dark theme - GitHub
+	@# renders these in whichever theme the reader has - so it gets an opaque
+	@# sheet behind it, the colour a plot is supposed to be on.
+	@for f in $(REVIEW)/*.svg; do python3 tools/svg_sheet.py $$f; done
+	@python3 tools/review.py $(BOARD)
 	@ls -1 $(REVIEW) | sed 's/^/    /'
 
 OUT := out/$(BOARD)
