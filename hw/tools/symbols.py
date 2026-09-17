@@ -71,6 +71,46 @@ def symbol_pins(reference: str, library_dir: Path | None = None) -> set[str]:
     raise SymbolNotFound(f"{reference}: extends forms a loop")
 
 
+def symbol_pin_names(reference: str, library_dir: Path | None = None) -> dict[str, str]:
+    """
+    Pin number -> pin name, for a symbol named `Library:Symbol`.
+
+    What a pin is *for*, which the netlist does not record: it has nodes on pin
+    numbers, and a check that wants to know whether the receiver enable is tied
+    active has otherwise to be told that the receiver enable is pin 2. Told, it
+    keeps saying the same thing after the pin moves.
+
+    Names are as KiCad writes them, overbars and all: `~{RE}`, not `RE`.
+    """
+    library_dir = library_dir or KICAD_SYMBOL_DIR
+    library_name, _, symbol_name = reference.partition(":")
+    if not symbol_name:
+        raise SymbolNotFound(f"{reference!r} is not of the form Library:Symbol")
+
+    path = library_dir / f"{library_name}.kicad_sym"
+    if not path.is_file():
+        raise SymbolNotFound(f"no symbol library {path}")
+
+    text = path.read_text()
+    seen: set[str] = set()
+    while symbol_name not in seen:
+        seen.add(symbol_name)
+        block = _find_symbol(text, symbol_name)
+        names = {}
+        for chunk in block.split("(pin ")[1:]:
+            name = re.search(r'\(name "([^"]*)"', chunk)
+            number = re.search(r'\(number "([^"]+)"', chunk)
+            if name and number:
+                names[number.group(1)] = name.group(1)
+        if names:
+            return names
+        parent = re.search(r'\(extends "([^"]+)"', block)
+        if not parent:
+            return {}
+        symbol_name = parent.group(1)
+    raise SymbolNotFound(f"{reference}: extends forms a loop")
+
+
 def footprint_pads(path: Path) -> set[str]:
     """
     The pad *numbers* of a footprint that carry copper.

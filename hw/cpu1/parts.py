@@ -556,5 +556,76 @@ RES_4K7_0402 = PartSpec(
 )
 
 
+# --- the field buses ---------------------------------------------------------
+#
+# CAN FD and RS-485, both differential, both terminated on a solder jumper so a
+# board in the middle of a bus is not a board with two terminations.
+
+# The symbol is KiCad's SN65HVD230, because no library carries a TCAN1044V. The
+# eight pin numbers are identical - TI's own Pin Functions table was read in
+# full - and two of the names differ: pin 5 is this part's IO supply where the
+# HVD230's is a reference output, and pin 8 its standby input where the
+# HVD230's is a slope control. See SOIC8.md.
+#
+# 5 V on VCC and 3.3 V on VIO, which is what makes a 5 V bus driver take 3.3 V
+# logic without a level shifter. Its standby pin has an integrated pull-up, so
+# the transceiver comes up listening and firmware has to ask for the bus.
+CAN_TRANSCEIVER = PartSpec(
+    symbol="Interface_CAN_LIN:SN65HVD230", footprint="SOIC8:SOIC-8_3.9x4.9mm_P1.27mm",
+    prefix="U", manufacturer="Texas Instruments", mpn="TCAN1044VDRQ1", lcsc="C1852061",
+    value="TCAN1044V",
+    params={
+        "supply_voltage": between(4.5, 5.5),
+        "io_supply_voltage": between(1.7, 5.5),
+        "loop_delay_max": exact(210e-9),
+        "bus_fault_voltage": exact(58.0),
+        "data_rate_max": exact(8e6),
+    },
+)
+
+# Integrated fail-safe: the receiver reads high on an idle or shorted bus with
+# no external bias network, which is the reason this part rather than a cheaper
+# one. Its driver enable has a 2 Mohm pull-down and its receiver enable a
+# pull-up, so an undriven board neither talks nor listens.
+RS485_TRANSCEIVER = PartSpec(
+    symbol="Interface_UART:THVD1450DR", footprint="SOIC8:SOIC-8_3.9x4.9mm_P1.27mm",
+    prefix="U", manufacturer="Texas Instruments", mpn="THVD1450DR", lcsc="C2671361",
+    value="THVD1450",
+    params={
+        "supply_voltage": between(3.0, 5.5),
+        "bus_fault_voltage": exact(18.0),
+        "data_rate_max": exact(50e6),
+    },
+)
+
+HEADER_1X3 = PartSpec(
+    symbol="Connector_Generic:Conn_01x03",
+    footprint="HDR1X3:PinHeader_1x03_P2.54mm_Vertical", prefix="J",
+    manufacturer="HCTL", mpn="PZ254-1-03-Z-8.5", lcsc="C2894926", value="bus",
+    params={"current_rating": exact(3.0)},
+)
+
+# A footprint, not a part: two pads and a gap, closed with solder when this
+# board is at the end of a bus. lcsc=None keeps it off the BOM.
+SOLDER_JUMPER = PartSpec(
+    symbol="Jumper:SolderJumper_2_Open",
+    footprint="SJ2:SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm", prefix="JP",
+    manufacturer="-", mpn="SOLDER-JUMPER-2", lcsc=None, value="open",
+)
+
+RES_60R4_0402 = PartSpec(
+    **_R0402, mpn="0402WGF604JTCE", lcsc="C60310", value="60R4",
+    params={"resistance": pm(60.4, 0.01), "max_power": exact(0.0625)},
+)
+RES_120R_0402 = PartSpec(
+    **_R0402, mpn="0402WGF1200TCE", lcsc="C25079", value="120R",
+    params={"resistance": pm(120, 0.01), "max_power": exact(0.0625)},
+)
+CAP_4N7_0402 = PartSpec(
+    **_C0402, manufacturer="FH", mpn="0402B472K500NT", lcsc="C1538", value="4.7nF",
+    params={"capacitance": pm(4.7e-9, 0.10), "max_voltage": exact(50.0)},
+)
+
+
 ALL: dict[str, PartSpec] = collect(globals())
 """Every part, by the name it is known by here. Used by the parts checks."""

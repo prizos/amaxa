@@ -1,0 +1,450 @@
+"""
+CAN FD and RS-485: two pairs of wires that leave the board.
+
+Everything here is worked out from the netlist rather than from the names in
+`cpu1.py`. Each bus is found by asking which nets a transceiver shares with a
+connector, and its termination by walking from one of those nets to the other
+through whatever two-terminal parts lie between them. A termination wired to
+the wrong pair, or with one half missing, is not a thing this can be told about
+- it has to fall out of the walk.
+
+Datasheets: TI SLLSF41 (TCAN1044V, October 2019) and SLLSEZ6 (THVD1450,
+June 2017).
+"""
+
+import itertools
+
+import pytest
+
+# Which declared rail each supply net is, as in test_trip.py: a check that names
+# a rail reads the same number whatever the board does.
+RAILS = {"5V": "rail.5v", "3V3": "rail.3v3"}
+
+GROUND = "GND"
+
+
+@pytest.fixture(scope="module")
+def pad_net(design):
+    return {tuple(node): net for net, nodes in design["nets"].items() for node in nodes}
+
+
+@pytest.fixture(scope="module")
+def pads_of(design, pad_net):
+    """address -> {pad: net}, for looking at one part's connections at a time."""
+    out: dict[str, dict[str, str]] = {}
+    for (address, pad), net in pad_net.items():
+        out.setdefault(address, {})[pad] = net
+    return out
+
+
+@pytest.fixture(scope="module")
+def pin_names(design, board_dir):
+    """address -> {pad: the symbol's name for it}, so checks can say what a pin is."""
+    import sys
+
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from symbols import symbol_pin_names
+
+    return {
+        address: symbol_pin_names(part["symbol"])
+        for address, part in design["parts"].items()
+    }
+
+
+@pytest.fixture(scope="module")
+def buses(design, pads_of):
+    """
+    bus -> (transceiver address, header address, the two nets between them).
+
+    The pair is what a transceiver and a connector have in common once ground is
+    set aside. Nothing declares which nets those are; if a bus pin were wired to
+    the wrong connector pin the pair found here would be wrong too, and every
+    check below would be asking about a bus that does not exist - which is why
+    the first check is that each pair has exactly two wires in it.
+    """
+    out = {}
+    for address in design["parts"]:
+        if not address.endswith(".transceiver"):
+            continue
+        bus = address[: -len(".transceiver")]
+        header = f"{bus}.header"
+        assert header in design["parts"], f"{bus} has a transceiver and no connector"
+        shared = (set(pads_of[address].values()) & set(pads_of[header].values())) - {GROUND}
+        out[bus] = (address, header, sorted(shared))
+    assert out, "no field buses found, and this file is about them"
+    return out
+
+
+def _termination_path(design, pads_of, start: str, finish: str) -> list[str] | None:
+    """
+    The two-terminal parts between two nets, in order, or None if there are none.
+
+    A plain depth-first walk: from a net, through any part with exactly two pads,
+    to the net on its other pad. What comes back is the termination as it is
+    actually wired, including a jumper left open, which a part list would not
+    distinguish from one that is not there.
+    """
+    def walk(net: str, seen: frozenset) -> list[str] | None:
+        for address, pads in pads_of.items():
+            if address in seen or len(pads) != 2:
+                continue
+            nets = list(pads.values())
+            if net not in nets:
+                continue
+            other = nets[1] if nets[0] == net else nets[0]
+            if other == finish:
+                return [address]
+            if other in (GROUND, net):
+                continue
+            rest = walk(other, seen | {address})
+            if rest is not None:
+                return [address] + rest
+        return None
+
+    return walk(start, frozenset())
+
+
+@pytest.fixture(scope="module")
+def terminations(design, pads_of, buses):
+    """bus -> the ordered parts between its two wires."""
+    out = {}
+    for bus, (_, _, pair) in buses.items():
+        assert len(pair) == 2, f"{bus}: {len(pair)} wires between transceiver and connector"
+        path = _termination_path(design, pads_of, pair[0], pair[1])
+        assert path, f"{bus}: nothing connects {pair[0]} to {pair[1]}"
+        out[bus] = path
+    return out
+
+
+# --- what the bus is, physically ---------------------------------------------
+
+
+def test_each_bus_is_a_pair_with_a_ground_beside_it(design, pads_of, buses):
+    """
+    Two wires and a ground, on a connector that carries nothing else.
+
+    The ground is not the return - a differential pair is its own return - it is
+    the reference the two receivers have to share for the common-mode range to
+    mean anything. A pair run without it works on a bench and fails between two
+    machines on different supplies, which is the only place it matters.
+    """
+    problems = []
+    for bus, (transceiver, header, pair) in sorted(buses.items()):
+        pins = pads_of[header]
+        if len(pair) != 2:
+            problems.append(f"  {bus}: {len(pair)} wires shared with its connector: {pair}")
+        grounds = [pad for pad, net in pins.items() if net == GROUND]
+        if len(grounds) != 1:
+            problems.append(f"  {bus}: {len(grounds)} ground pins on its connector")
+        stray = sorted(set(pins.values()) - set(pair) - {GROUND})
+        if stray:
+            problems.append(f"  {bus}: its connector also carries {stray}")
+    assert not problems, "Field bus connectors:\n" + "\n".join(problems)
+
+
+def test_each_transceiver_runs_from_rails_its_datasheet_allows(
+    pads_of, pin_names, buses, spec, spec_has
+):
+    """
+    Every supply pin is on a declared rail, and on one its range covers.
+
+    A part with two supplies has a logic side and a bus side, and they are not
+    interchangeable: the CAN transceiver's I/O supply sets what a logic high is
+    to it, and its VCC sets what a dominant bit is on the cable. Swapped, both
+    pins are still on a rail the board has, the board still powers up, and the
+    bus drives to the wrong levels - so the two have to be told apart, not just
+    counted. Which pin is which comes from the symbol, and which rail is which
+    from the netlist; neither is written here.
+
+    The check that came before this one matched rails to ranges in any order,
+    which is the same thing said carelessly: swapping the CAN transceiver's two
+    supplies passed it, because the set of rails was unchanged.
+    """
+    for bus, (transceiver, _, _) in sorted(buses.items()):
+        supplies = {
+            _SUPPLY_NAMES[name.upper()]: (pad, net)
+            for pad, name in pin_names[transceiver].items()
+            if name.upper() in _SUPPLY_NAMES
+            and (net := pads_of[transceiver].get(pad)) is not None
+        }
+        declared = {
+            name: spec(transceiver, name)
+            for name in ("supply_voltage", "io_supply_voltage")
+            if spec_has(transceiver, name)
+        }
+        assert set(supplies) == set(declared), (
+            f"{bus}: its symbol has supply pins for {sorted(supplies)} and "
+            f"parts.py states ranges for {sorted(declared)}"
+        )
+        for name, (pad, net) in sorted(supplies.items()):
+            assert net in RAILS, (
+                f"{bus}: {name} on pin {pad} is on {net!r}, not a declared rail"
+            )
+            low, high = declared[name]
+            rail_low, rail_high = spec(RAILS[net], "voltage")
+            assert low <= rail_low and rail_high <= high, (
+                f"{bus}: {name} on pin {pad} is on {net} at {rail_low} to "
+                f"{rail_high} V, outside the {low} to {high} V it states"
+            )
+
+
+# What a supply pin is called, and which declared range belongs to it. The CAN
+# transceiver's I/O supply is the reason this is a mapping and not a list: the
+# symbol is the SN65HVD230's, where pin 5 is a reference *output* called Vref,
+# and on the part actually fitted it is the level-shifter supply. See
+# parts/SOIC8/SOIC8.md.
+_SUPPLY_NAMES = {
+    "VCC": "supply_voltage",
+    "VDD": "supply_voltage",
+    "V+": "supply_voltage",
+    "VIO": "io_supply_voltage",
+    "VREF": "io_supply_voltage",
+}
+
+
+# --- the termination ---------------------------------------------------------
+
+
+def test_each_bus_can_be_terminated_and_is_not_terminated_when_it_arrives(
+    design, terminations
+):
+    """
+    The path between the two wires passes through a jumper, and the jumper is
+    open.
+
+    A bus wants two terminations, one at each end. A board that is terminated
+    because it was built that way can only ever be an end, and two of them in
+    the middle of a working bus is the fault that looks like a cable problem for
+    a day. Open by default is the only state that is right more often than not:
+    a board added to a bus is usually not the end of it.
+    """
+    for bus, path in sorted(terminations.items()):
+        jumpers = [
+            address
+            for address in path
+            if design["parts"][address]["symbol"].startswith("Jumper:")
+        ]
+        assert len(jumpers) == 1, (
+            f"{bus}: {len(jumpers)} jumpers between its two wires, so its "
+            "termination cannot be chosen once the board is built"
+        )
+        assert design["parts"][jumpers[0]]["value"] == "open", (
+            f"{bus}: {jumpers[0]} arrives closed, so this board is always an "
+            "end of the bus"
+        )
+
+
+def test_each_termination_matches_the_cable_it_terminates(spec, terminations, spec_has):
+    """
+    The resistance between the two wires is the cable's impedance.
+
+    Everything in the path that has a resistance counts, whether the bus is
+    terminated with one resistor or with two either side of a midpoint, because
+    what the cable sees is the total. Too low and the driver runs out of current
+    before it reaches a dominant level; too high and the far end of the cable
+    reflects, which at these edge rates is a second copy of every bit.
+    """
+    low, high = spec("bus", "termination")
+    for bus, path in sorted(terminations.items()):
+        parts = [address for address in path if spec_has(address, "resistance")]
+        assert parts, f"{bus}: nothing in its termination has a resistance"
+        total_low = sum(spec(address, "resistance")[0] for address in parts)
+        total_high = sum(spec(address, "resistance")[1] for address in parts)
+        assert low <= total_low and total_high <= high, (
+            f"{bus}: {total_low:.1f} to {total_high:.1f} ohm across the pair, "
+            f"outside {low:g} to {high:g}"
+        )
+
+
+def test_a_split_termination_is_split_evenly(spec, terminations, spec_has):
+    """
+    Where a termination is in two halves, the halves are equal.
+
+    The midpoint only stays at the common-mode voltage while the two halves
+    match. Unequal, it moves with every dominant bit, and the difference comes
+    out of the pair as common mode - the thing the split was added to remove.
+    Two resistors one value apart pass every other check here.
+    """
+    for bus, path in sorted(terminations.items()):
+        halves = [address for address in path if spec_has(address, "resistance")]
+        if len(halves) < 2:
+            continue
+        values = {spec(address, "resistance") for address in halves}
+        assert len(values) == 1, (
+            f"{bus}: its termination is split into "
+            f"{[f'{low}-{high}' for low, high in sorted(values)]} ohm, which "
+            "puts the midpoint off centre"
+        )
+
+
+def test_a_split_midpoint_shunts_common_mode_and_nothing_else(
+    design, pads_of, spec, spec_has, buses, terminations
+):
+    """
+    The capacitor at the midpoint, as the impedance it offers common mode at the
+    fastest bit rate the transceiver can signal at.
+
+    It sits where the differential signal is zero, so it loads common mode and
+    nothing else. Its value is the whole point: large enough that common mode at
+    the signalling frequency finds ground through it rather than through the
+    cable and whatever the cable is near, and it does not have to be any larger
+    because the differential pair never sees it at all.
+    """
+    import math
+
+    _, allowed = spec("can", "common_mode_shunt")
+    checked = 0
+    for bus, path in sorted(terminations.items()):
+        inside = {
+            net
+            for address in path
+            for net in pads_of[address].values()
+            if sum(net in pads_of[other].values() for other in path) > 1
+        }
+        # Asked in this order deliberately: `spec_has` counts as a read, and
+        # probing every part on the board for a capacitance would quietly mark
+        # capacitors nothing here looks at as checked.
+        shunts = sorted(
+            address
+            for address, pads in pads_of.items()
+            if set(pads.values()) & inside
+            and GROUND in pads.values()
+            and spec_has(address, "capacitance")
+        )
+        if not shunts:
+            continue
+        assert len(shunts) == 1, f"{bus}: {len(shunts)} capacitors on its midpoint"
+        halves = [address for address in path if spec_has(address, "resistance")]
+        assert len(halves) == 2, (
+            f"{bus}: a midpoint capacitor with {len(halves)} termination "
+            "halves, so there is no midpoint for it to be at"
+        )
+        transceiver = buses[bus][0]
+        rate, _ = spec(transceiver, "data_rate_max")
+        capacitance, _ = spec(shunts[0], "capacitance")
+        half, _ = spec(halves[0], "resistance")
+        impedance = 1.0 / (2 * math.pi * rate * capacitance)
+        ratio = impedance / (half / 2)
+        assert ratio <= allowed, (
+            f"{bus}: {impedance:.1f} ohm to ground at {rate / 1e6:g} Mbit/s "
+            f"against {half / 2:.1f} ohm of termination, a ratio of "
+            f"{ratio:.2f} where {allowed:g} is the most that counts as a shunt"
+        )
+        checked += 1
+    assert checked, "no split termination found, and this check is about them"
+
+
+# --- what the bus does to the rest of the board ------------------------------
+
+
+def test_a_bus_at_its_worst_case_voltage_stays_inside_the_connector_rating(
+    spec, spec_has, buses, terminations
+):
+    """
+    A wire in the cable shorted to whatever the transceiver is rated to survive,
+    against what the connector pin it arrives on is rated to carry.
+
+    The transceiver's bus-fault rating is the reason to pick that part: it says
+    the silicon lives through a wire touching a supply. It says nothing about
+    the termination, which is then a resistor across that voltage, or about the
+    connector pin the current goes through on its way there. A part that
+    survives a fault on a board that does not is a worse outcome than neither
+    surviving, because it looks like it worked.
+    """
+    for bus, (transceiver, header, _) in sorted(buses.items()):
+        fault, _ = spec(transceiver, "bus_fault_voltage")
+        resistance = sum(
+            spec(address, "resistance")[0]
+            for address in terminations[bus]
+            if spec_has(address, "resistance")
+        )
+        assert resistance, f"{bus}: no resistance in its termination"
+        current = fault / resistance
+        rating, _ = spec(header, "current_rating")
+        assert current <= rating, (
+            f"{bus}: {current:.2f} A through the connector if a wire sits at "
+            f"the {fault:g} V its transceiver survives, against {rating:g} A "
+            "per pin"
+        )
+
+
+def test_the_can_transceivers_leave_room_in_the_bit_they_arbitrate_in(
+    spec, spec_has, buses
+):
+    """
+    Two transceiver delays inside one arbitration bit.
+
+    CAN arbitration is decided by every node seeing the same bus level within
+    the bit it is sent in: a node's dominant bit has to reach the far end of the
+    cable and its own receiver has to see the result, so each arbitration bit
+    contains a round trip. The transceivers are the fixed part of that budget -
+    the cable's share depends on how long it is, and this is what is left for it
+    once the silicon has taken its cut.
+    """
+    _, rate = spec("can", "arbitration_rate")
+    _, allowed = spec("can", "transceiver_delay_share")
+    for bus, (transceiver, _, _) in sorted(buses.items()):
+        if not spec_has(transceiver, "loop_delay_max"):
+            continue
+        _, loop = spec(transceiver, "loop_delay_max")
+        share = 2 * loop * rate
+        assert share <= allowed, (
+            f"{bus}: two loop delays of {loop * 1e9:.0f} ns are "
+            f"{share:.0%} of a bit at {rate / 1e3:g} kbit/s, over the "
+            f"{allowed:.0%} the cable is left"
+        )
+
+
+def test_no_bus_is_clocked_faster_than_its_transceiver_signals(spec, buses, spec_has):
+    """
+    The rate firmware will run each bus at, against what the part does.
+
+    Both rates are written down in `INTENT` because they are firmware's to
+    choose, and a part chosen for its price rather than its speed is only found
+    this way - a 500 kbit/s transceiver on a 1 Mbit/s bus works at the bench
+    length and degrades with cable, which is the hardest kind of fault to find.
+    """
+    for bus, (transceiver, _, _) in sorted(buses.items()):
+        if not spec_has(transceiver, "data_rate_max"):
+            continue
+        limit, _ = spec(transceiver, "data_rate_max")
+        wanted = f"{bus}.baud" if bus == "rs485" else f"{bus}.arbitration_rate"
+        _, rate = spec(*wanted.rsplit(".", 1))
+        assert rate <= limit, (
+            f"{bus}: {rate / 1e3:g} kbit/s asked of a part that does "
+            f"{limit / 1e3:g}"
+        )
+
+
+def test_every_receiver_enable_is_tied_to_the_state_that_listens(
+    design, pads_of, pin_names, buses
+):
+    """
+    A receiver enable is held asserted, whichever way round the part wants it.
+
+    Half duplex means the driver and the receiver share the pair, and a node
+    that stops listening while it transmits cannot hear a collision with
+    another node that started in the same moment. Both then carry on, and what
+    arrives at every other node is neither message. Holding the receiver on
+    costs nothing: the bytes it reads back are its own, and firmware discards
+    them.
+
+    Which pin that is, and which level asserts it, come from the symbol - `RE`
+    is active high and `~{RE}` active low - so a part swapped for one with the
+    opposite polarity is a failure here rather than a board that never receives.
+    """
+    found = 0
+    for bus, (transceiver, _, _) in sorted(buses.items()):
+        for pad, name in sorted(pin_names[transceiver].items()):
+            bare = name.replace("~{", "").replace("}", "")
+            if bare != "RE":
+                continue
+            found += 1
+            net = pads_of[transceiver].get(pad)
+            wanted = GROUND if name != bare else "a supply rail"
+            asserted = net == GROUND if name != bare else net in RAILS
+            assert asserted, (
+                f"{bus}: {name} on pin {pad} is on {net!r}, not {wanted}, so "
+                "the receiver is not held on"
+            )
+    assert found, "no receiver enable found, and this check is about them"

@@ -75,7 +75,17 @@
 
 # The analog supply the power board's sensors run from, and the comparator
 # outputs on their way to the trip bus.
-(rule "analog supply")
+(rule "analog supply"
 	(condition "A.NetName == '5VA'")
 	(constraint track_width (min 0.3mm))
+	(severity error))
+
+# The two field buses, from each transceiver to the three pins it leaves on.
+# They are differential pairs leaving the board on a cable, so they are wider
+# than a signal that stays on it, and the two halves of each pair are the same
+# width as each other - a difference in width is a difference in impedance, and
+# the impedance is the only thing a terminated bus cares about.
+(rule "field buses"
+	(condition "A.NetName == 'CAN_H' || A.NetName == 'CAN_L' || A.NetName == 'RS485_A' || A.NetName == 'RS485_B'")
+	(constraint track_width (min 0.2mm))
 	(severity error))

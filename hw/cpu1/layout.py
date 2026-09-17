@@ -901,6 +901,37 @@ def _adc_inputs() -> None:
     LABELS["tp_dac_test"] = (0.0, -2.0)
 
 
+# --- the field buses ---------------------------------------------------------
+#
+# CAN and RS-485 side by side above the package, each with its transceiver, its
+# termination on a jumper, and three pins out to the field.
+
+def _field_buses() -> None:
+    # Four rows above the package: each transceiver, its decoupling, its
+    # termination on a jumper, and the three pins that leave the board.
+    PLACEMENT["can.transceiver"] = (2.0, -25.0, 0)
+    PLACEMENT["can.decoupling_vcc"] = (8.0, -25.0, 0)
+    PLACEMENT["can.decoupling_vio"] = (11.0, -25.0, 0)
+    PLACEMENT["can.termination_jumper"] = (2.0, -29.0, 0)
+    PLACEMENT["can.termination_upper"] = (6.0, -29.0, 0)
+    PLACEMENT["can.termination_lower"] = (10.0, -29.0, 0)
+    PLACEMENT["can.termination_split"] = (14.0, -29.0, 0)
+    PLACEMENT["rs485.transceiver"] = (2.0, -33.0, 0)
+    PLACEMENT["rs485.decoupling"] = (8.0, -33.0, 0)
+    PLACEMENT["rs485.termination_jumper"] = (11.5, -33.0, 0)
+    PLACEMENT["rs485.termination"] = (15.0, -33.0, 0)
+    PLACEMENT["can.header"] = (2.0, -37.5, 90)
+    PLACEMENT["rs485.header"] = (12.0, -37.5, 90)
+    for address in ("can.transceiver", "rs485.transceiver"):
+        LABELS[address] = (0.0, -3.4)
+    for address in ("can.header", "rs485.header"):
+        LABELS[address] = (2.6, 2.6)
+    for address in ("can.decoupling_vcc", "can.decoupling_vio", "can.termination_jumper",
+                    "can.termination_upper", "can.termination_lower", "can.termination_split",
+                    "rs485.decoupling", "rs485.termination_jumper", "rs485.termination"):
+        LABELS[address] = (0.0, -1.6)
+
+
 _supply_vias()
 _decoupling()
 _analog_supply()
@@ -910,3 +941,4 @@ _power()
 _safety()
 _trip()
 _adc_inputs()
+_field_buses()

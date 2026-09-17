@@ -119,6 +119,30 @@ INTENT: dict[str, tuple[float, float]] = {
     # changing - so it is an interface promise rather than an assumption, and
     # every corner and settling figure here is worked with it included.
     "header.source_impedance": (0.0, 2.0),
+    # What a terminated bus must present between its two wires, at each end.
+    # ISO 11898 and TIA-485 both ask for the cable's characteristic impedance,
+    # which for the twisted pair either of them runs on is 120 ohm nominal; the
+    # band is what a real cable and a real resistor tolerance come to.
+    "bus.termination": (108.0, 132.0),
+    # The CAN bit rate arbitration happens at. It is a firmware choice, and the
+    # reason it is written down here is that arbitration is the one part of a
+    # CAN frame where a bit must reach the far end of the cable and come back
+    # inside one bit time, so it is what the transceivers' loop delay is spent
+    # against. The data phase is faster and does not arbitrate.
+    "can.arbitration_rate": (125e3, 500e3),
+    # How much of that round trip the two transceivers themselves may take,
+    # leaving the rest for the cable and for the far node to make up its mind.
+    # A quarter is the share TI's own bit-timing examples work to.
+    "can.transceiver_delay_share": (0.0, 0.25),
+    # The split termination's midpoint capacitor, as the impedance it presents
+    # to common mode at the fastest bit rate the transceiver can signal at,
+    # relative to the half termination it sits behind. Small means the common
+    # mode sees a path to ground where the differential signal sees none, which
+    # is the whole reason the termination is split.
+    "can.common_mode_shunt": (0.0, 0.3),
+    # What USART2 will clock the RS-485 pair at. As with the CAN rate this is a
+    # firmware choice written down so the part can be held to it.
+    "rs485.baud": (9600.0, 500e3),
 }
 
 # Which later block connects the other end of each net. Matched in order; a net
@@ -130,8 +154,8 @@ _MILESTONES = [
      "M6: the ADC input networks and comparator taps"),
     (r"^\w+_SENSE$",
      "M6: the anti-alias filter between this and the ADC pin it belongs to"),
-    (r"^(USB_\w+|CAN_\w+|ETH_\w+|RS485_\w+)$",
-     "M7: USB, CAN FD, Ethernet and RS-485"),
+    (r"^(USB_\w+|ETH_\w+)$",
+     "M7b: USB and Ethernet"),
 ]
 
 
@@ -140,7 +164,7 @@ _MILESTONES = [
 _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
     r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d"
-    r"|\w+_SENSE|DAC_S\w+"
+    r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+"
     r"|IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$"
 )
 
@@ -202,6 +226,7 @@ def build() -> Net:
     analog_input(nets["5V"], gnd, nets)
     trip_comparators(v3v3, gnd, nets)
     adc_inputs(v3v3, gnd, nets)
+    field_buses(v3v3, gnd, nets)
 
     # Unused I/O is left unconnected on purpose, and said so. Firmware sets these
     # to analog mode, the lowest-leakage state.
@@ -879,6 +904,88 @@ def adc_inputs(v3v3, gnd, nets) -> None:
     series = part(parts.RES_1K_0402, "adc.dac_test.series", f"R{resistor_ref}")
     nets["DAC_TEST"] += series[1]
     Net("DAC_TEST_OUT").connect(series[2], part(parts.TEST_PAD, "tp_dac_test", "TP11")[1])
+
+
+def field_buses(v3v3, gnd, nets) -> None:
+    """
+    CAN FD and RS-485: two differential buses, each on three pins.
+
+    Both transceivers are chosen for what they do when nothing is driving them.
+    The CAN part's standby pin has an integrated pull-up, so it comes out of
+    reset listening rather than talking. The RS-485 part's driver enable has a
+    2 Mohm pull-down and its receiver enable a pull-up, and it reads a logic
+    high on an idle or shorted bus with no external bias network at all - which
+    is the reason it is this part and not a cheaper one, and why the fail-safe
+    resistors the plan called for are not here.
+
+    Termination is on a solder jumper on both. A bus wants exactly two
+    terminations, at its two ends, and a board that cannot be anything but an
+    end is a board that cannot go in the middle.
+    """
+    v5 = nets["5V"]
+
+    # --- CAN FD --------------------------------------------------------------
+    can = part(parts.CAN_TRANSCEIVER, "can.transceiver", "U16")
+    v5 += can["VCC"]
+    v3v3 += can["Vref"]      # pin 5: this part's IO supply, not a reference out
+    gnd += can["GND"]
+    nets["CAN_TX"] += can["D"]
+    nets["CAN_RX"] += can["R"]
+    nets["CAN_STANDBY"] += can["Rs"]   # pin 8: standby, pulled up inside
+
+    for address, rail, ref in (("can.decoupling_vcc", v5, "C55"),
+                               ("can.decoupling_vio", v3v3, "C56")):
+        cap = part(parts.CAP_100N_0402, address, ref)
+        rail += cap[1]
+        gnd += cap[2]
+
+    can_header = part(parts.HEADER_1X3, "can.header", "J5")
+    canh = Net("CAN_H")
+    canl = Net("CAN_L")
+    canh.connect(can["CANH"], can_header[1])
+    canl.connect(can["CANL"], can_header[2])
+    gnd += can_header[3]
+
+    # Split termination: two halves with the midpoint bypassed to ground, which
+    # is what gives a CAN bus a defined common mode as well as a defined
+    # differential impedance. In series with a jumper, so it can be left open.
+    jumper = part(parts.SOLDER_JUMPER, "can.termination_jumper", "JP1")
+    upper = part(parts.RES_60R4_0402, "can.termination_upper", "R76")
+    lower = part(parts.RES_60R4_0402, "can.termination_lower", "R77")
+    split = part(parts.CAP_4N7_0402, "can.termination_split", "C57")
+    canh += jumper[1]
+    Net("CAN_TERM").connect(jumper[2], upper[1])
+    Net("CAN_TERM_MID").connect(upper[2], lower[1], split[1])
+    canl += lower[2]
+    gnd += split[2]
+
+    # --- RS-485 --------------------------------------------------------------
+    rs485 = part(parts.RS485_TRANSCEIVER, "rs485.transceiver", "U17")
+    v3v3 += rs485["VCC"]
+    gnd += rs485["GND"]
+    nets["RS485_TX"] += rs485["DI"]
+    nets["RS485_RX"] += rs485["RO"]
+    nets["RS485_DE"] += rs485["DE"]
+    # The receiver stays on, including while this board is transmitting, which
+    # is how a half-duplex node hears its own collisions.
+    gnd += rs485["~{RE}"]
+
+    cap = part(parts.CAP_100N_0402, "rs485.decoupling", "C58")
+    v3v3 += cap[1]
+    gnd += cap[2]
+
+    rs485_header = part(parts.HEADER_1X3, "rs485.header", "J6")
+    bus_a = Net("RS485_A")
+    bus_b = Net("RS485_B")
+    bus_a.connect(rs485["A"], rs485_header[1])
+    bus_b.connect(rs485["B"], rs485_header[2])
+    gnd += rs485_header[3]
+
+    rs485_jumper = part(parts.SOLDER_JUMPER, "rs485.termination_jumper", "JP2")
+    termination = part(parts.RES_120R_0402, "rs485.termination", "R78")
+    bus_a += rs485_jumper[1]
+    Net("RS485_TERM").connect(rs485_jumper[2], termination[1])
+    bus_b += termination[2]
 
 
 def pending(names: list[str]) -> dict[str, str]:

@@ -132,6 +132,60 @@ def test_every_net_has_a_track_width_rule(design, board_dir):
     )
 
 
+def test_every_rule_in_the_dru_file_is_one_kicad_will_apply(board_dir):
+    """
+    Each rule in `rules.kicad_dru` is a well-formed s-expression carrying both a
+    condition and a constraint.
+
+    KiCad does not complain about a rule it cannot parse: it reports no error,
+    DRC runs, and the rule simply does not exist. A stray parenthesis closing
+    `(rule "analog supply")` before its condition cost that net its width rule
+    for two milestones, and the check above did not notice because it reads the
+    file as text and the condition was still there - just no longer inside
+    anything.
+
+    So this reads the file the way KiCad's parser does, and requires that what
+    comes out is the rules the file appears to contain.
+    """
+    import re
+
+    text = (board_dir / "rules.kicad_dru").read_text()
+    stripped = re.sub(r"#[^\n]*", "", text)
+
+    forms, stack = [], []
+    for token in re.findall(r"\(|\)|\"[^\"]*\"|[^\s()]+", stripped):
+        if token == "(":
+            stack.append([])
+        elif token == ")":
+            assert stack, f"{board_dir.name}/rules.kicad_dru: a ')' with nothing open"
+            done = stack.pop()
+            (stack[-1] if stack else forms).append(done)
+        elif stack:
+            stack[-1].append(token)
+    assert not stack, (
+        f"{board_dir.name}/rules.kicad_dru ends with {len(stack)} form(s) still "
+        "open, so KiCad reads the rest of the file as part of one of them"
+    )
+
+    written = len(re.findall(r"^\(rule\b", stripped, re.MULTILINE))
+    parsed = [form for form in forms if form and form[0] == "rule"]
+    assert len(parsed) == written, (
+        f"{board_dir.name}/rules.kicad_dru is written as {written} rules but "
+        f"parses as {len(parsed)}: one of them closes early, and the parts left "
+        "outside it are not applied to anything"
+    )
+    incomplete = [
+        form[1]
+        for form in parsed
+        if not any(part[0] == "condition" for part in form[2:] if isinstance(part, list))
+        or not any(part[0] == "constraint" for part in form[2:] if isinstance(part, list))
+    ]
+    assert not incomplete, (
+        "Rules with no condition or no constraint, which apply to everything or "
+        "require nothing:\n" + "\n".join(f"  {name}" for name in incomplete)
+    )
+
+
 def test_pending_nets_are_still_pending(design, board_config, board_dir):
     """
     A board still being drawn may leave nets half-connected, and only that.
