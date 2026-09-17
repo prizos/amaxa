@@ -29,6 +29,30 @@ project's boards so far had thousands. An assembled order needs either stock to
 return, a consigned reel, or hand-fitting the MCU. This has to be resolved
 before ordering, not discovered at checkout.
 
+## Figures used from the datasheet
+
+ST's datasheet, *STM32H743xI*, DocID030538 Rev 3 (October 2017), served by LCSC
+for C114408. ST's own site did not respond to automated requests, so AN4938 —
+ST's hardware development guide for the part — was not read.
+
+| Figure | Value | Where |
+|---|---|---|
+| Supply voltage | 1.62 to 3.6 V | Table 23 |
+| VCAP capacitor CEXT | 2.2 µF per VCAP pin, ESR < 100 mΩ | Table 24 |
+| HSE maximum critical gm | 1.5 mA/V | Table 43 |
+| HSE load capacitors | 5 to 25 pF typical | Section 6.3.8 |
+| LSE maximum critical gm | 0.5 / 0.75 / 1.7 / 2.7 µA/V by drive | Table 44 |
+| I/O pin current | 20 mA absolute maximum | Table 21 |
+| NRST capacitor | 100 nF, internal pull-up 30–50 kΩ | Figure 21, Table 62 |
+| Supply decoupling | N × 100 nF + 1 × 4.7 µF on VDD; "100 nF + 1 x 1 µF" pairs | Figure 13 |
+
+**Needs a human eye.** Figure 13 is a drawing, and its extracted text gives the
+decoupling values without saying which supply pin each belongs to: "100 nF",
+"100 nF + 1 x 1 µF" and "4.7 µF" appear beside VDDA, VREF+, VDD33USB and VBAT in
+no recoverable order. The board gives every supply pin its 100 nF, and both 3V3
+and VDDA a 1 µF, which covers the likely reading — but read the figure, and
+AN4938, before ordering.
+
 ## Why this part
 
 Recorded in [`docs/research/README.md`](../../../../docs/research/README.md#decision).

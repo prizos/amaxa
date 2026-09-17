@@ -170,9 +170,9 @@ PARAMETERS_READ: set[tuple[str, str]] = set()
 
 def pytest_collection_modifyitems(config, items):
     """
-    Record how many checks were collected, and run the coverage guard last.
+    Record how many checks were collected, and run the coverage guards last.
 
-    The guard asserts on what every other check read, so it has to run after
+    The guards assert on what every other check read, so they have to run after
     them. Sorting on a boolean is stable, so nothing else moves.
     """
     # Checks that will actually execute, not checks that exist. A skipped test
@@ -184,7 +184,8 @@ def pytest_collection_modifyitems(config, items):
         for item in items
         if not (item.get_closest_marker("skip") or item.get_closest_marker("skipif"))
     )
-    items.sort(key=lambda item: item.name == "test_every_declared_parameter_is_read")
+    guards = {"test_every_declared_parameter_is_read", "test_every_design_intent_is_read_by_something"}
+    items.sort(key=lambda item: item.name in guards)
 
 
 @pytest.fixture(scope="session")

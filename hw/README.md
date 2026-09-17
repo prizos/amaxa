@@ -75,6 +75,12 @@ gates loosened:
   connections not yet routed — counted and printed — but still fails on any
   violation. `SIM := none` says a board has no simulation decks.
 
+**A dense board's layout is computed.** `tools/layout_lib.py` gives a board's
+`layout.py` the geometry of a quad-flat package — each pin's line out of the
+package, points along it, which way to turn a two-pad part to face it — so
+decoupling, stitching and fan-out are generated from the netlist and the
+footprint rather than typed as coordinates. `cpu1` is the example.
+
 **Board layers** come from `layout.py`'s `BOARD`: `copper_layers`, and for more
 than two, a `stack` of the dielectrics between them, taken from the fab's
 published stackup. Every route, via and plane is refused on a layer the board

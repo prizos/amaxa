@@ -4,12 +4,17 @@ The STM32H743ZIT6 board that generates every hard real-time signal, and is later
 soldered onto one analog power board. **In progress,** and built one block at a
 time.
 
-What exists: the pin map; the MCU itself on a 4-layer board, with every used pin
-on its own named net, every unused pin marked no-connect, and its ground pads
-stitched to a solid ground plane on In1. It builds, passes ERC and every check,
-and DRC finds no violations — with the 3.3 V rail's pins not yet routed, because
-nothing supplies them until the power block lands. 94 nets are *pending*, each
-naming the block that will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)).
+What exists: the pin map, and the MCU with its core — every supply pin
+decoupled, the core regulator's capacitors, a filtered analog supply, an 8 MHz
+and a 32.768 kHz crystal, reset and boot, a Tag-Connect debug footprint, three
+LEDs, a button and test pads. 43 parts on four layers, with solid ground on In1
+and 3V3 on In2. It builds, passes ERC and 45 checks, and DRC finds no violations.
+
+**Not everything placed is routed.** The decoupling, the analog supply and both
+crystals are; debug, the LEDs, the button, the test pads, reset and boot are
+placed but not yet wired — 28 connections, counted by DRC because `board.mk` says
+routing is incomplete. The remaining 75 nets are *pending*, each naming the block
+that will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)).
 
 | | |
 |---|---|
@@ -45,11 +50,55 @@ and the table's docstring records them: Ethernet's CRS_DV and TIM8_CH1N want the
 same pin, no 32-bit timer is free for the encoder, and keeping TIM1 where the
 NUCLEO has it costs COMP2's external inputs.
 
+## How the MCU core is laid out
+
+Most of it is computed from the netlist and the footprint, not written as
+coordinates ([`layout.py`](layout.py), with helpers in
+[`../tools/layout_lib.py`](../tools/layout_lib.py)):
+
+- **Supply pins take their plane vias inward.** An LQFP-144 has an 18 mm square
+  of empty board inside its pad ring, where no signal will ever escape. Outside
+  the ring, vias on neighbouring 0.5 mm-pitch pins collide; inside, they stagger
+  in rings — ground at 9.3 mm from the centre, 3V3 at 8.5 mm, and 7.7 mm for a 3V3
+  pin beside another.
+- **Each supply pin's capacitor goes outward**, turned so its first pad faces the
+  pin, with its ground via beyond. Capacitors on neighbouring pins spread apart.
+
+VDDA's filter and both crystals are placed by hand.
+
+## What the checks establish
+
+[`checks/test_core.py`](checks/test_core.py) derives everything from ST's
+datasheet figures and the parts' own:
+
+| Check | From |
+|---|---|
+| Every supply pin has its **own** 100 nF within 3 mm, matched one to one | ST pin data, netlist, placed board |
+| Bulk: 4.7 µF on 3V3, 1 µF on 3V3 and on VDDA | Datasheet Figure 13 |
+| One 2.2 µF on each VCAP pin | Datasheet Table 24 |
+| Each crystal sees its specified load, at every corner | Crystal load, capacitor tolerance, declared stray |
+| **Oscillator gain margin at least 5**, both crystals | Datasheet Tables 43–44, crystal ESR and C0 |
+| Indicators visibly lit and inside the LED's and the pin's ratings | LED and resistor tolerances, pin limit |
+| NRST's 100 nF, BOOT0 and button pull-downs, VDDA fed only through a ferrite | Datasheet Figure 21, netlist |
+
+The gain-margin check chose the crystals. Every in-stock 8 MHz part in 3225 or
+HC-49S, and the common 12.5 pF 32 kHz parts, fail it — the latter at a margin of
+1.8. Each would start on the bench and might not start cold.
+
+**Four things need a person** before ordering, tracked by `make check`: which
+supply pin each of the datasheet's decoupling values belongs to (the figure is a
+drawing), the 32 kHz crystal's pad roles, the LEDs' cathode pad, and the
+Tag-Connect pinout against Tag-Connect's own drawing. ST's AN4938 hardware guide
+could not be fetched and has not been read.
+
 ## Still to come
 
-The router extensions a dense board needs — routes that change layer and
-generated fan-out and decoupling; the MCU core
-(crystals, reset, Tag-Connect, VDDA and VREF+); a 9–36 V input with a 100 V-class
-buck; the hardware trip chain (external comparators, a latch, and PWM buffers
-that are off until firmware deliberately enables them); the ADC input networks;
-USB, CAN FD, RS-485 and Ethernet; and 2.54 mm headers to the power board.
+- Routing for debug, the LEDs, the button, reset and boot.
+- Silkscreen that clears the crystals and vias — warnings today, not errors.
+- VREF+ and its external 3.0 V reference, with a 9–36 V input and a 100 V-class
+  buck.
+- The hardware trip chain: external comparators, a latch, and PWM buffers that
+  stay off until firmware deliberately enables them.
+- The ADC input networks.
+- USB, CAN FD, RS-485 and Ethernet.
+- 2.54 mm headers to the power board.

@@ -2,26 +2,36 @@
 cpu1 placement and routing.
 
 Read by hw/tools/layout.py. Coordinates are millimetres in the board's own frame:
-x runs right, y runs down, origin at the centre.
+x runs right, y runs down, origin at the centre, where the MCU sits.
 
-So far this places the MCU and stitches its ground pads down to the In1 ground
-plane. Everything else is added block by block, and routes will increasingly be
-computed from pad geometry rather than written as coordinates — which is why the
-ground stitching below is generated from the footprint file, not listed.
+Most of this is computed, not written. The MCU's supply pins are found in
+design.json by the nets they are on, and every one of them gets the same
+treatment from the pin's own geometry:
 
-The board size is provisional: it gets decided once the blocks and the headers
-to the power board are placed.
+- **Its plane via goes inward.** An LQFP-144 has an 18 mm square of empty board
+  inside its pad ring, where no signal will ever escape. Supply pins sit next to
+  each other at 0.5 mm pitch, so outside the ring their vias would collide; inside
+  they stagger in rings - ground at 9.3 mm from the centre, 3V3 at 8.5 mm, and a
+  second 3V3 ring at 7.7 mm for a 3V3 pin beside another.
+- **Its capacitor goes outward**, turned so its first pad faces the pin, with a
+  straight track to it and its ground via beyond.
+
+Everything else - the crystals, the analog supply's filter, debug, indicators -
+is placed by hand where the pins it serves come out, and routed where routing is
+what the check depends on. The rest waits, and board.mk says so.
+
+The board size is provisional until the blocks and the headers to the power
+board are placed.
 """
 
-import math
-import re
+import json
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))
 
-from stm32 import Silicon  # noqa: E402
+from layout_lib import qfp_pins  # noqa: E402
 
 # --- the board itself --------------------------------------------------------
 #
@@ -49,67 +59,189 @@ BOARD = {
     "pour_inset": 0.5,
 }
 
-MCU_AT = (0.0, 0.0)
+F, B = "F.Cu", "B.Cu"
+VIA = (0.5, 0.2)          # PCBWay: 0.15 mm drill, 0.15 mm annular ring, minimum
+STUB = 0.2                # between 0.5 mm-pitch pads
+SUPPLY = 0.25             # pin to its capacitor
 
-PLACEMENT = {
-    "mcu": MCU_AT,
+MCU = "mcu"
+PINS = qfp_pins(HERE / "parts" / "LQFP144" / "LQFP-144_20x20mm_P0.5mm.kicad_mod")
+
+
+def _design() -> dict:
+    path = HERE / "build" / "design.json"
+    return json.loads(path.read_text()) if path.is_file() else {"parts": {}, "nets": {}}
+
+
+DESIGN = _design()
+NET_OF_PIN = {
+    pad: net
+    for net, nodes in DESIGN["nets"].items()
+    for address, pad in nodes
+    if address == MCU
 }
 
-LABELS = {
-    "*": (0.0, -1.7),
-    "mcu": (0.0, -12.5),
-}
-
-LABEL_FONT = {"size": 1.0, "thickness": 0.15}
-
+PLACEMENT: dict = {MCU: (0.0, 0.0)}
+LABELS: dict = {"*": (0.0, -1.2), MCU: (0.0, -6.0)}
+LABEL_FONT = {"size": 0.8, "thickness": 0.15}   # fab minimum
 ROUTES: list = []
-
-# --- ground stitching ----------------------------------------------------------
-#
-# Every MCU ground pad gets its own via to the In1 plane, straight out from the
-# package. The pads are 0.3 mm wide at 0.5 mm pitch, so the stub is 0.2 mm - the
-# 0.5 mm default suits an 0805 and would short a QFP pad to both neighbours. The
-# via sits 1 mm beyond the pad's outer end, clear of the neighbours' pads.
-
-VIA = (0.6, 0.3)
-STUB = 0.2
-_FOOTPRINT = HERE / "parts" / "LQFP144" / "LQFP-144_20x20mm_P0.5mm.kicad_mod"
+VIAS: list = []
 
 
-def _pads() -> dict[str, tuple[float, float, float, float]]:
-    """Pad number -> (x, y, width, height) in the footprint's own frame."""
-    text = _FOOTPRINT.read_text()
-    return {
-        number: (float(x), float(y), float(w), float(h))
-        for number, x, y, w, h in re.findall(
-            r'\(pad "(\d+)" smd \w+\s*\(at ([-\d.]+) ([-\d.]+)\)\s*\(size ([\d.]+) ([\d.]+)\)',
-            text,
-        )
+# --- supply pins: plane vias inward ----------------------------------------------
+
+GROUND_RING, SUPPLY_RING, SUPPLY_RING_2 = 9.3, 8.5, 7.7
+
+
+def _supply_vias() -> None:
+    rings: dict[int, float] = {}
+    for number in sorted((int(n) for n, net in NET_OF_PIN.items() if net in ("3V3", "GND"))):
+        net = NET_OF_PIN[str(number)]
+        if net == "GND":
+            ring = GROUND_RING
+        else:
+            beside = [rings.get(number - 1), rings.get(number + 1)]
+            ring = SUPPLY_RING_2 if SUPPLY_RING in beside else SUPPLY_RING
+        rings[number] = ring
+        pin = PINS[str(number)]
+        VIAS.append((f"{MCU}:{number}", pin.at(ring), net, *VIA, STUB))
+
+
+# --- decoupling: capacitors outward ------------------------------------------------
+
+CAP_CENTRE, CAP_VIA = 12.9, 14.2
+# An 0402 is 0.62 mm across and the pins are 0.5 mm apart, so two capacitors on
+# neighbouring pins cannot both sit on their pin's line. Each moves this far
+# away from the other, and its track jogs out to it once clear of the pads.
+SPREAD, JOG = 0.5, 11.9
+
+
+def _decoupling() -> None:
+    served = {
+        address.rsplit("p", 1)[1]: address
+        for address in DESIGN["parts"]
+        if address.startswith(("core.dec.p", "core.vcap.p"))
     }
+    for number, address in served.items():
+        pin = PINS[number]
+        across = 0.0
+        for neighbour in (str(int(number) - 1), str(int(number) + 1)):
+            if neighbour in served:
+                across += SPREAD if PINS[neighbour].centre_along < pin.centre_along else -SPREAD
+        PLACEMENT[address] = (*pin.at(CAP_CENTRE, across), pin.facing())
+        LABELS[address] = _label_beside(pin)
+        path = [f"{MCU}:{number}"]
+        if across:
+            path += [pin.at(JOG), pin.at(JOG + abs(across), across)]
+        ROUTES.append((NET_OF_PIN[number], SUPPLY, F, path + [f"{address}:1"]))
+        VIAS.append((f"{address}:2", pin.at(CAP_VIA, across), "GND", *VIA, SUPPLY))
 
 
-def _escape(x: float, y: float, w: float, h: float, gap: float = 1.0) -> tuple[float, float]:
-    """A point `gap` beyond a peripheral pad's outer end, straight out from the package."""
-    if abs(x) > abs(y):
-        reach = abs(x) + w / 2 + gap
-        return (math.copysign(reach, x), y)
-    reach = abs(y) + h / 2 + gap
-    return (x, math.copysign(reach, y))
+def _label_beside(pin) -> tuple[float, float]:
+    """Silkscreen for a part on a pin's line: pushed further out, clear of the ring."""
+    nx, ny = pin.normal
+    return (round(nx * 2.4, 3), round(ny * 2.4, 3))
 
 
-def _ground_vias() -> list:
-    silicon = Silicon("STM32H743ZITx")
-    pads = _pads()
-    vias = []
-    for name in ("VSS", "VSSA"):
-        for number in silicon.pins[name].positions:
-            x, y, w, h = pads[number]
-            ex, ey = _escape(x, y, w, h)
-            vias.append((f"mcu:{number}", (MCU_AT[0] + ex, MCU_AT[1] + ey), "GND", *VIA, STUB))
-    return vias
+# --- the analog supply ---------------------------------------------------------------
+#
+# VDDA's 100 nF sits on its pin's line like every other supply pin's. The rest of
+# its filter - 1 uF and the ferrite from 3V3 - has no room there: the pins either
+# side carry capacitors or future escapes. So VDDA also leaves its pin inward,
+# through a via to the bottom layer, and meets the filter in the free corner
+# below-left of the package.
+
+VDDA_PIN = "33"
 
 
-VIAS = _ground_vias()
+def _analog_supply() -> None:
+    pin = PINS[VDDA_PIN]
+    inward = pin.at(SUPPLY_RING)
+    VIAS.append((f"{MCU}:{VDDA_PIN}", inward, "VDDA", *VIA, STUB))
+    corner_via = (-11.5, 12.5)
+    ROUTES.append(("VDDA", SUPPLY, B, [inward, (-12.0, inward[1]), (-12.0, 11.5), (-11.5, 12.0), corner_via]))
+    VIAS.append((None, corner_via, "VDDA", *VIA))
+
+    PLACEMENT["core.vdda.c1u"] = (-13.0, 12.5, 180)
+    PLACEMENT["core.vdda.bead"] = (-13.0, 14.0, 0)      # pad 2, VDDA, towards the via
+    LABELS["core.vdda.c1u"] = (-2.0, 0.0)
+    LABELS["core.vdda.bead"] = (-2.0, 0.0)
+    ROUTES.append(("VDDA", SUPPLY, F, [corner_via, "core.vdda.c1u:1"]))
+    ROUTES.append(("VDDA", SUPPLY, F, [corner_via, (-11.5, 14.0), "core.vdda.bead:2"]))
+    VIAS.append(("core.vdda.c1u:2", (-14.4, 12.5), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.vdda.bead:1", (-14.4, 14.0), "3V3", *VIA, SUPPLY))
+
+
+# --- clocks ------------------------------------------------------------------------------
+
+def _crystals() -> None:
+    # 8 MHz, left of pins 23 and 24. Turned so pad 1 is the upper one and the two
+    # tracks from the pins never cross.
+    hse_in, hse_out = PINS["23"], PINS["24"]
+    PLACEMENT["core.hse.crystal"] = (-16.0, 2.5, 270)
+    PLACEMENT["core.hse.c_in"] = (-19.2, 0.65, 180)
+    PLACEMENT["core.hse.c_out"] = (-19.2, 4.35, 180)
+    LABELS["core.hse.crystal"] = (-3.4, 0.0)
+    LABELS["core.hse.c_in"] = (0.0, -1.0)
+    LABELS["core.hse.c_out"] = (0.0, 1.0)
+    ROUTES.append(("HSE_IN", 0.2, F, [f"{MCU}:23", (-13.8, hse_in.at(0)[1]), (-13.8, 0.65), "core.hse.crystal:1"]))
+    ROUTES.append(("HSE_OUT", 0.2, F, [f"{MCU}:24", (-12.8, hse_out.at(0)[1]), (-12.8, 4.35), "core.hse.crystal:2"]))
+    ROUTES.append(("HSE_IN", 0.2, F, ["core.hse.crystal:1", "core.hse.c_in:1"]))
+    ROUTES.append(("HSE_OUT", 0.2, F, ["core.hse.crystal:2", "core.hse.c_out:1"]))
+    VIAS.append(("core.hse.c_in:2", (-20.6, 0.65), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.hse.c_out:2", (-20.6, 4.35), "GND", *VIA, SUPPLY))
+
+    # 32.768 kHz, left of pins 8 and 9. Its crystal terminals are pads 1 and 4,
+    # both on one end; turned to face the MCU.
+    lse_in, lse_out = PINS["8"], PINS["9"]
+    PLACEMENT["core.lse.crystal"] = (-19.0, -5.5, 180)
+    PLACEMENT["core.lse.c_in"] = (-16.25, -9.6, 90)
+    PLACEMENT["core.lse.c_out"] = (-16.25, -1.7, 270)
+    LABELS["core.lse.crystal"] = (0.0, 0.0)
+    LABELS["core.lse.c_in"] = (-1.3, 0.0)
+    LABELS["core.lse.c_out"] = (-1.3, 0.0)
+    ROUTES.append(("LSE_IN", 0.2, F, [f"{MCU}:8", (-15.0, lse_in.at(0)[1]), (-15.0, -7.1), "core.lse.crystal:1"]))
+    ROUTES.append(("LSE_OUT", 0.2, F, [f"{MCU}:9", (-14.4, lse_out.at(0)[1]), (-14.4, -3.9), "core.lse.crystal:4"]))
+    ROUTES.append(("LSE_IN", 0.2, F, ["core.lse.crystal:1", "core.lse.c_in:1"]))
+    ROUTES.append(("LSE_OUT", 0.2, F, ["core.lse.crystal:4", "core.lse.c_out:1"]))
+    VIAS.append(("core.lse.c_in:2", (-16.25, -10.6), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.lse.c_out:2", (-17.3, -1.22), "GND", *VIA, SUPPLY))
+
+
+# --- everything else, placed near what it serves, routed later ------------------------
+
+def _placed() -> None:
+    # Bulk capacitance in the two top corners, where no pin escapes.
+    PLACEMENT["core.bulk"] = (-13.5, -13.5, 0)
+    VIAS.append(("core.bulk:1", (-15.0, -13.5), "3V3", *VIA, SUPPLY))
+    VIAS.append(("core.bulk:2", (-12.0, -13.5), "GND", *VIA, SUPPLY))
+    PLACEMENT["core.usb_bulk"] = (13.5, -13.5, 0)
+    VIAS.append(("core.usb_bulk:1", (12.5, -13.5), "3V3", *VIA, SUPPLY))
+    VIAS.append(("core.usb_bulk:2", (14.5, -13.5), "GND", *VIA, SUPPLY))
+
+    PLACEMENT["core.swd"] = (16.0, -18.0, 0)
+    PLACEMENT["core.nrst.cap"] = (-18.0, 10.5, 0)
+    PLACEMENT["core.boot0.pulldown"] = (-5.75, -16.0, 90)
+    PLACEMENT["tp_boot0"] = (-5.75, -19.5)
+    PLACEMENT["tp_console_tx"] = (22.0, 4.0)
+    PLACEMENT["tp_console_rx"] = (22.0, 7.0)
+    PLACEMENT["tp_gnd"] = (22.0, 10.0)
+    PLACEMENT["tp_3v3"] = (22.0, 13.0)
+    for index, key in enumerate(("status", "fault", "comms")):
+        y = 20.0 + 3.0 * index
+        PLACEMENT[f"core.led.{key}.resistor"] = (-20.0, y, 0)
+        PLACEMENT[f"core.led.{key}.led"] = (-16.5, y, 0)
+    PLACEMENT["core.button.switch"] = (20.0, 20.0)
+    PLACEMENT["core.button.pulldown"] = (18.0, 17.0, 0)
+    for address in ("tp_console_tx", "tp_console_rx", "tp_gnd", "tp_3v3", "tp_boot0"):
+        LABELS[address] = (-2.6, 0.0)
+
+
+_supply_vias()
+_decoupling()
+_analog_supply()
+_crystals()
+_placed()
 
 
 def _pour_outline() -> list[tuple[float, float]]:
@@ -118,12 +250,21 @@ def _pour_outline() -> list[tuple[float, float]]:
     return [(-x, -y), (x, -y), (x, y), (-x, y)]
 
 
-# One solid ground plane on the first inner layer. The second inner layer gets
-# the supply islands once the power block exists.
+# Ground on the first inner layer, 3V3 on the second. The 3V3 plane becomes
+# supply islands once the power block exists; for now it is the only supply.
 PLANES = [
     {
         "net": "GND",
         "layer": "In1.Cu",
+        "outline": _pour_outline(),
+        "pad_clearance": 0.3,
+        "min_thickness": 0.25,
+        "thermal_gap": 0.3,
+        "thermal_bridge": 0.4,
+    },
+    {
+        "net": "3V3",
+        "layer": "In2.Cu",
         "outline": _pour_outline(),
         "pad_clearance": 0.3,
         "min_thickness": 0.25,

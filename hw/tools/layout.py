@@ -155,9 +155,13 @@ def label(text: str, footprints: dict, placement: dict, labels: dict, font: dict
         block = text[start:end]
         dx, dy = labels.get(address, labels.get("*", (0.0, -1.7)))
 
+        # Board offset into the footprint's frame: the inverse of the turn
+        # absolute_pad() applies. The signs of the sine terms matter only for
+        # parts turned by 90 or 270 degrees, which is why a board of parts at 0
+        # and 180 never showed them wrong.
         rotation = math.radians(placement[address][2] if len(placement[address]) > 2 else 0)
-        local_x = dx * math.cos(rotation) + dy * math.sin(rotation)
-        local_y = -dx * math.sin(rotation) + dy * math.cos(rotation)
+        local_x = dx * math.cos(rotation) - dy * math.sin(rotation)
+        local_y = dx * math.sin(rotation) + dy * math.cos(rotation)
 
         def fix(match: re.Match) -> str:
             body = match.group(0)
@@ -204,8 +208,38 @@ def place(text: str, footprints: dict, placement: dict) -> str:
         block = text[start:end]
         new_at = f"(at {x:g} {y:g} {rotation:g})" if rotation else f"(at {x:g} {y:g})"
         block = re.sub(r"\(at [-\d.]+ [-\d.]+(?: [-\d.]+)?\)", new_at, block, count=1)
+        block = _move_zones(block, x, y, rotation)
         text = text[:start] + block + text[end:]
     return text
+
+
+def _move_zones(block: str, x: float, y: float, rotation: float) -> str:
+    """
+    Carry a footprint's own zones with it.
+
+    KiCad stores a zone inside a footprint - a keepout under a Tag-Connect's pogo
+    pins, say - in board coordinates, not the footprint's. The board writer
+    copies it from the library file, where it sits around (0, 0), so unless it
+    moves and turns with the footprint it stays at the board's origin: over
+    whatever part is there, forbidding things that were never near the footprint
+    it belongs to.
+    """
+    angle = math.radians(-rotation)
+
+    def move(match: re.Match) -> str:
+        lx, ly = float(match.group(1)), float(match.group(2))
+        ax = x + lx * math.cos(angle) - ly * math.sin(angle)
+        ay = y + lx * math.sin(angle) + ly * math.cos(angle)
+        return f"(xy {ax:g} {ay:g})"
+
+    out = []
+    last = 0
+    for zone_start, zone_end in sexp_blocks(block, "zone"):
+        out.append(block[last:zone_start])
+        out.append(re.sub(r"\(xy ([-\d.]+) ([-\d.]+)\)", move, block[zone_start:zone_end]))
+        last = zone_end
+    out.append(block[last:])
+    return "".join(out)
 
 
 def absolute_pad(footprints: dict, placement: dict, reference: str) -> tuple[float, float]:
@@ -270,24 +304,30 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
     Each entry is `(pad, (x, y), net, via size, drill)`, with an optional sixth
     field for the stub's width. It defaults to 0.5 mm, which suits an 0805 pad
     and would short a 0.5 mm-pitch QFP pad to both of its neighbours.
+
+    A pad of `None` is a free via, with no stub: where a route changes layer, or
+    where a track already reaches the via's position.
     """
     objects = []
     top, bottom = board.copper[0], board.copper[-1]
     for entry in vias:
         pad_ref, (via_x, via_y), net_name, size, drill, *rest = entry
         stub = rest[0] if rest else 0.5
+        if net_name not in board.nets:
+            sys.exit(f"via names an unknown net: {net_name}")
         net = board.nets[net_name]
-        pad_x, pad_y = absolute_pad(footprints, placement, pad_ref)
-        objects.append(
-            f'\t(segment\n'
-            f'\t\t(start {pad_x:g} {pad_y:g})\n'
-            f'\t\t(end {via_x:g} {via_y:g})\n'
-            f'\t\t(width {stub:g})\n'
-            f'\t\t(layer "F.Cu")\n'
-            f'\t\t(net {net})\n'
-            f'\t\t(uuid "{stable_uuid(TAG, "stub", pad_ref, via_x, via_y)}")\n'
-            f'\t)'
-        )
+        if pad_ref is not None:
+            pad_x, pad_y = absolute_pad(footprints, placement, pad_ref)
+            objects.append(
+                f'\t(segment\n'
+                f'\t\t(start {pad_x:g} {pad_y:g})\n'
+                f'\t\t(end {via_x:g} {via_y:g})\n'
+                f'\t\t(width {stub:g})\n'
+                f'\t\t(layer "F.Cu")\n'
+                f'\t\t(net {net})\n'
+                f'\t\t(uuid "{stable_uuid(TAG, "stub", pad_ref, via_x, via_y)}")\n'
+                f'\t)'
+            )
         objects.append(
             f'\t(via\n'
             f'\t\t(at {via_x:g} {via_y:g})\n'

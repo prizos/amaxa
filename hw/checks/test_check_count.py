@@ -33,7 +33,7 @@ def test_expected_number_of_checks_ran(collected_check_count, board_config, boar
     )
 
 
-def test_every_design_intent_is_read_by_something(design, board_dir):
+def test_every_design_intent_is_read_by_something(design, board_dir, parameters_read):
     """
     Every value in the design that is not a part parameter is consumed.
 
@@ -44,6 +44,11 @@ def test_every_design_intent_is_read_by_something(design, board_dir):
 
     Intent is identified structurally rather than from a list, so a new one
     cannot be added without this noticing: a value whose owner is not a part.
+
+    Like the parameter guard below, it runs last and counts what the other
+    checks actually looked up, as well as what the decks name: a check that
+    reads `spec(oscillator, "stray_capacitance")` for two oscillators names
+    neither in its text.
     """
     parts = set(design["parts"])
     intent = sorted(
@@ -62,8 +67,13 @@ def test_every_design_intent_is_read_by_something(design, board_dir):
     def is_read(key: str) -> bool:
         owner, _, name = key.rpartition(".")
         # Decks name the whole path (`@rail.power_out.voltage:min@`); checks
-        # split it across the two arguments of the `spec` fixture.
-        return key in corpus or f'"{owner}", "{name}"' in corpus
+        # split it across the two arguments of the `spec` fixture, or build
+        # them, which only the record of lookups can see.
+        return (
+            key in corpus
+            or f'"{owner}", "{name}"' in corpus
+            or (owner, name) in parameters_read
+        )
 
     orphaned = [key for key in intent if not is_read(key)]
     assert not orphaned, (
