@@ -735,8 +735,14 @@ PLANES = [
 
 HEADER_ORIGIN = (44.0, -24.0)    # pin 1; row 2 is 2.54 mm to the right
 HEADER_PITCH = 2.54
-INNER_SERIES, INNER_PULLDOWN = 36.4, 38.2   # channels on the header's second row
-OUTER_SERIES, OUTER_PULLDOWN = 40.0, 41.6   # channels on its first row
+# One column of series resistors and one of pull-downs, not two of each. The
+# slots used to sit level with the header pin they feed, which put two of them
+# at the same height whenever both header rows carried a signal, and meant the
+# outer one's feed ran through the inner one's resistor. Evenly spaced instead:
+# every slot gets its own height, the feeds never collide, and what it costs is
+# a short diagonal from each pull-down to its pin.
+SERIES_X, PULLDOWN_X = 38.5, 40.5
+SLOT_LOW, SLOT_PITCH = -4.3, 1.87
 # The buffers sit 1.5 mm further left than they first did, to open the lane
 # field between them and the slot columns: four tracks need room to pass, and a
 # track half a millimetre from a package pin merges its solder mask with it.
@@ -793,33 +799,7 @@ def _safety() -> None:
     _output_slots()
     _static_pulls()
     _output_routes()
-
-
-def _output_slots() -> None:
-    """
-    Fifteen identical slots, one per buffered output, in the header's own order.
-
-    Each is a series resistor and the pull-down that holds the connector low
-    when the buffer is not driving it, in line with the pin they feed. There are
-    two columns because seven of the header's positions carry a signal in each
-    row, and those two slots would otherwise want the same place.
-    """
-    channels = []
-    for address, names in (("safety.buffer1", PINMAP.HEADER_DIGITAL[18:]),
-                           ("safety.buffer2", PINMAP.HEADER_DIGITAL[11:18])):
-        channels.extend((address, name) for name in names)
-
-    for address, name in channels:
-        number = HEADER_PIN[name]
-        slot = _header_at(number)[1]
-        first_row = bool(number % 2)
-        signal = name[: -len("_OUT")]
-        PLACEMENT[f"safety.series.{signal.lower()}"] = (
-            OUTER_SERIES if first_row else INNER_SERIES, slot, 0)
-        PLACEMENT[f"safety.pulldown.{name.lower()}"] = (
-            OUTER_PULLDOWN if first_row else INNER_PULLDOWN, slot, 270)
-        LABELS[f"safety.series.{signal.lower()}"] = (0.0, -1.3)
-        LABELS[f"safety.pulldown.{name.lower()}"] = (-1.6, 0.0)
+    _buffer_fanout()
 
 
 def _rule_widths() -> list[tuple[str, float]]:
@@ -856,44 +836,112 @@ def _width_for(net: str, floor: float = 0.0) -> float:
     return max([floor] + widths)
 
 
+def _buffered() -> list[tuple[str, str]]:
+    """(buffer, signal name) for all fifteen buffered outputs, in header order."""
+    out = []
+    for address, names in (("safety.buffer2", PINMAP.HEADER_DIGITAL[11:18]),
+                           ("safety.buffer1", PINMAP.HEADER_DIGITAL[18:])):
+        out.extend((address, name) for name in names)
+    return sorted(out, key=lambda pair: HEADER_PIN[pair[1]])
+
+
+def _slot_of(name: str) -> float:
+    """Where a buffered output's own two parts sit."""
+    order = [n for _, n in _buffered()]
+    return round(SLOT_LOW + order.index(name) * SLOT_PITCH, 4)
+
+
+def _output_slots() -> None:
+    """
+    Fifteen identical slots, one per buffered output, in the header's order.
+
+    Each is a series resistor and the pull-down that holds the connector low
+    when the buffer is not driving it. They are evenly spaced rather than lined
+    up with their header pins, which is what lets all fifteen feeds arrive from
+    the same side without crossing each other.
+    """
+    for _, name in _buffered():
+        signal = name[: -len("_OUT")].lower()
+        slot = _slot_of(name)
+        PLACEMENT[f"safety.series.{signal}"] = (SERIES_X, slot, 0)
+        PLACEMENT[f"safety.pulldown.{name.lower()}"] = (PULLDOWN_X, slot, 270)
+        LABELS[f"safety.series.{signal}"] = (0.0, -1.3)
+        LABELS[f"safety.pulldown.{name.lower()}"] = (-1.6, 0.0)
+
+
 def _output_routes() -> None:
     """
     Each buffered output from its series resistor to the pin it leaves on.
 
-    The slots are already in the header's own order, so this is fifteen copies
-    of one short route: through the series resistor, past the pull-down that
-    holds the pin low when nothing is driving it, and into the connector.
+    Fifteen copies of one short route: through the series resistor, past the
+    pull-down that holds the pin low when nothing is driving it, and into the
+    connector. The slots no longer sit level with their pins, so the last leg
+    is a diagonal - they stay in the header's own order, so the diagonals fan
+    without crossing.
 
-    The inner column's last leg goes underneath. Its slots feed the header's
-    *second* row, which is on the far side of the outer column's parts, and at
-    the same height as them - the two columns exist precisely because those
-    slots collide. The header's pins are through-hole, so the far end needs no
-    via to come back up.
+    The second row goes underneath. A straight line to it passes through the
+    first row's pin, and those pins are through-hole: they are on the back
+    layer too.
+    """
+    for _, name in _buffered():
+        number = HEADER_PIN[name]
+        signal = name[: -len("_OUT")].lower()
+        series = f"safety.series.{signal}"
+        pulldown = f"safety.pulldown.{name.lower()}"
+        pin = f"header.digital:{number}"
+        width = _width_for(name, SIGNAL)
+        if number % 2:                    # the header's first row, in the clear
+            ROUTES.append((name, width, F, [f"{series}:2", f"{pulldown}:1", pin]))
+        else:
+            # Under the first row, crossing it midway between two positions.
+            between = _header_at(number)[1] + HEADER_PITCH / 2
+            path(name, width, [
+                (F, [f"{series}:2", f"{pulldown}:1"]),
+                (B, [f"{pulldown}:1", (PULLDOWN_X + 1.0, _slot_of(name)),
+                     (PULLDOWN_X + 1.0, between),
+                     (HEADER_ORIGIN[0] + HEADER_PITCH, between), pin]),
+            ])
+
+
+# The lane field between each buffer and the slot column.
+LANE_ONE, LANE_PITCH = 33.2, 0.6
+
+
+def _buffer_fanout() -> None:
+    """
+    Each buffer's outputs out to the slot that carries them.
+
+    The two buffers feed two blocks of slots that do not overlap in height, so
+    each gets its own eight lanes and both use the same strip of board.
+
+    Lane order is what keeps the fan from crossing itself, and it depends on
+    which way the track is going. An output whose slot is *below* its pin takes
+    an inner lane the further down it goes; one whose slot is above takes an
+    inner lane the further *up* it goes. Either way a track's own escape, which
+    runs at the height of its pin, passes only over lanes whose verticals have
+    not reached that height yet.
     """
     for address, names in (("safety.buffer1", PINMAP.HEADER_DIGITAL[18:]),
                            ("safety.buffer2", PINMAP.HEADER_DIGITAL[11:18])):
-        for name in names:
-            number = HEADER_PIN[name]
-            signal = name[: -len("_OUT")].lower()
-            series = f"safety.series.{signal}"
-            pulldown = f"safety.pulldown.{name.lower()}"
-            pin = f"header.digital:{number}"
-            width = _width_for(name, SIGNAL)
-            if number % 2:                # the header's first row, in the clear
-                ROUTES.append((name, width, F,
-                               [f"{series}:2", f"{pulldown}:1", pin]))
-            else:
-                # Underneath, and between the rows. A straight line from here
-                # to the second row passes through the first row's pin at the
-                # same height, and those pins are through-hole - they are on
-                # the back layer too. So the leg drops half a pitch, crosses in
-                # the gap between two positions, and comes up to its own pin.
-                between = _header_at(number)[1] + HEADER_PITCH / 2
-                path(name, width, [
-                    (F, [f"{series}:2", f"{pulldown}:1"]),
-                    (B, [f"{pulldown}:1", (INNER_PULLDOWN, between),
-                         (HEADER_ORIGIN[0] + HEADER_PITCH, between), pin]),
-                ])
+        pin_y = {
+            name: round(PLACEMENT[address][1] + (channel - 2.5) * _TSSOP, 4)
+            for channel, name in enumerate(names)
+        }
+        going_down = [n for n in names if _slot_of(n) < pin_y[n]]
+        going_up = [n for n in names if _slot_of(n) >= pin_y[n]][::-1]
+        lanes = {name: lane for lane, name in enumerate(going_down)}
+        lanes.update({name: lane for lane, name in enumerate(going_up)})
+
+        for channel, name in enumerate(names):
+            signal = name[: -len("_OUT")]
+            net = f"{signal}_B"           # the buffer's side of the resistor
+            x = LANE_ONE + lanes[name] * LANE_PITCH
+            ROUTES.append((net, _width_for(net, SIGNAL), F, [
+                f"{address}:{18 - channel}",
+                (x, pin_y[name]),
+                (x, _slot_of(name)),
+                f"safety.series.{signal.lower()}:1",
+            ]))
 
 
 def _static_pulls() -> None:
