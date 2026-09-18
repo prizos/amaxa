@@ -1335,6 +1335,52 @@ def _sense_routes() -> None:
             ROUTES.append((net, width, F, along(ref, x)))
 
 
+# The one wire the whole safety chain hangs off, along the top of the board
+# where the only thing in its way is the RS-485 connector - and it passes north
+# of that too, rather than crossing the pair on its way to it.
+TRIP_BUS, TRIP_BUS_EAST = -49.5, 20.5
+
+# From the pull-up to the latch is the length of the board, and the front of
+# that column belongs to the package's own escapes. It goes on the back.
+TRIP_LATCH_LANE = 30.5
+
+
+def _trip_bus() -> None:
+    """
+    Seven comparator outputs, two gate-driver faults and reset, on one wire.
+
+    The diodes are what puts them there: each pair's common cathode faces north
+    and drops onto a lane that runs the length of the row, so no output has to
+    reach past another one. The lane carries on east to the two diodes that
+    also set the latch, and the pull-up that holds it clear when none of them
+    do, and then to the latch itself.
+    """
+    net = "TRIP_SET_N"
+    width = _width_for(net, SIGNAL)
+    cathodes = sorted((f"trip.d_outputs{index + 1}:3" for index in range(4)),
+                      key=lambda ref: _point(ref)[0])
+    west = _point(cathodes[0])[0]
+    ROUTES.append((net, width, F, [
+        (west, TRIP_BUS), (TRIP_BUS_EAST, TRIP_BUS),
+        (TRIP_BUS_EAST, -33.0), "safety.d_reset:3",
+    ]))
+    for ref in cathodes:
+        ROUTES.append((net, width, F, [(_point(ref)[0], TRIP_BUS), ref]))
+    for first, second in (("safety.d_reset:3", "safety.d_faults:3"),
+                          ("safety.d_faults:3", "safety.r_trip_pullup:2")):
+        ROUTES.append((net, width, F, [first, second]))
+
+    # And up the east side of the board to the latch, on the back: the front
+    # of that column is the package's own escapes for its whole length.
+    drop, rise = (19.75, -24.0), (28.7, 8.75)
+    path(net, width, [
+        (F, ["safety.r_trip_pullup:2", drop]),
+        (B, [drop, (drop[0], -26.0), (TRIP_LATCH_LANE, -26.0),
+             (TRIP_LATCH_LANE, rise[1]), rise]),
+        (F, [rise, "safety.latch:7"]),
+    ])
+
+
 # --- the field buses ---------------------------------------------------------
 #
 # CAN and RS-485 side by side above the package, each with its transceiver, its
@@ -2043,6 +2089,7 @@ _safety()
 _trip()
 _adc_inputs()
 _sense_routes()
+_trip_bus()
 _field_buses()
 _field_bus_routes()
 _usb()
