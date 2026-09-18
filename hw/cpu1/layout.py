@@ -955,6 +955,52 @@ def _output_routes() -> None:
             ])
 
 
+# Each static signal from its pull resistor to the pin it leaves on.
+#
+# The resistors are already in the header's order, so the ten runs fan without
+# crossing. What decides the rest is which row the pin is in. A first-row pin
+# is reached on the front: out along the signal's own lane, then a turn north
+# in a column of its own, then a step east into the pin. The columns go west as
+# the lanes go south, which is what stops a lane meeting a column.
+#
+# A second-row pin is behind the first row, and the first row is through-hole -
+# there is no going past it on either layer except between two of its pins. So
+# those five drop to the back at their own lane, before the first row's columns
+# start, and come up at the pin.
+STATIC_TURN = {
+    "RELAY_PRECHARGE": 42.7, "ID_STRAP1": 42.4, "ID_STRAP2": 42.1,
+    "STO1_FEEDBACK": 41.8, "STO2_FEEDBACK": 41.5,
+}
+# East of the 5 V spine, which runs the length of the board on the back here.
+STATIC_UNDER = {
+    "FAULT2_N": 37.0, "FAULT1_N": 37.7, "ID_STRAP3": 38.4,
+    "ID_STRAP0": 39.1, "RELAY_MAIN": 39.8,
+}
+
+
+def _static_routes() -> None:
+    for name, address in sorted(STATIC_PULL.items()):
+        number = HEADER_PIN[name]
+        lane, width = _lane_of(name), _width_for(name, SIGNAL)
+        pin = f"header.digital:{number}"
+        # A pull-up holds the signal on its second pad and a pull-down on its
+        # first; which it is comes from the netlist, not from the name.
+        pad = next(p for a, p in DESIGN["nets"][name] if a == address)
+        if number % 2:
+            turn = STATIC_TURN[name]
+            ROUTES.append((name, width, F, [
+                f"{address}:{pad}", (turn, lane), (turn, _header_at(number)[1]), pin]))
+        else:
+            # Under the first row, crossing midway between two of its pins.
+            drop = (STATIC_UNDER[name], lane)
+            between = _header_at(number)[1] + HEADER_PITCH / 2
+            path(name, width, [
+                (F, [f"{address}:{pad}", drop]),
+                (B, [drop, (drop[0], between),
+                     (HEADER_ORIGIN[0] + HEADER_PITCH, between), pin]),
+            ])
+
+
 # The lane field between each buffer and the slot column.
 LANE_ONE, LANE_PITCH = 33.2, 0.6
 
@@ -996,6 +1042,9 @@ def _buffer_fanout() -> None:
             ]))
 
 
+STATIC_PULL: dict[str, str] = {}
+
+
 def _static_pulls() -> None:
     """
     The ten signals that are not PWM, each with its pull-up or pull-down.
@@ -1011,8 +1060,12 @@ def _static_pulls() -> None:
         "STO1_FEEDBACK": "down", "STO2_FEEDBACK": "down",
     }
     named = {"FAULT1_N": "safety.r_fault1_pullup", "FAULT2_N": "safety.r_fault2_pullup"}
+    STATIC_PULL.update(
+        {name: named.get(name,
+                         f"safety.{'pullup' if direction == 'up' else 'pulldown'}.{name.lower()}")
+         for name, direction in pulls.items()})
     for name, direction in pulls.items():
-        address = named.get(name, f"safety.{'pullup' if direction == 'up' else 'pulldown'}.{name.lower()}")
+        address = STATIC_PULL[name]
         PLACEMENT[address] = (34.5, _lane_of(name), 0 if direction == "up" else 180)
         LABELS[address] = (0.0, -1.3)
 
@@ -2263,6 +2316,7 @@ STITCH_PLACES = (
     # millimetres of any of them; the check said so before the board did.
     (-19.5, 8.5), (-19.5, -6.0), (-19.5, -18.0),
     (-30.0, 8.5), (-33.0, -1.0), (-33.0, -7.5), (-33.0, -15.5),
+    (38.0, -42.0),                    # the static signals' way under the header
 )
 
 
@@ -2458,6 +2512,7 @@ _adc_to_package()
 _pwm_inputs()
 _tripped()
 _safety_signals()
+_static_routes()
 _field_buses()
 _field_bus_routes()
 _usb()

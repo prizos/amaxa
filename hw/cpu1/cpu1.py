@@ -1260,7 +1260,7 @@ def plane_stitching(v3v3, gnd) -> None:
     to be near, the return has a short way over; where it does not, the current
     goes round whatever loop it can find, and the loop is what radiates.
 
-    Nineteen of them. Six in a row beyond the digital connector, where fifteen
+    Twenty of them. Six in a row beyond the digital connector, where fifteen
     buffered outputs dip under its first row and there is nowhere nearer to put
     them; one each at the USB connector's fan-out, the debug escapes, the
     power-good line and the CAN termination; two on the Ethernet block; and six
@@ -1272,7 +1272,7 @@ def plane_stitching(v3v3, gnd) -> None:
     `test_routing.py` failed, named the layer changes it had stranded, and
     these went where that list said.
     """
-    for index in range(19):
+    for index in range(20):
         cap = part(parts.CAP_100N_0402, f"stitch.{index + 1}", f"C{68 + index}")
         v3v3 += cap[1]
         gnd += cap[2]
