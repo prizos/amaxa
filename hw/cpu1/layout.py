@@ -106,6 +106,18 @@ VIAS: list = []
 GROUND_RING, SUPPLY_RING, SUPPLY_RING_2 = 9.3, 8.5, 7.7
 
 
+# The two supply pins in the north-west corner, whose rings fall where the five
+# static signals on the west edge have to escape inward.
+#
+# Those five pins are half a millimetre apart, and a via on the ring is a
+# quarter of a millimetre from two of their lines: with these where the rest
+# are, three of the five have no way out of the package at all. Moved outward
+# instead of the signals being moved, because a supply via has one job - reach
+# the plane - and it does that from anywhere its stub is short.
+CORNER_RINGS = {"143": 9.6, "144": None}
+CORNER_144 = (-9.6, -9.3)        # diagonally out, which is the only side free
+
+
 def _supply_vias() -> None:
     rings: dict[int, float] = {}
     for number in sorted((int(n) for n, net in NET_OF_PIN.items() if net in ("3V3", "GND"))):
@@ -117,7 +129,12 @@ def _supply_vias() -> None:
             ring = SUPPLY_RING_2 if SUPPLY_RING in beside else SUPPLY_RING
         rings[number] = ring
         pin = PINS[str(number)]
-        VIAS.append((f"{MCU}:{number}", pin.at(ring), net, *VIA, STUB))
+        if str(number) in CORNER_RINGS:
+            moved = CORNER_RINGS[str(number)]
+            where = CORNER_144 if moved is None else pin.at(moved)
+        else:
+            where = pin.at(ring)
+        VIAS.append((f"{MCU}:{number}", where, net, *VIA, STUB))
 
 
 # --- decoupling: capacitors outward ------------------------------------------------
@@ -389,14 +406,14 @@ def _button() -> None:
     LABELS["core.button.pulldown"] = (0.0, -1.3)
     inward = PINS["7"].at(SUPPLY_RING_2)
     VIAS.append((f"{MCU}:7", inward, "BUTTON", *VIA, STUB))
-    # It goes the long way round, north of the package and down the west edge,
-    # rather than across the strip south of it: six analog lines have to cross
-    # that strip to reach the connector, and a button is the one net here that
-    # can afford the detour.
-    # It passes south of the strip the analog lines cross, not through it.
+    # It used to cross the package eastward and come back round the north-west
+    # corner. The band it crossed in is now the one the ten static signals use
+    # to get out of the package, and a button is the net here that can afford
+    # to move: it turns south inside the package instead and leaves on the
+    # south-west side, which is the side its switch is on anyway.
     ROUTES.append(("BUTTON", SIGNAL, B, [
-        inward, (0.5, -7.0), (0.5, -11.5), (-11.2, -11.5), (-11.2, 9.75),
-        (-46.5, 9.75), (-46.5, 18.5), "core.button.switch:2",
+        inward, (-12.0, -5.75), (-39.5, -5.75), (-40.3, -5.49), (-46.5, -5.49),
+        (-46.5, 18.5), "core.button.switch:2",
     ]))
     ROUTES.append(("BUTTON", SIGNAL, F, ["core.button.switch:2", "core.button.pulldown:1"]))
     # A tactile switch has two legs on each pole, and they are separate pads:
@@ -427,8 +444,8 @@ def _boot_and_console() -> None:
     # The two rail pads go north-east, out of the strip the latch's signals
     # cross. They carry no signal - a plane via each is the whole net - so
     # anywhere the planes reach will do.
-    PLACEMENT["tp_gnd"] = (33.5, -8.0)
-    PLACEMENT["tp_3v3"] = (33.5, -11.0)
+    PLACEMENT["tp_gnd"] = (31.0, -4.0)
+    PLACEMENT["tp_3v3"] = (31.0, -6.5)
     for address in ("tp_console_tx", "tp_console_rx", "tp_gnd", "tp_3v3"):
         LABELS[address] = (2.6, 0.0)
     ROUTES.append(("CONSOLE_TX", SIGNAL, F, [f"{MCU}:77", (20.5, 6.75), "tp_console_tx:1"]))
@@ -436,8 +453,8 @@ def _boot_and_console() -> None:
         # The dip happens east of the buffer fan, not through it.
         f"{MCU}:78", (21.5, 6.25), (21.5, 5.45), "tp_console_rx:1",
     ]))
-    VIAS.append(("tp_gnd:1", (35.0, -8.0), "GND", *VIA, SUPPLY))
-    VIAS.append(("tp_3v3:1", (35.0, -11.0), "3V3", *VIA, SUPPLY))
+    VIAS.append(("tp_gnd:1", (32.4, -4.0), "GND", *VIA, SUPPLY))
+    VIAS.append(("tp_3v3:1", (32.4, -6.5), "3V3", *VIA, SUPPLY))
 
 
 
@@ -821,7 +838,7 @@ def _lane_of(name: str) -> float:
     # via beside two of these resistors' supply pads, which the plane stitching
     # generator refused to guess at rather than placing one on a neighbour.
     statics = [n for n in PINMAP.HEADER_DIGITAL[:11] if n != "3V3"]
-    return round(-38.6 + 2.0 * statics.index(name), 4)
+    return round(-26.6 + 2.0 * statics.index(name), 4)
 
 
 def _safety() -> None:
@@ -2452,6 +2469,7 @@ STITCH_PLACES = (
     (-19.5, 8.5), (-19.5, -6.0), (-19.5, -18.0),
     (-30.0, 8.5), (-33.0, -1.0), (-33.0, -7.5), (-33.0, -15.5),
     (38.0, -42.0),                    # the static signals' way under the header
+    (39.5, -15.5),                    # and where that column moved to
 )
 
 
