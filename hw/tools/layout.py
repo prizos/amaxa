@@ -348,7 +348,8 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
     belongs to the plane needs its own way down.
 
     Each entry is `(pad, (x, y), net, via size, drill)`, with an optional sixth
-    field for the stub's width. It defaults to 0.5 mm, which suits an 0805 pad
+    field for the stub's width. The position may also be an `address:pad`
+    reference, for a via that sits on a pad. It defaults to 0.5 mm, which suits an 0805 pad
     and would short a 0.5 mm-pitch QFP pad to both of its neighbours.
 
     A pad of `None` is a free via, with no stub: where a route changes layer, or
@@ -357,7 +358,11 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
     objects = []
     top, bottom = board.copper[0], board.copper[-1]
     for entry in vias:
-        pad_ref, (via_x, via_y), net_name, size, drill, *rest = entry
+        pad_ref, where, net_name, size, drill, *rest = entry
+        # A via may be asked for at a pad rather than at a point - that is what
+        # a route changing layer on top of one looks like - so it is resolved
+        # the same way a route's points are.
+        via_x, via_y = resolve(where, footprints, placement)
         stub = rest[0] if rest else 0.5
         if net_name not in board.nets:
             sys.exit(f"via names an unknown net: {net_name}")

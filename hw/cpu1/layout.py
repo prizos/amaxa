@@ -737,7 +737,10 @@ HEADER_ORIGIN = (44.0, -24.0)    # pin 1; row 2 is 2.54 mm to the right
 HEADER_PITCH = 2.54
 INNER_SERIES, INNER_PULLDOWN = 36.4, 38.2   # channels on the header's second row
 OUTER_SERIES, OUTER_PULLDOWN = 40.0, 41.6   # channels on its first row
-BUFFER1, BUFFER2, LATCH = (30.0, 18.27), (30.0, 2.2), (26.0, 9.0)
+# The buffers sit 1.5 mm further left than they first did, to open the lane
+# field between them and the slot columns: four tracks need room to pass, and a
+# track half a millimetre from a package pin merges its solder mask with it.
+BUFFER1, BUFFER2, LATCH = (28.5, 18.27), (28.5, 2.2), (26.0, 9.0)
 
 _TSSOP = 0.65                    # lead pitch of both buffers
 PINMAP = load_source(HERE / "pinmap.py", "cpu1_pinmap")
@@ -789,6 +792,7 @@ def _safety() -> None:
 
     _output_slots()
     _static_pulls()
+    _output_routes()
 
 
 def _output_slots() -> None:
@@ -816,6 +820,80 @@ def _output_slots() -> None:
             OUTER_PULLDOWN if first_row else INNER_PULLDOWN, slot, 270)
         LABELS[f"safety.series.{signal.lower()}"] = (0.0, -1.3)
         LABELS[f"safety.pulldown.{name.lower()}"] = (-1.6, 0.0)
+
+
+def _rule_widths() -> list[tuple[str, float]]:
+    """
+    (net pattern, minimum width) from the board's own design rules.
+
+    The rules file already says how wide each net has to be, and DRC holds the
+    board to it. A generator that picked its own widths would be a second
+    opinion on the same question, and the two would drift: the first thing this
+    was needed for was GATE_ENABLE_OUT, which the rules make wider than a
+    signal and which four generated tracks had drawn at signal width.
+    """
+    import re
+
+    text = (HERE / "rules.kicad_dru").read_text()
+    out = []
+    for block in re.findall(r"\(rule\b.*?\(severity", text, re.S):
+        width = re.search(r"\(constraint track_width \(min ([\d.]+)mm\)\)", block)
+        if not width:
+            continue
+        for name in re.findall(r"A\.NetName == '([^']+)'", block):
+            out.append((name, float(width.group(1))))
+    return out
+
+
+RULE_WIDTHS = _rule_widths()
+
+
+def _width_for(net: str, floor: float = 0.0) -> float:
+    """How wide the rules say this net has to be, at least."""
+    import fnmatch
+
+    widths = [w for pattern, w in RULE_WIDTHS if fnmatch.fnmatchcase(net, pattern)]
+    return max([floor] + widths)
+
+
+def _output_routes() -> None:
+    """
+    Each buffered output from its series resistor to the pin it leaves on.
+
+    The slots are already in the header's own order, so this is fifteen copies
+    of one short route: through the series resistor, past the pull-down that
+    holds the pin low when nothing is driving it, and into the connector.
+
+    The inner column's last leg goes underneath. Its slots feed the header's
+    *second* row, which is on the far side of the outer column's parts, and at
+    the same height as them - the two columns exist precisely because those
+    slots collide. The header's pins are through-hole, so the far end needs no
+    via to come back up.
+    """
+    for address, names in (("safety.buffer1", PINMAP.HEADER_DIGITAL[18:]),
+                           ("safety.buffer2", PINMAP.HEADER_DIGITAL[11:18])):
+        for name in names:
+            number = HEADER_PIN[name]
+            signal = name[: -len("_OUT")].lower()
+            series = f"safety.series.{signal}"
+            pulldown = f"safety.pulldown.{name.lower()}"
+            pin = f"header.digital:{number}"
+            width = _width_for(name, SIGNAL)
+            if number % 2:                # the header's first row, in the clear
+                ROUTES.append((name, width, F,
+                               [f"{series}:2", f"{pulldown}:1", pin]))
+            else:
+                # Underneath, and between the rows. A straight line from here
+                # to the second row passes through the first row's pin at the
+                # same height, and those pins are through-hole - they are on
+                # the back layer too. So the leg drops half a pitch, crosses in
+                # the gap between two positions, and comes up to its own pin.
+                between = _header_at(number)[1] + HEADER_PITCH / 2
+                path(name, width, [
+                    (F, [f"{series}:2", f"{pulldown}:1"]),
+                    (B, [f"{pulldown}:1", (INNER_PULLDOWN, between),
+                         (HEADER_ORIGIN[0] + HEADER_PITCH, between), pin]),
+                ])
 
 
 def _static_pulls() -> None:
@@ -1197,7 +1275,41 @@ def _obstacles() -> tuple[list, list]:
                 if turned:
                     half_w, half_h = half_h, half_w
                 pads.append((x, y, half_w, half_h))
-    return pads, [tuple(entry[1]) for entry in VIAS]
+    return pads, [_point(entry[1]) for entry in VIAS]
+
+
+def _track_points() -> list[tuple[float, float, float, str]]:
+    """
+    Every route already drawn, sampled as (x, y, half width, layer).
+
+    A via goes through every layer, so it has to clear copper on all of them -
+    and the first thing the stitching generator did once the safety chain was
+    routed was drop three ground vias onto tracks running underneath. Sampled
+    rather than solved: the arithmetic for a point against a fat line segment
+    is more than this needs, and the points go into the same grid as the pads.
+    """
+    import math
+
+    out = []
+    for net, width, layer, points in ROUTES:
+        resolved = [_point(p) for p in points]
+        for a, b in zip(resolved, resolved[1:]):
+            steps = max(1, int(math.dist(a, b) / 0.3))
+            out.extend(
+                (a[0] + (b[0] - a[0]) * i / steps, a[1] + (b[1] - a[1]) * i / steps,
+                 width / 2, layer)
+                for i in range(steps + 1)
+            )
+    return out
+
+
+def _point(where) -> tuple[float, float]:
+    """A via's place, whether it was given as coordinates or as a pad."""
+    if isinstance(where, str):
+        address, _, number = where.partition(":")
+        pad = next(p for p in _pads_of(address)[number])
+        return _absolute(address, pad.x, pad.y)
+    return tuple(where)
 
 
 def _plane_stitches() -> None:
@@ -1224,6 +1336,18 @@ def _plane_stitches() -> None:
     grid: dict[tuple[int, int], list] = {}
     for rect in pads:
         grid.setdefault((int(rect[0] // 4), int(rect[1] // 4)), []).append(rect)
+
+    copper: dict[tuple[int, int], list] = {}
+    for x, y, half, layer in _track_points():
+        copper.setdefault((int(x // 4), int(y // 4)), []).append((x, y, half, layer))
+
+    def near_copper(point):
+        cx, cy = int(point[0] // 4), int(point[1] // 4)
+        return [
+            spot
+            for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+            for spot in copper.get((cx + dx, cy + dy), ())
+        ]
 
     def near_pads(point):
         cx, cy = int(point[0] // 4), int(point[1] // 4)
@@ -1272,6 +1396,15 @@ def _plane_stitches() -> None:
                 return False
             if any(not _outside(rect, point, width / 2 + margin) for point in walk):
                 return False
+        # Copper already drawn. The via meets every layer; the stub only meets
+        # the front one.
+        for x, y, half, layer in near_copper(at):
+            if math.dist((x, y), at) < half + 0.25 + 0.2:
+                return False
+        for point in walk:
+            for x, y, half, layer in near_copper(point):
+                if layer == F and math.dist((x, y), point) < half + width / 2 + margin:
+                    return False
         if existing:
             return True                   # the via is already there and legal
         return all(math.dist(other, at) >= VIA_TO_VIA for other in vias)
