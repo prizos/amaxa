@@ -1817,6 +1817,21 @@ def _safety_signals() -> None:
         ROUTES.append((net, _width_for(net, SIGNAL), F, [(pad[0], lane), f"{address}:2"]))
 
 
+# The spare DAC output and the test network beside it. Both go round rather
+# than through: the test resistor's output pad faces the package and its test
+# pad is on the other side of the resistor, and the DAC's spare output is on
+# the far side of the DAC from the pad that brings it out.
+def _dac_test_points() -> None:
+    width = _width_for("DAC_TEST_OUT", SIGNAL)
+    ROUTES.append(("DAC_TEST_OUT", width, F, [
+        "adc.dac_test.series:2", (-13.49, -20.6), (-17.0, -20.6), "tp_dac_test:1",
+    ]))
+    ROUTES.append(("DAC_SPARE", _width_for("DAC_SPARE", SIGNAL), F, [
+        "tp_dac_spare:1", (-12.2, -19.6), (-12.2, -23.0),
+        (-15.5, -23.0), (-15.5, -24.5), "trip.dac:9",
+    ]))
+
+
 # --- the field buses ---------------------------------------------------------
 #
 # CAN and RS-485 side by side above the package, each with its transceiver, its
@@ -2628,6 +2643,7 @@ _trip()
 _adc_inputs()
 _sense_routes()
 _trip_bus()
+_dac_test_points()
 _adc_to_package()
 _pwm_inputs()
 _tripped()
