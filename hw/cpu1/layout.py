@@ -1136,10 +1136,15 @@ def _trip_routes() -> None:
         # horizontal ends, and the DAC's pins come out in that order already.
         drop = (round(pad_x - 1.3 - (len(THRESHOLDS) - 1 - index) * 0.7, 4), pad_y)
         taps = sorted(_point(f"trip.{key}:{pin}")[0] for key in keys)
+        # The lane has to reach the furthest tap either way. A bus whose first
+        # tap is east of where it drops goes out along the pad's own line
+        # first, then down, then back west past the rest - and the version
+        # that stopped at that first tap left the other two comparators on
+        # their own, which nothing but the unrouted count noticed.
         if taps[-1] < drop[0]:
             legs = [drop, (drop[0], lane), (taps[0], lane)]
         else:
-            legs = [drop, (taps[-1], pad_y), (taps[-1], lane)]
+            legs = [drop, (taps[-1], pad_y), (taps[-1], lane), (taps[0], lane)]
         path(net, width, [
             (F, [f"trip.dac:{dac_pad}", drop]),
             (B, legs),
