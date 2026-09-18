@@ -1179,37 +1179,137 @@ def _adc_inputs() -> None:
 # termination on a jumper, and three pins out to the field.
 
 def _field_buses() -> None:
-    # Four rows above the package: each transceiver, its decoupling, its
-    # termination on a jumper, and the three pins that leave the board.
-    PLACEMENT["can.transceiver"] = (2.0, -25.0, 0)
-    PLACEMENT["can.decoupling_vcc"] = (8.0, -25.0, 0)
-    PLACEMENT["can.decoupling_vio"] = (11.0, -25.0, 0)
-    PLACEMENT["can.termination_jumper"] = (2.0, -29.0, 0)
-    PLACEMENT["can.termination_upper"] = (6.0, -29.0, 0)
-    PLACEMENT["can.termination_lower"] = (10.0, -29.0, 0)
-    PLACEMENT["can.termination_split"] = (14.0, -29.0, 0)
-    PLACEMENT["rs485.transceiver"] = (2.0, -33.0, 0)
-    PLACEMENT["rs485.decoupling"] = (8.0, -33.0, 0)
-    PLACEMENT["rs485.termination_jumper"] = (11.5, -33.0, 0)
-    PLACEMENT["rs485.termination"] = (15.0, -33.0, 0)
-    PLACEMENT["can.header"] = (2.0, -37.5, 90)
-    PLACEMENT["rs485.header"] = (12.0, -37.5, 90)
-    for address in ("can.transceiver", "rs485.transceiver"):
-        LABELS[address] = (0.0, -3.4)
-    for address in ("can.header", "rs485.header"):
-        LABELS[address] = (2.6, 2.6)
-    for address in ("can.decoupling_vcc", "can.decoupling_vio", "can.termination_jumper",
-                    "can.termination_upper", "can.termination_lower", "can.termination_split",
-                    "rs485.decoupling", "rs485.termination_jumper", "rs485.termination"):
+    """
+    CAN and RS-485, one above the other, each laid out so its pair can reach
+    the connector without crossing itself.
+
+    The bus pins come out of the package with the low half above the high half,
+    and the connector is turned so that its high pin is the outer one. The high
+    half then runs out past the low half's lane and up its own, and the two
+    never meet - which is the only arrangement of these two parts that avoids a
+    crossing, because two tracks on one layer cannot swap sides.
+
+    The termination stacks between the two lanes, which are one connector pitch
+    apart: the jumper taps the high half where it passes, the chain runs down,
+    and its far end meets the low half.
+    """
+    for prefix, top in (("can", -22.0), ("rs485", -40.0)):
+        PLACEMENT[f"{prefix}.transceiver"] = (2.0, top, 0)
+        LABELS[f"{prefix}.transceiver"] = (0.0, -3.4)
+        # Turned to match the order the bus pins come out in: the half that
+        # leaves the package higher up takes the inner lane, and pin 1 of the
+        # connector has to be on that lane's side.
+        above = _bus_high_is_above(prefix)
+        PLACEMENT[f"{prefix}.header"] = (
+            INNER_LANE if above else OUTER_LANE, BUS_HEADER_Y[prefix],
+            90 if above else 270)
+        LABELS[f"{prefix}.header"] = (2.6, 2.6)
+
+    PLACEMENT["can.decoupling_vcc"] = (-3.5, -20.5, 0)
+    PLACEMENT["can.decoupling_vio"] = (-3.5, -23.5, 0)
+    PLACEMENT["rs485.decoupling"] = (-3.5, -41.5, 0)
+
+    # Each chain stacked between its own two lanes, which are a connector pitch
+    # apart, so the parts stand on end to fit.
+    for prefix, first, names in (
+        ("can", -24.0, ("termination_jumper", "termination_upper", "termination_lower")),
+        ("rs485", -41.5, ("termination_jumper", "termination")),
+    ):
+        for index, name in enumerate(names):
+            PLACEMENT[f"{prefix}.{name}"] = (CHAIN_X,
+                                             round(first - index * 3.5, 4), 90)
+            LABELS[f"{prefix}.{name}"] = (-1.6, 0.0)
+    PLACEMENT["can.termination_split"] = (12.5, -29.25, 0)
+    LABELS["can.termination_split"] = (0.0, -1.6)
+
+    for address in ("can.decoupling_vcc", "can.decoupling_vio", "rs485.decoupling"):
         LABELS[address] = (0.0, -1.6)
+
+
+# The two lanes each bus runs up, and the column its termination stands in
+# between them.
+# Each bus gets its own pair of lanes and its own connector, side by side, one
+# connector pitch clear of the package's pin column - a lane laid over a row of
+# pads leaves them nowhere to escape to - and clear of each other, because both
+# connectors are through-hole and sit on every layer.
+# The high half takes the inner lane and the low half the outer one, because
+# the high pin comes out of the package above the low one and the connector is
+# turned to match. Put them the other way round and the high half has to cross
+# the low half's lane on its way out.
+#
+# Both buses use the same two lanes at different heights: one finishes at its
+# connector before the other begins.
+INNER_LANE, OUTER_LANE, CHAIN_X = 7.08, 9.62, 8.35
+BUS_HEADER_Y = {"can": -34.0, "rs485": -48.0}
+
+
+def _bus_high_is_above(prefix: str) -> bool:
+    """Whether the bus's high half leaves the package above its low half."""
+    high_pin, low_pin = ("7", "6") if prefix == "can" else ("6", "7")
+    return (_point(f"{prefix}.transceiver:{high_pin}")[1]
+            < _point(f"{prefix}.transceiver:{low_pin}")[1])
+
+
+def _field_bus_routes() -> None:
+    """
+    Each bus from its transceiver to the three pins it leaves on.
+
+    The low half turns up at the nearer lane and the high half runs out past it
+    and up the further one. The high half's leg out is below the low half's, so
+    it passes under where the low half has already turned.
+    """
+    for prefix, high, low, chain in (
+        ("can", "CAN_H", "CAN_L",
+         ("can.termination_jumper", "can.termination_upper", "can.termination_lower")),
+        ("rs485", "RS485_A", "RS485_B",
+         ("rs485.termination_jumper", "rs485.termination")),
+    ):
+        transceiver = f"{prefix}.transceiver"
+        header = f"{prefix}.header"
+        high_pin, low_pin = ("7", "6") if prefix == "can" else ("6", "7")
+        width = _width_for(high, SIGNAL)
+        jumper, *rest = chain
+        top = _point(f"{header}:1")[1] + 1.5
+
+        above = _bus_high_is_above(prefix)
+        high_lane = INNER_LANE if above else OUTER_LANE
+        low_lane = OUTER_LANE if above else INNER_LANE
+        for net, pin, lane, pad in ((high, high_pin, high_lane, "1"),
+                                    (low, low_pin, low_lane, "2")):
+            y = _point(f"{transceiver}:{pin}")[1]
+            ROUTES.append((net, width, F, [
+                f"{transceiver}:{pin}", (lane, y), (lane, top), f"{header}:{pad}",
+            ]))
+
+        # The termination taps each lane where it passes.
+        ROUTES.append((high, width, F, [
+            (high_lane, _point(f"{jumper}:1")[1]), f"{jumper}:1"]))
+        ROUTES.append((low, width, F, [
+            f"{rest[-1]}:2", (low_lane, _point(f"{rest[-1]}:2")[1])]))
+        links = [(f"{jumper}:2", f"{rest[0]}:1")]
+        links += [(f"{a}:2", f"{b}:1") for a, b in zip(rest, rest[1:])]
+        for one, other in links:
+            net = NET_AT.get(tuple(one.split(":")))
+            ROUTES.append((net, _width_for(net, SIGNAL), F, [one, other]))
+
+    # The split termination's midpoint capacitor sits outside both lanes, so
+    # its one connection goes under the high lane rather than through it.
+    mid = "CAN_TERM_MID"
+    path(mid, _width_for(mid, SIGNAL), [
+        # Taken from the gap between the two halves, not from a pad: the via
+        # has to land on copper the chain leaves free.
+        (F, ["can.termination_upper:2", (CHAIN_X, -29.25)]),
+        (B, [(CHAIN_X, -29.25), (11.5, -29.25)]),
+        (F, [(11.5, -29.25), "can.termination_split:1"]),
+    ])
 
 
 # --- USB ---------------------------------------------------------------------
 #
-# The one differential pair on this board. Its width and gap are not written
-# down: `pair_geometry` solves the stackup in BOARD for the width that makes
-# 90 ohm at the gap chosen, so a change to the fab's build changes the trace
-# rather than leaving a number behind that used to be right.
+# The board's first differential pair. Its width and gap are not written down:
+# `pair_geometry` solves the stackup in BOARD for the width that makes 90 ohm
+# at the gap chosen, so a change to the fab's build changes the trace rather
+# than leaving a number behind that used to be right.
 
 USB_GAP = 0.2
 USB_STACK = layout_lib.Microstrip(
@@ -1717,6 +1817,7 @@ _safety()
 _trip()
 _adc_inputs()
 _field_buses()
+_field_bus_routes()
 _usb()
 _ethernet()
 _plane_stitches()

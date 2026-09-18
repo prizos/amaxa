@@ -11,8 +11,8 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
 | **Footprints** | 228 |
 | **Nets** | 191, of which 8 pending |
-| **Routing** | 565 track segments, 262 vias, 3 zones |
-| **DRC** | 0 violations, 163 connections not yet routed (`ROUTING := incomplete`) |
+| **Routing** | 587 track segments, 264 vias, 3 zones |
+| **DRC** | 0 violations, 151 connections not yet routed (`ROUTING := incomplete`) |
 
 > [!IMPORTANT]
 > **Routing is deliberately incomplete.** Read the plots with that in
