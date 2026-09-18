@@ -977,20 +977,65 @@ def _static_pulls() -> None:
 ANALOG_HEADER = (-46.0, -18.0)
 
 
+# The comparators, in the order the analog header presents them, so the two
+# that watch one phase sit together. Named once: the placement and the supply
+# spine both walk it.
+TRIP_ORDER = (
+    "ia_high", "ia_low", "ib_high", "ib_low", "ic_high", "ic_low", "vdc_high",
+)
+
+# The 5 V spine down that column, and where it leaves the island.
+TRIP_SPINE_X = -33.0
+ISLAND_TAP = (-8.5, 25.5)
+
+
+def _trip_supply() -> None:
+    """
+    5 V from the regulator's island to the comparators, thirty millimetres away.
+
+    The island on the inner layer stops beside the buck; the comparators do not
+    reach it, so their supply pads have no plane under them and stitching them
+    gave four vias connected to nothing. The supply is routed instead - on the
+    back layer, which is empty here - and tapped up to each comparator in turn.
+
+    Each tap goes to the comparator's own supply pin first and to its
+    decoupling capacitor second, so the capacitor is on the pin's side of the
+    inductance rather than the spine's.
+    """
+    spine = [
+        ISLAND_TAP,
+        (ISLAND_TAP[0], 21.0),
+        (TRIP_SPINE_X, 21.0),
+        (TRIP_SPINE_X, -19.0 + 0.95),
+    ]
+    VIAS.append((None, ISLAND_TAP, "5V", *VIA))
+    ROUTES.append(("5V", _width_for("5V", RAIL), B, spine))
+
+    for index, key in enumerate(TRIP_ORDER):
+        y = round(-19.0 + 4.6 * index, 4)
+        tap = (TRIP_SPINE_X, y + 0.95)
+        VIAS.append((None, tap, "5V", *VIA))
+        ROUTES.append(("5V", _width_for("5V", SUPPLY), F, [
+            tap, f"trip.{key}:4", f"trip.{key}.decoupling:1",
+        ]))
+
+
 def _trip() -> None:
     PLACEMENT["header.analog"] = (*ANALOG_HEADER, 0)
     LABELS["header.analog"] = (3.0, -2.0)
 
     # One comparator per trip point, in the order the header presents them, so
     # the two that watch one phase sit together.
-    for index, key in enumerate((
-        "ia_high", "ia_low", "ib_high", "ib_low", "ic_high", "ic_low", "vdc_high",
-    )):
+    for index, key in enumerate(TRIP_ORDER):
         y = round(-19.0 + 4.6 * index, 4)
         PLACEMENT[f"trip.{key}"] = (-36.0, y, 0)
         LABELS[f"trip.{key}"] = (0.0, -2.4)
-        PLACEMENT[f"trip.{key}.decoupling"] = (-36.0, y + 2.2, 0)
+        # Turned round so its supply pad faces the comparator's: both 5 V
+        # points then sit on the same side and the spine taps them in one run.
+        PLACEMENT[f"trip.{key}.decoupling"] = (-36.0, y + 2.2, 180)
         LABELS[f"trip.{key}.decoupling"] = (0.0, -1.3)
+
+    _trip_supply()
 
     # The threshold DAC, below the comparators it feeds, with its own supply
     # decoupling and the two pull-ups its bus needs.
@@ -1160,42 +1205,84 @@ def _ethernet() -> None:
     PLACEMENT["eth.jack"] = (*JACK, 180)
     LABELS["eth.jack"] = (-9.5, 5.0)
 
-    PLACEMENT["eth.phy"] = (-53.0, -18.0, 0)
+    PLACEMENT["eth.phy"] = (-54.0, -17.0, 0)
     LABELS["eth.phy"] = (0.0, 3.6)
 
-    for address, at, rotation in (("eth.dec_vddio", (-48.5, -18.0), 90),
-                                  ("eth.dec_vdd1a", (-53.0, -13.5), 0),
-                                  ("eth.dec_vdd2a", (-57.5, -18.0), 90)):
-        PLACEMENT[address] = (*at, rotation)
-        LABELS[address] = (0.0, -1.3)
+    # Each supply pin routes to its own capacitor and the capacitor carries the
+    # via down to the plane, rather than the pin being stitched and the
+    # capacitor stitched separately beside it. That is the order the current
+    # actually takes, and it is what leaves the pins either side a lane to
+    # escape along.
+    PLACEMENT["eth.dec_vdd2a"] = (-58.5, -19.5, 180)
+    PLACEMENT["eth.dec_vdd1a"] = (-51.5, -22.5, 90)
+    PLACEMENT["eth.dec_vddio"] = (-54.25, -12.5, 270)
+    PLACEMENT["eth.r_refclk_strap"] = (-58.7, -17.75, 180)
 
-    # The core rail's two capacitors together - one bypass split across two
-    # decades, not two separate jobs - with the bias resistor beside them,
-    # because it is the other thing here that wants a short way back to ground.
-    for address, at in (("eth.core_bulk", (-61.0, -13.0)),
-                        ("eth.core_hf", (-61.0, -10.5)),
-                        ("eth.bias", (-61.0, -8.0))):
-        PLACEMENT[address] = (*at, 0)
-        LABELS[address] = (0.0, -1.3)
+    # The package's left side carries both crystal pins, so the crystal gets
+    # that side to itself. A four-pad crystal has its two terminals diagonally
+    # opposite, with the can's pads on the other diagonal, and the two pins
+    # driving it are adjacent: there is no angle that makes both tracks
+    # straight, so one of them gets past a can pad underneath.
+    PLACEMENT["eth.xtal.crystal"] = (-62.0, -13.0, 0)
+    PLACEMENT["eth.xtal.c_in"] = (-63.0, -8.5, 0)
+    PLACEMENT["eth.xtal.c_out"] = (-59.0, -16.0, 180)
 
-    PLACEMENT["eth.xtal.crystal"] = (-53.0, -7.5, 90)
-    PLACEMENT["eth.xtal.c_in"] = (-49.5, -9.5, 90)
-    PLACEMENT["eth.xtal.c_out"] = (-49.5, -5.5, 90)
-    LABELS["eth.xtal.crystal"] = (-3.4, 0.0)
-    for address in ("eth.xtal.c_in", "eth.xtal.c_out"):
-        LABELS[address] = (1.5, 0.0)
+    # The core rail's pair: one bypass split across two decades, not two
+    # separate jobs.
+    PLACEMENT["eth.core_bulk"] = (-57.5, -11.0, 0)
+    PLACEMENT["eth.core_hf"] = (-57.5, -8.5, 0)
 
-    for address, y in (("eth.r_mdio_pullup", -22.0),
-                       ("eth.r_reset_pullup", -20.0),
-                       ("eth.r_refclk_strap", -18.0)):
-        PLACEMENT[address] = (-61.5, y, 0)
-        LABELS[address] = (0.0, -1.3)
+    PLACEMENT["eth.bias"] = (-56.5, -22.5, 90)
+    PLACEMENT["eth.r_mdio_pullup"] = (-51.0, -8.5, 0)
+    PLACEMENT["eth.r_reset_pullup"] = (-51.0, -6.0, 0)
 
     for address, x in (("eth.tap_bypass1", -47.0), ("eth.tap_bypass2", -44.5)):
         PLACEMENT[address] = (x, -31.0, 0)
+
+    for address in ("eth.dec_vdd2a", "eth.dec_vdd1a", "eth.dec_vddio",
+                    "eth.r_refclk_strap", "eth.xtal.c_in", "eth.xtal.c_out",
+                    "eth.core_bulk", "eth.core_hf", "eth.bias",
+                    "eth.r_mdio_pullup", "eth.r_reset_pullup",
+                    "eth.tap_bypass1", "eth.tap_bypass2"):
         LABELS[address] = (0.0, -1.3)
+    LABELS["eth.xtal.crystal"] = (0.0, -3.0)
 
     _ethernet_pairs()
+    _ethernet_local()
+
+
+def _ethernet_local() -> None:
+    """
+    Everything on the PHY that goes to a part rather than to the MCU.
+
+    The crystal and its two load capacitors, the bias resistor, the core rail's
+    bypass pair and the one strap that has to be fought. All of them sit beside
+    the pin they belong to, so each is a straight run from a package pin to a
+    pad and there is nothing to arrange.
+    """
+    for net, points in (
+        # Both leave the package straight out and turn once they are clear of
+        # the pins either side of them - a diagonal from the pad crosses the
+        # escape of whichever supply pin is next along.
+        ("ETH_XTAL2", ["eth.phy:4", (-57.6, -16.75), "eth.xtal.c_out:1",
+                       "eth.xtal.crystal:3"]),
+        ("ETH_RBIAS", ["eth.phy:24", "eth.bias:1"]),
+        ("ETH_VDDCR", ["eth.phy:6", "eth.core_bulk:1", "eth.core_hf:1"]),
+        ("ETH_NINTSEL", ["eth.phy:2", "eth.r_refclk_strap:1"]),
+        ("3V3", ["eth.phy:1", "eth.dec_vdd2a:1"]),
+    ):
+        ROUTES.append((net, _width_for(net, SIGNAL), F, points))
+
+    # XTAL1 goes to the terminal on the far corner, which means past the can
+    # pad sitting between it and the package. Under the crystal rather than
+    # around it: around is three millimetres further on the one net where
+    # length is the thing being controlled.
+    width = _width_for("ETH_XTAL1", SIGNAL)
+    path("ETH_XTAL1", width, [
+        (F, ["eth.phy:5", (-57.0, -16.25), (-57.3, -15.2)]),
+        (B, [(-57.3, -15.2), (-62.0, -9.8)]),
+        (F, [(-62.0, -9.8), "eth.xtal.c_in:1", "eth.xtal.crystal:1"]),
+    ])
 
 
 # Where each pair's two halves have to end up, and the fact that forces the
@@ -1225,8 +1312,11 @@ def _ethernet_pairs() -> None:
     # under N, and where it comes back up. The two crossings are at different
     # heights so their four vias are not neighbours.
     for pair, pins, centre, pads, detour, hop, target in (
-        ("ETH_TD", ("21", "20"), phy_x + 1.2, ("1", "2"), -53.2, -30.2, jack_x),
-        ("ETH_RD", ("23", "22"), phy_x - 1.2, ("3", "6"), -57.5, -32.5, jack_x - 2.54),
+        # Both lines sit inboard of the pins that feed them, which leaves
+        # VDD1A - the pin outboard of the transmit pair - a lane of its own to
+        # escape along. Put either line outside its pins and that lane closes.
+        ("ETH_TD", ("21", "20"), phy_x + 0.55, ("1", "2"), -53.2, -30.2, jack_x),
+        ("ETH_RD", ("23", "22"), phy_x - 0.55, ("3", "6"), -57.5, -32.5, jack_x - 2.54),
     ):
         line = [(centre, phy_y - 1.95 - 3.0), (centre, finish)]
         left, right = layout_lib.diff_pair(line, ETH_WIDTH, ETH_GAP)
@@ -1360,6 +1450,16 @@ def _point(where) -> tuple[float, float]:
     return tuple(where)
 
 
+def _inside(polygon: list[tuple[float, float]], point: tuple[float, float]) -> bool:
+    """Ray casting: how many sides a ray from the point crosses going right."""
+    x, y = point
+    crossings = 0
+    for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]):
+        if (y1 > y) != (y2 > y) and x1 + (y - y1) * (x2 - x1) / (y2 - y1) > x:
+            crossings += 1
+    return crossings % 2 == 1
+
+
 def _plane_stitches() -> None:
     """
     A via for every surface pad that belongs to a plane and has no other way
@@ -1376,6 +1476,13 @@ def _plane_stitches() -> None:
 
     reached = _already_reached()
     pads, vias = _obstacles()
+
+    # Where each plane actually is. A via only reaches a plane if the plane is
+    # underneath it: 5V is an island beside the regulator, and the comparators
+    # that run from it are thirty millimetres away, over ground and 3V3. Four
+    # vias were placed there that connected to nothing, and DRC counted the
+    # pads as unrouted while the board looked stitched.
+    covered = {plane["net"]: plane["outline"] for plane in PLANES}
 
     # A search that asks every pad on the board about every candidate position
     # takes half a minute; the same search asking only the pads nearby takes
@@ -1469,6 +1576,8 @@ def _plane_stitches() -> None:
             if pad is None:
                 continue                  # through-hole: already in every layer
             here = _absolute(address, pad.x, pad.y)
+            if net in covered and not _inside(covered[net], here):
+                continue                  # the plane is somewhere else; route it
 
             # Two pads of one net, side by side, do not need two ways down -
             # but only if the track between them has somewhere to run. The
@@ -1508,6 +1617,8 @@ def _plane_stitches() -> None:
                 at = _absolute(address,
                                pad.x + math.cos(angle) * reach,
                                pad.y + math.sin(angle) * reach)
+                if net in covered and not _inside(covered[net], at):
+                    continue              # the plane does not reach here
                 if clear(at, here, PLANE_NETS[net], margin):
                     VIAS.append((f"{address}:{number}", at, net, *VIA, PLANE_NETS[net]))
                     vias.append(at)
