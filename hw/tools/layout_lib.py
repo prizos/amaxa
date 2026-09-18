@@ -26,6 +26,10 @@ class Pad:
     y: float
     width: float
     height: float
+    # "smd" or "thru_hole". A through-hole pad is already in every layer, so it
+    # meets an inner plane without needing a via; a surface pad does not, and
+    # anything that stitches pads to planes has to tell them apart.
+    kind: str = "smd"
 
 
 def footprint_pads(path: Path) -> dict[str, list[Pad]]:
@@ -33,12 +37,14 @@ def footprint_pads(path: Path) -> dict[str, list[Pad]]:
     text = path.read_text()
     pads: dict[str, list[Pad]] = {}
     for match in re.finditer(
-        r'\(pad "([^"]+)" (?!np_thru_hole)\w+ \w+\s*\(at ([-\d.]+) ([-\d.]+)(?: [-\d.]+)?\)\s*'
+        r'\(pad "([^"]+)" (?!np_thru_hole)(\w+) \w+\s*\(at ([-\d.]+) ([-\d.]+)(?: [-\d.]+)?\)\s*'
         r"\(size ([\d.]+) ([\d.]+)\)",
         text,
     ):
-        number, x, y, w, h = match.groups()
-        pads.setdefault(number, []).append(Pad(number, float(x), float(y), float(w), float(h)))
+        number, kind, x, y, w, h = match.groups()
+        pads.setdefault(number, []).append(
+            Pad(number, float(x), float(y), float(w), float(h), kind)
+        )
     return pads
 
 

@@ -113,6 +113,10 @@ connections are left for M8, when the whole board is in view. DRC runs in the
 mode that still refuses anything drawn wrongly but does not demand what has not
 been drawn at all - so a clean DRC here does not mean a finished board, and the
 unrouted count above is the honest number.
+
+Every pad that belongs to a plane now reaches one: that part is generated, not
+drawn, and it is what the via count above is mostly made of. What is left is
+signal routing.
 """),
     ("The renders confirm nothing electrical", """
 No 3D model library is installed in the environment these were generated in, so

@@ -81,6 +81,11 @@ def _design() -> dict:
 
 
 DESIGN = _design()
+NET_AT = {
+    (address, pad): net
+    for net, nodes in _design()["nets"].items()
+    for address, pad in nodes
+}
 NET_OF_PIN = {
     pad: net
     for net, nodes in DESIGN["nets"].items()
@@ -749,8 +754,11 @@ def _header_at(number: int) -> tuple[float, float]:
 
 def _lane_of(name: str) -> float:
     """Where a static signal's parts sit, by its place in the header table."""
+    # 2.0 mm apart, not 1.4. At the tighter pitch there was nowhere to put a
+    # via beside two of these resistors' supply pads, which the plane stitching
+    # generator refused to guess at rather than placing one on a neighbour.
     statics = [n for n in PINMAP.HEADER_DIGITAL[:11] if n != "3V3"]
-    return round(-38.6 + 1.4 * statics.index(name), 4)
+    return round(-38.6 + 2.0 * statics.index(name), 4)
 
 
 def _safety() -> None:
@@ -1121,6 +1129,216 @@ def _ethernet_pairs() -> None:
 
 
 
+# --- everything the planes have to reach -------------------------------------
+#
+# Ninety-six ground pads, and fifty more on the two supply islands, each of
+# them a surface pad that has to find a plane two layers down. Written as a
+# generator rather than as a hundred and fifty coordinates, for the same reason
+# the decoupling is: a via list that long is a list nobody reads, and one wrong
+# entry in it looks exactly like the rest.
+#
+# A pad is given a via beyond it, on the line out from the part's own centre,
+# so the stub runs along the part's axis rather than across its neighbour. Pads
+# something else already reaches - the decoupling capacitors, the MCU's supply
+# ring, anything routed by hand - are left alone, and through-hole pads need
+# nothing: they are already in every layer.
+
+# The stub width each plane net's own design rule asks for. 5 V is wider than
+# the logic rails because `rules.kicad_dru` says so, and a stub is a track.
+PLANE_NETS = {"GND": 0.25, "3V3": 0.25, "5V": 0.3}
+STITCH_REACH = 0.85       # how far beyond a pad its via sits
+VIA_TO_PAD = 0.45         # via edge to pad edge, with clearance to spare
+VIA_TO_VIA = 0.95         # centre to centre, which hole-to-hole decides
+SHARE_REACH = 1.8         # how far a pad will reach to use a via already there
+
+
+def _pads_of(address: str) -> dict[str, list]:
+    library, _, name = DESIGN["parts"][address]["footprint"].partition(":")
+    return layout_lib.footprint_pads(HERE / "parts" / library / f"{name}.kicad_mod")
+
+
+def _absolute(address: str, x: float, y: float) -> tuple[float, float]:
+    """A point in a footprint's frame, placed on the board."""
+    import math
+
+    ox, oy, *rest = PLACEMENT[address]
+    angle = math.radians(rest[0] if rest else 0.0)
+    return (round(ox + x * math.cos(angle) + y * math.sin(angle), 4),
+            round(oy - x * math.sin(angle) + y * math.cos(angle), 4))
+
+
+def _already_reached() -> set[str]:
+    """Every `address:pad` some route or via already touches."""
+    out = set()
+    for _, _, _, points in ROUTES:
+        out |= {p for p in points if isinstance(p, str)}
+    for entry in VIAS:
+        if entry[0] is not None:
+            out.add(entry[0])
+    return out
+
+
+def _obstacles() -> tuple[list, list]:
+    """
+    Every pad on the board as an upright rectangle, and every via already there.
+
+    Rectangles rather than circles: a via wants to pass *along* a row of
+    0.6 by 1.3 mm pads, and measuring them by their diagonal says there is no
+    room anywhere on an SOIC. Every part on this board is placed at a right
+    angle, so the rectangles stay upright and the arithmetic stays simple.
+    """
+    pads = []
+    for address in PLACEMENT:
+        turned = round((PLACEMENT[address][2] if len(PLACEMENT[address]) > 2 else 0)) % 180 == 90
+        for copies in _pads_of(address).values():
+            for pad in copies:
+                x, y = _absolute(address, pad.x, pad.y)
+                half_w, half_h = pad.width / 2, pad.height / 2
+                if turned:
+                    half_w, half_h = half_h, half_w
+                pads.append((x, y, half_w, half_h))
+    return pads, [tuple(entry[1]) for entry in VIAS]
+
+
+def _plane_stitches() -> None:
+    """
+    A via for every surface pad that belongs to a plane and has no other way
+    down.
+
+    Where the via goes is searched for rather than assumed. The first choice is
+    straight out from the part's centre, past the pad, which keeps the stub
+    along the part's own axis; if something is already there the direction
+    turns in steps until it finds room. A generator that always used its first
+    choice would put fifty of these on top of their neighbours, and finding
+    that out one DRC violation at a time is not a design method.
+    """
+    import math
+
+    reached = _already_reached()
+    pads, vias = _obstacles()
+
+    # A search that asks every pad on the board about every candidate position
+    # takes half a minute; the same search asking only the pads nearby takes
+    # under a second. Bucketed on a four-millimetre grid, which is wider than
+    # anything this generator reaches.
+    grid: dict[tuple[int, int], list] = {}
+    for rect in pads:
+        grid.setdefault((int(rect[0] // 4), int(rect[1] // 4)), []).append(rect)
+
+    def near_pads(point):
+        cx, cy = int(point[0] // 4), int(point[1] // 4)
+        return [
+            rect
+            for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+            for rect in grid.get((cx + dx, cy + dy), ())
+        ]
+
+    # net -> where that net already goes through to the plane, so a second pad
+    # on the same net can reach an existing via instead of asking for its own.
+    placed: dict[str, list] = {}
+    for entry in VIAS:
+        placed.setdefault(entry[2], []).append(tuple(entry[1]))
+
+    def _outside(rect, point, margin) -> bool:
+        x, y, half_w, half_h = rect
+        return (abs(point[0] - x) > half_w + margin
+                or abs(point[1] - y) > half_h + margin)
+
+    def clear(at: tuple[float, float], own: tuple[float, float],
+              width: float, margin: float, existing: bool = False) -> bool:
+        """
+        Room for the via *and* for the stub that reaches it.
+
+        The first version of this checked only where the via landed, and left
+        six stubs lying across their neighbours' pads - a via can have all the
+        room in the world at the end of a track that crosses something on the
+        way there. The stub is walked in small steps rather than solved for,
+        because a rectangle and a segment is more arithmetic than this needs.
+
+        `margin` is tried generously first and then tightened. Copper clearance
+        is 0.15 mm, but a track threading between two pads also merges their
+        solder mask openings, and that rule wants more room than this one does.
+        Pads at 0.5 mm pitch cannot give it, so the tight figure exists for
+        them and is used only where the roomy one finds nothing.
+        """
+        steps = max(2, int(math.dist(own, at) / 0.1))
+        walk = [(own[0] + (at[0] - own[0]) * i / steps,
+                 own[1] + (at[1] - own[1]) * i / steps) for i in range(1, steps + 1)]
+        looking = {id(rect): rect for point in walk + [at] for rect in near_pads(point)}
+        for rect in looking.values():
+            if abs(rect[0] - own[0]) < 1e-6 and abs(rect[1] - own[1]) < 1e-6:
+                continue                  # the pad this via belongs to
+            if not _outside(rect, at, 0.25 + 0.2):
+                return False
+            if any(not _outside(rect, point, width / 2 + margin) for point in walk):
+                return False
+        if existing:
+            return True                   # the via is already there and legal
+        return all(math.dist(other, at) >= VIA_TO_VIA for other in vias)
+
+    stranded = []
+    for address in sorted(PLACEMENT):
+        if address == MCU:
+            continue                      # its ring is drawn by _supply_vias()
+        for number, copies in sorted(_pads_of(address).items()):
+            net = NET_AT.get((address, number))
+            if net not in PLANE_NETS or f"{address}:{number}" in reached:
+                continue
+            pad = next((p for p in copies if p.kind == "smd"), None)
+            if pad is None:
+                continue                  # through-hole: already in every layer
+            here = _absolute(address, pad.x, pad.y)
+
+            # Two pads of one net, side by side, do not need two ways down -
+            # but only if the track between them has somewhere to run. The
+            # first version of this shared a via whenever one was near enough
+            # and put five stubs straight across a comparator's input pad.
+            near = sorted((v for v in placed.get(net, []) if math.dist(v, here) <= SHARE_REACH),
+                          key=lambda v: math.dist(v, here))
+            shared = next(
+                (v for v in near
+                 if clear(v, here, PLANE_NETS[net], 0.3, existing=True)),
+                None,
+            )
+            if shared is not None:
+                ROUTES.append((net, PLANE_NETS[net], F, [f"{address}:{number}", shared]))
+                continue
+
+            # Straight out along the pad's own long axis, away from the part.
+            # That is where a pin escapes: for the middle pin of a 0.5 mm-pitch
+            # package it is the only line with room on both sides, and a
+            # bearing taken from the part's centre misses it by the few degrees
+            # that put the stub into a neighbour.
+            if abs(pad.width - pad.height) < 1e-6:
+                bearing = math.atan2(pad.y, pad.x)
+            elif pad.width > pad.height:
+                bearing = 0.0 if pad.x >= 0 else math.pi
+            else:
+                bearing = math.pi / 2 if pad.y >= 0 else -math.pi / 2
+            candidates = (
+                (margin, turn, STITCH_REACH + step * 0.3)
+                for margin in (0.3, 0.22, 0.17)
+                for turn in (0, 10, -10, 20, -20, 30, -30, 40, -40, 55, -55,
+                             70, -70, 90, -90, 120, -120, 150, -150, 180)
+                for step in range(9)
+            )
+            for margin, turn, reach in candidates:
+                angle = bearing + math.radians(turn)
+                at = _absolute(address,
+                               pad.x + math.cos(angle) * reach,
+                               pad.y + math.sin(angle) * reach)
+                if clear(at, here, PLANE_NETS[net], margin):
+                    VIAS.append((f"{address}:{number}", at, net, *VIA, PLANE_NETS[net]))
+                    vias.append(at)
+                    placed.setdefault(net, []).append(at)
+                    break
+            else:
+                stranded.append(f"{address}:{number} ({net})")
+    if stranded:
+        sys.exit("no room for a plane via beside: " + ", ".join(stranded))
+
+
+
 _supply_vias()
 _decoupling()
 _analog_supply()
@@ -1133,3 +1351,4 @@ _adc_inputs()
 _field_buses()
 _usb()
 _ethernet()
+_plane_stitches()

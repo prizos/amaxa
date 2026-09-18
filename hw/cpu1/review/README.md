@@ -11,8 +11,8 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
 | **Footprints** | 228 |
 | **Nets** | 191, of which 8 pending |
-| **Routing** | 275 track segments, 118 vias, 3 zones |
-| **DRC** | 0 violations, 373 connections not yet routed (`ROUTING := incomplete`) |
+| **Routing** | 425 track segments, 259 vias, 3 zones |
+| **DRC** | 0 violations, 243 connections not yet routed (`ROUTING := incomplete`) |
 
 > [!IMPORTANT]
 > **Routing is deliberately incomplete.** Read the plots with that in
@@ -616,6 +616,10 @@ connections are left for M8, when the whole board is in view. DRC runs in the
 mode that still refuses anything drawn wrongly but does not demand what has not
 been drawn at all - so a clean DRC here does not mean a finished board, and the
 unrouted count above is the honest number.
+
+Every pad that belongs to a plane now reaches one: that part is generated, not
+drawn, and it is what the via count above is mostly made of. What is left is
+signal routing.
 
 **The renders confirm nothing electrical.** No 3D model library is installed in the environment these were generated in, so
 parts appear as their bare land patterns. More importantly, a footprint renders
