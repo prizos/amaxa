@@ -1197,8 +1197,9 @@ ADC_SHUNT_OFFSET = 2.2
 
 # One connector pin can feed more than one cell: the DC link's does, once for
 # the measurement and once for the faster tap the over-voltage comparator
-# watches. The second cell goes east of both columns, level with the first.
-ADC_SPILL = -24.0
+# watches. The second cell goes half a row from the first, on the side away
+# from the other column, and is fed from the first cell's own input pad - which
+# is the node it is meant to be tapping.
 
 # The connector's two pin columns are 2.54 mm apart along the row and their
 # cells would be level with each other. Half a row of stagger puts each east
@@ -1228,8 +1229,9 @@ def _adc_inputs() -> None:
         row, column = divmod(pin - 1, 2)
         seen = spilled.get(pin, 0)
         spilled[pin] = seen + 1
-        x = ADC_COLUMNS[column] if not seen else ADC_SPILL + (seen - 1) * 4.6
-        y = round(ANALOG_HEADER[1] + HEADER_PITCH * row + ADC_STAGGER * column, 4)
+        x = ADC_COLUMNS[column]
+        y = round(ANALOG_HEADER[1] + HEADER_PITCH * row + ADC_STAGGER * column
+                  + ADC_STAGGER * seen * (1 if column == 0 else -1), 4)
         PLACEMENT[f"{cell}.series"] = (x, y, 0)
         PLACEMENT[f"{cell}.shunt"] = (round(x + ADC_SHUNT_OFFSET, 4), y, 0)
         LABELS[f"{cell}.series"] = (0.0, -1.3)
@@ -1240,6 +1242,97 @@ def _adc_inputs() -> None:
     PLACEMENT["tp_dac_test"] = (-17.0, -19.0)
     LABELS["adc.dac_test.series"] = (0.0, -1.3)
     LABELS["tp_dac_test"] = (0.0, -2.0)
+
+
+# The connector's two pin columns are 2.54 mm apart and so are its rows, so a
+# line leaving the west column runs straight into the east column's pin. It
+# steps half a row north to get past it and back again; the east column's own
+# lines step half a row south instead, into the gap the staggered cells leave.
+SENSE_DODGE = 1.15
+SENSE_WEST = (-42.8, -40.0, -38.8)      # step out, run along, step back
+SENSE_EAST = (-40.4, -39.6)             # step out, and rise into the gap
+
+# The four sense lines a comparator watches, and how each of them reaches the
+# row. They go north on the back layer: the front of this channel is where they
+# come back down, and a line that rose on the front would cross the ones that
+# rose before it. The only other thing on the back here is the three threshold
+# buses, and those are north of where these surface.
+#
+# Each entry is the net, the lane it surfaces on, and the back-layer way there
+# from its connector pin. The lanes go south as their taps go east, and each
+# one ends before the next one's first tap, so no lane crosses another's riser.
+SENSE_LANES = (
+    ("IA_SENSE", -30.0, ((-44.0, -24.5),)),
+    ("IB_SENSE", -29.2, ((-41.46, -23.7),)),
+    ("IC_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9))),
+    # The DC link's line arrives from the east instead. Its tap is the last on
+    # the row and its own threshold bus surfaces where it would have risen, so
+    # it runs along the empty back layer under the input networks and comes up
+    # beyond it.
+    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-5.0, -15.65))),
+)
+
+
+def _sense_route(net: str) -> list[str]:
+    """The comparator input pads on a sense net, west to east."""
+    return sorted(
+        (f"{address}:{pad}" for address, pad in DESIGN["nets"][net]
+         if address.startswith("trip.")),
+        key=lambda ref: _point(ref)[0],
+    )
+
+
+def _sense_routes() -> None:
+    """
+    The connector's analog inputs: to their cells, and to the comparators.
+
+    Every line is a run east at its pin's own height, which is what placing one
+    cell per pin bought. The two that are not - the dodge past the other
+    column's pin, and the half-row rise into the gap between two cells - are
+    both a millimetre long and happen before the line has left the connector.
+    """
+    pins = _adc_pins()
+    order: dict[int, list[str]] = {}
+    for cell, pin in sorted(pins.items()):
+        order.setdefault(pin, []).append(cell)
+
+    for pin, cells in sorted(order.items()):
+        net = NET_AT[("header.analog", str(pin))]
+        width = _width_for(net, SIGNAL)
+        row, column = divmod(pin - 1, 2)
+        y = round(ANALOG_HEADER[1] + HEADER_PITCH * row, 4)
+        if column == 0:
+            legs = [(SENSE_WEST[0], round(y - SENSE_DODGE, 4)),
+                    (SENSE_WEST[1], round(y - SENSE_DODGE, 4)),
+                    (SENSE_WEST[2], y)]
+        else:
+            legs = [(SENSE_EAST[0], y),
+                    (SENSE_EAST[1], round(y + ADC_STAGGER, 4))]
+        ROUTES.append((net, width, F,
+                       [f"header.analog:{pin}", *legs, f"{cells[0]}.series:1"]))
+        # A pin that feeds a second cell feeds it from the first one's input
+        # pad, which is the node the second one is there to tap.
+        for extra in cells[1:]:
+            ROUTES.append((net, width, F,
+                           [f"{cells[0]}.series:1", f"{extra}.series:1"]))
+
+    for net, lane, waypoints in SENSE_LANES:
+        width = _width_for(net, SIGNAL)
+        pads = _sense_route(net)
+        taps = [_point(ref)[0] for ref in pads]
+        entry = waypoints[-1]
+        riser = entry[0] if entry[0] > taps[-1] else taps[0]
+        pin = next(pad for address, pad in DESIGN["nets"][net]
+                   if address == "header.analog")
+        back = [f"header.analog:{pin}", *waypoints,
+                (riser, entry[1]), (riser, lane)]
+        def along(ref: str, x: float) -> list:
+            corner = [] if abs(x - riser) < 1e-6 else [(x, lane)]
+            return [(riser, lane), *corner, ref]
+
+        path(net, width, [(B, back), (F, along(pads[0], taps[0]))])
+        for ref, x in zip(pads[1:], taps[1:]):
+            ROUTES.append((net, width, F, along(ref, x)))
 
 
 # --- the field buses ---------------------------------------------------------
@@ -1949,6 +2042,7 @@ _power()
 _safety()
 _trip()
 _adc_inputs()
+_sense_routes()
 _field_buses()
 _field_bus_routes()
 _usb()
