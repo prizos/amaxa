@@ -98,3 +98,21 @@
 	(condition "A.NetName == 'USB_DP' || A.NetName == 'USB_DM'")
 	(constraint track_width (min 0.25mm))
 	(severity error))
+
+# The PHY's own nets: the bias that sets transmit amplitude, the crystal either
+# side of it, the 1.2 V rail its internal regulator makes, and the strap that
+# decides where the reference clock comes from. Microamps to milliamps, but the
+# bias and the crystal are the two this block is most sensitive about, and a
+# narrow track beside a switching node is where that sensitivity gets spent.
+(rule "ethernet phy"
+	(condition "A.NetName == 'ETH_RBIAS' || A.NetName == 'ETH_XTAL1' || A.NetName == 'ETH_XTAL2' || A.NetName == 'ETH_VDDCR' || A.NetName == 'ETH_NINTSEL'")
+	(constraint track_width (min 0.2mm))
+	(severity error))
+
+# The two pairs out to the magnetics. 100 ohm differential is what 100BASE-TX
+# runs on; the width that makes it waits for M7d, with the jack that decides
+# where they go.
+(rule "ethernet pairs"
+	(condition "A.NetName == 'ETH_TD_P' || A.NetName == 'ETH_TD_N' || A.NetName == 'ETH_RD_P' || A.NetName == 'ETH_RD_N'")
+	(constraint track_width (min 0.2mm))
+	(severity error))

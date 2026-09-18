@@ -993,6 +993,45 @@ def _usb() -> None:
         ROUTES.append((net, USB_WIDTH, F, list(line)))
 
 
+# --- Ethernet ----------------------------------------------------------------
+#
+# The PHY and its clock, in the corner left of the threshold DAC. The jack is
+# not here: see cpu1.py's ethernet(), and M7d.
+
+def _ethernet() -> None:
+    PLACEMENT["eth.phy"] = (-44.5, -35.0, 0)
+    LABELS["eth.phy"] = (0.0, -3.6)
+
+    # Decoupling on three sides of the package, each beside the pin it serves.
+    for address, at, rotation in (("eth.dec_vddio", (-40.0, -35.0), 90),
+                                  ("eth.dec_vdd1a", (-44.5, -31.0), 0),
+                                  ("eth.dec_vdd2a", (-44.5, -39.0), 0)):
+        PLACEMENT[address] = (*at, rotation)
+        LABELS[address] = (0.0, -1.3)
+
+    # The core rail's two capacitors, together, because they are one bypass
+    # split across two decades rather than two separate jobs.
+    PLACEMENT["eth.core_bulk"] = (-48.0, -33.0, 90)
+    PLACEMENT["eth.core_hf"] = (-48.0, -36.0, 90)
+    PLACEMENT["eth.bias"] = (-47.5, -38.5, 90)
+    for address in ("eth.core_bulk", "eth.core_hf", "eth.bias"):
+        LABELS[address] = (-1.5, 0.0)
+
+    # The crystal below the package, its two capacitors either side of it.
+    PLACEMENT["eth.xtal.crystal"] = (-44.5, -26.5, 90)
+    PLACEMENT["eth.xtal.c_in"] = (-47.5, -28.0, 90)
+    PLACEMENT["eth.xtal.c_out"] = (-47.5, -25.0, 90)
+    LABELS["eth.xtal.crystal"] = (2.8, 0.0)
+    for address in ("eth.xtal.c_in", "eth.xtal.c_out"):
+        LABELS[address] = (-1.5, 0.0)
+
+    PLACEMENT["eth.r_mdio_pullup"] = (-41.0, -30.0, 0)
+    PLACEMENT["eth.r_reset_pullup"] = (-41.0, -28.0, 0)
+    PLACEMENT["eth.r_refclk_strap"] = (-41.0, -23.5, 0)
+    for address in ("eth.r_mdio_pullup", "eth.r_reset_pullup", "eth.r_refclk_strap"):
+        LABELS[address] = (0.0, -1.3)
+
+
 _supply_vias()
 _decoupling()
 _analog_supply()
@@ -1004,3 +1043,4 @@ _trip()
 _adc_inputs()
 _field_buses()
 _usb()
+_ethernet()

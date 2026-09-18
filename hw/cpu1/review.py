@@ -57,6 +57,10 @@ BLOCKS: list[tuple[str, tuple[str, ...], str]] = [
      "A device port that senses VBUS and takes no power from it. The board's "
      "one differential pair, drawn to 90 ohm from the stackup rather than to "
      "a width somebody remembered."),
+    ("Ethernet", ("eth",),
+     "The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII "
+     "reference clock, and the straps that decide it should. The jack and its "
+     "magnetics wait for M7d, with the board size."),
     ("Headers", ("header",),
      "Digital 2x20 and analog 2x15 to the power board."),
     ("Test points", ("tp_",),

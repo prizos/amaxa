@@ -62,7 +62,9 @@ PINS = [
     Pin("PG11", "ETH_TX_EN", "ETH_TX_EN"),
     Pin("PG13", "ETH_TXD0", "ETH_TXD0"),
     Pin("PG12", "ETH_TXD1", "ETH_TXD1", note="not PB13 as on the NUCLEO: that is TIM1_CH1N"),
-    Pin("PG14", "GPIO", "ETH_PHY_IRQ", "in"),
+    # PG14 was the PHY interrupt. In REF_CLK Out mode the LAN8742A has no
+    # interrupt pin to drive it - its datasheet says so in as many words - so
+    # the pin is free and firmware reads link state over MDIO instead.
     Pin("PG15", "GPIO", "ETH_PHY_RESET", "out"),
     Pin("PD5", "USART2_TX", "RS485_TX"),
     Pin("PD6", "USART2_RX", "RS485_RX"),

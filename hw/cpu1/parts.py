@@ -666,5 +666,59 @@ RES_5K1_0402 = PartSpec(
 )
 
 
+# --- Ethernet ------------------------------------------------------------
+# Industrial temperature grade: this board sits in a motor drive, and the
+# commercial part stops at +70 degC. Every figure here was read from SMSC's
+# LAN8742A/LAN8742Ai datasheet, revision 1.1; see QFN24.md for how, because
+# Microchip ships it encrypted and no extractor could open it as it came.
+ETH_PHY = PartSpec(
+    symbol="Interface_Ethernet:LAN8742A",
+    footprint="QFN24:QFN-24-1EP_4x4mm_P0.5mm_EP2.5x2.5mm", prefix="U",
+    manufacturer="Microchip Tech", mpn="LAN8742AI-CZ-TR", lcsc="C621425",
+    value="LAN8742Ai",
+    params={
+        "io_supply_voltage": between(1.62, 3.6),      # VDDIO
+        "analog_supply_voltage": between(3.0, 3.6),   # VDD1A, VDD2A
+        "core_supply_voltage": between(1.14, 1.26),   # VDDCR, from the internal regulator
+        "magnetics_supply_voltage": between(2.25, 3.6),
+        "bias_resistance": pm(12.1e3, 0.01),          # RBIAS to ground, 1%
+        "crystal_frequency": exact(25e6),
+        "crystal_esr_max": exact(30.0),
+        "crystal_load_capacitance": exact(20e-12),
+        "crystal_ppm_budget": exact(45e-6),           # tolerance + stability, aging aside
+        "xtal_pin_capacitance": exact(3e-12),
+    },
+)
+
+# 5032 rather than the cheaper 3225: at 25 MHz the smaller package's ESR runs
+# 50 to 80 ohm, and the PHY's oscillator is specified to 30. See XTAL5032_4P.md.
+XTAL_25M = PartSpec(
+    symbol="Device:Crystal_GND24",
+    footprint="XTAL5032_4P:Crystal_SMD_5032-4Pin_5.0x3.2mm", prefix="Y",
+    manufacturer="Yajingxin", mpn="TXM25M0004503LDCDO00T", lcsc="C362363",
+    value="25MHz",
+    params={
+        "frequency": exact(25e6),
+        "load_capacitance": exact(20e-12),
+        "esr_max": exact(30.0),
+        "frequency_tolerance": exact(20e-6),
+        "frequency_stability": exact(20e-6),
+    },
+)
+
+RES_12K1_0402 = PartSpec(
+    **_R0402, mpn="0402WGF1212TCE", lcsc="C25852", value="12K1",
+    params={"resistance": pm(12.1e3, 0.01), "max_power": exact(0.0625)},
+)
+CAP_33P_0402 = PartSpec(
+    **_C0402, manufacturer="FH", mpn="0402CG330J500NT", lcsc="C1562", value="33pF",
+    params={"capacitance": pm(33e-12, 0.05), "max_voltage": exact(50.0)},
+)
+CAP_470P_0402 = PartSpec(
+    **_C0402, manufacturer="FH", mpn="0402CG471J500NT", lcsc="C75274", value="470pF",
+    params={"capacitance": pm(470e-12, 0.05), "max_voltage": exact(50.0)},
+)
+
+
 ALL: dict[str, PartSpec] = collect(globals())
 """Every part, by the name it is known by here. Used by the parts checks."""

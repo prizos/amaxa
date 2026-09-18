@@ -9,10 +9,10 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 100 × 80 mm |
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
-| **Footprints** | 212 |
-| **Nets** | 183, of which 19 pending |
+| **Footprints** | 225 |
+| **Nets** | 191, of which 12 pending |
 | **Routing** | 259 track segments, 114 vias, 3 zones |
-| **DRC** | 0 violations, 329 connections not yet routed (`ROUTING := incomplete`) |
+| **DRC** | 0 violations, 369 connections not yet routed (`ROUTING := incomplete`) |
 
 > [!IMPORTANT]
 > **Routing is deliberately incomplete.** Read the plots with that in
@@ -86,11 +86,12 @@ schematic after the fact.
 | CAN FD | 8 | TCAN1044V with split termination on a solder jumper. |
 | RS-485 | 5 | THVD1450, fail-safe biased on-chip, 120 ohm on a jumper. |
 | USB-C | 4 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
+| Ethernet | 13 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, and the straps that decide it should. The jack and its magnetics wait for M7d, with the board size. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 212, by block</summary>
+<summary><strong>Every footprint</strong> — all 225, by block</summary>
 
 #### MCU core
 
@@ -351,6 +352,24 @@ schematic after the fact.
 | `D12` | `usb.protection` | USBLC6-2 | USBLC6-2SC6 | C7519 | `SOT-23-6` |
 | `J7` | `usb.receptacle` | USB-C | TYPE-C-31-M-12 | C165948 | `USB_C_Receptacle_HRO_TYPE-C-31-M-12` |
 
+#### Ethernet
+
+| Ref | Address | Value | Part number | LCSC | Footprint |
+|---|---|---|---|---|---|
+| `R81` | `eth.bias` | 12K1 | 0402WGF1212TCE | C25852 | `R_0402_1005Metric` |
+| `C59` | `eth.core_bulk` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
+| `C60` | `eth.core_hf` | 470pF | 0402CG471J500NT | C75274 | `C_0402_1005Metric` |
+| `C62` | `eth.dec_vdd1a` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C63` | `eth.dec_vdd2a` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C61` | `eth.dec_vddio` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U18` | `eth.phy` | LAN8742Ai | LAN8742AI-CZ-TR | C621425 | `QFN-24-1EP_4x4mm_P0.5mm_EP2.5x2.5mm` |
+| `R82` | `eth.r_mdio_pullup` | 4.7k | 0402WGF4701TCE | C25900 | `R_0402_1005Metric` |
+| `R84` | `eth.r_refclk_strap` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R83` | `eth.r_reset_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `C64` | `eth.xtal.c_in` | 33pF | 0402CG330J500NT | C1562 | `C_0402_1005Metric` |
+| `C65` | `eth.xtal.c_out` | 33pF | 0402CG330J500NT | C1562 | `C_0402_1005Metric` |
+| `Y3` | `eth.xtal.crystal` | 25MHz | TXM25M0004503LDCDO00T | C362363 | `Crystal_SMD_5032-4Pin_5.0x3.2mm` |
+
 #### Headers
 
 | Ref | Address | Value | Part number | LCSC | Footprint |
@@ -379,22 +398,22 @@ schematic after the fact.
 
 ## Nets
 
-19 of the 183 nets are ERC waivers: each has exactly one
+12 of the 191 nets are ERC waivers: each has exactly one
 connection, because the block at its other end is not drawn yet. A check
 requires that to stay true, so when the block lands the waiver has to go.
 
 | Waiting on | Nets |
 |---|---|
-| M7c: the Ethernet PHY, its crystal and the jack | `ETH_CRS_DV`, `ETH_MDC`, `ETH_MDIO`, `ETH_PHY_IRQ`, `ETH_PHY_RESET`, `ETH_REF_CLK`, `ETH_RXD0`, `ETH_RXD1`, `ETH_TXD0`, `ETH_TXD1`, `ETH_TX_EN` |
+| M7d: the RJ45 and its magnetics, once the board's size is settled | `ETH_RD_N`, `ETH_RD_P`, `ETH_TD_N`, `ETH_TD_P` |
 | M8: the motion-feedback connector, once the encoder type is settled | `ENC_A`, `ENC_B`, `ENC_SERIAL_RX`, `ENC_SERIAL_TX`, `ENC_Z`, `HALL_1`, `HALL_2`, `HALL_3` |
 
 <details>
-<summary><strong>Every net</strong> — all 183, by size</summary>
+<summary><strong>Every net</strong> — all 191, by size</summary>
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 178 |  |
-| `3V3` | 63 |  |
+| `GND` | 190 |  |
+| `3V3` | 71 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
@@ -424,6 +443,11 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `CAN_TERM_MID` | 3 |  |
 | `DAC_SCL` | 3 |  |
 | `DAC_SDA` | 3 |  |
+| `ETH_MDIO` | 3 |  |
+| `ETH_PHY_RESET` | 3 |  |
+| `ETH_VDDCR` | 3 |  |
+| `ETH_XTAL1` | 3 |  |
+| `ETH_XTAL2` | 3 |  |
 | `FB_3V3` | 3 |  |
 | `GATE_ENABLE_OUT` | 3 |  |
 | `HSE_IN` | 3 |  |
@@ -490,6 +514,16 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `DAC_SPARE` | 2 |  |
 | `DAC_TEST` | 2 |  |
 | `DAC_TEST_OUT` | 2 |  |
+| `ETH_CRS_DV` | 2 |  |
+| `ETH_MDC` | 2 |  |
+| `ETH_NINTSEL` | 2 |  |
+| `ETH_RBIAS` | 2 |  |
+| `ETH_REF_CLK` | 2 |  |
+| `ETH_RXD0` | 2 |  |
+| `ETH_RXD1` | 2 |  |
+| `ETH_TXD0` | 2 |  |
+| `ETH_TXD1` | 2 |  |
+| `ETH_TX_EN` | 2 |  |
 | `GATE_ENABLE` | 2 |  |
 | `GATE_ENABLE_B` | 2 |  |
 | `LED_COMMS` | 2 |  |
@@ -562,17 +596,10 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `ENC_SERIAL_RX` | 1 | pending |
 | `ENC_SERIAL_TX` | 1 | pending |
 | `ENC_Z` | 1 | pending |
-| `ETH_CRS_DV` | 1 | pending |
-| `ETH_MDC` | 1 | pending |
-| `ETH_MDIO` | 1 | pending |
-| `ETH_PHY_IRQ` | 1 | pending |
-| `ETH_PHY_RESET` | 1 | pending |
-| `ETH_REF_CLK` | 1 | pending |
-| `ETH_RXD0` | 1 | pending |
-| `ETH_RXD1` | 1 | pending |
-| `ETH_TXD0` | 1 | pending |
-| `ETH_TXD1` | 1 | pending |
-| `ETH_TX_EN` | 1 | pending |
+| `ETH_RD_N` | 1 | pending |
+| `ETH_RD_P` | 1 | pending |
+| `ETH_TD_N` | 1 | pending |
+| `ETH_TD_P` | 1 | pending |
 | `HALL_1` | 1 | pending |
 | `HALL_2` | 1 | pending |
 | `HALL_3` | 1 | pending |

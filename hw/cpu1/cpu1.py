@@ -172,19 +172,28 @@ INTENT: dict[str, tuple[float, float]] = {
     # is 8 kV by contact, which is the level anything with a connector on the
     # outside of a machine is expected to meet.
     "usb.esd_level": (8e3, 15e3),
+    # What IEEE 802.3 allows the link's clock to drift by, end to end. The
+    # PHY's datasheet then splits it into tolerance, stability and ageing.
+    # (The pairs' impedance arrives with the jack, in M7d.)
+    "ethernet.clock_budget": (0.0, 50e-6),
+    # The stray capacitance either side of the PHY's crystal: its own pins are
+    # in the datasheet, this is what the board adds beside them. Same figure as
+    # the MCU's oscillators and the same reason - it is measured at bring-up.
+    "ethernet.stray_capacitance": (1e-12, 3e-12),
 }
 
 # Which later block connects the other end of each net. Matched in order; a net
 # matching none of these is an error, so a new pin cannot slip in unexplained.
 _MILESTONES = [
+    (r"^ETH_(TD|RD)_[PN]$",
+     "M7d: the RJ45 and its magnetics, once the board's size is settled"),
     (r"^(ENC_\w+|HALL_\d)$",
      "M8: the motion-feedback connector, once the encoder type is settled"),
     (r"^(IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$",
      "M6: the ADC input networks and comparator taps"),
     (r"^\w+_SENSE$",
      "M6: the anti-alias filter between this and the ADC pin it belongs to"),
-    (r"^ETH_\w+$",
-     "M7c: the Ethernet PHY, its crystal and the jack"),
+
 ]
 
 
@@ -194,6 +203,7 @@ _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
     r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d"
     r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+|USB_\w+"
+    r"|ETH_(TXD\d|TX_EN|RXD\d|CRS_DV|MDIO|MDC|PHY_RESET|REF_CLK|RBIAS|XTAL\d|VDDCR|NINTSEL)"
     r"|IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$"
 )
 
@@ -257,6 +267,7 @@ def build() -> Net:
     adc_inputs(v3v3, gnd, nets)
     field_buses(v3v3, gnd, nets)
     usb(v3v3, gnd, nets)
+    ethernet(v3v3, gnd, nets)
 
     # Unused I/O is left unconnected on purpose, and said so. Firmware sets these
     # to analog mode, the lowest-leakage state.
@@ -1079,6 +1090,121 @@ def usb(v3v3, gnd, nets) -> None:
     receptacle["SBU2"] += NC  # noqa: F821
 
 
+def ethernet(v3v3, gnd, nets) -> None:
+    """
+    100BASE-TX over RMII: the PHY, a 25 MHz crystal, and a jack with the
+    magnetics inside it.
+
+    **The PHY makes the reference clock.** A 25 MHz crystal is cheaper and
+    quieter than a 50 MHz oscillator, and the LAN8742A will multiply one up and
+    drive the RMII REF_CLK out of its nINT pin. The price is in the datasheet's
+    own words: "When configured for REF_CLK Out Mode, the device generates the
+    50MHz RMII REF_CLK and the nINT interrupt is not available." So this board
+    has no PHY interrupt line, PG14 is free again, and firmware learns about
+    link changes by reading the PHY over MDIO - which is what it does anyway
+    every time it wants to know the speed.
+
+    Nearly every strap is left alone on purpose. MODE[2:0] come up at 111
+    through their own pull-ups, which is "all capable, auto-negotiation
+    enabled"; PHYAD0 comes up at 0, which is the address this board wants;
+    REGOFF has an internal pull-down, and pulling it down is what turns the
+    internal 1.2 V regulator *on*. The one strap that has to be fought is
+    nINTSEL, which defaults to the interrupt mode this design cannot use.
+    """
+    phy = part(parts.ETH_PHY, "eth.phy", "U18")
+
+    v3v3 += phy["VDDIO"], phy["VDD1A"], phy["VDD2A"]
+    gnd += phy["VSS"]
+
+    # The core rail is the PHY's own regulator output, not a rail of this
+    # board's: it exists between one pin and two capacitors.
+    core = Net("ETH_VDDCR")
+    # The pin is a supply input that its own silicon supplies. ERC cannot see
+    # that, the way it cannot see what feeds the MCU's VCAP pins, so the drive
+    # is declared here rather than left as a warning nobody reads.
+    core.drive = POWER
+    core += phy["VDDCR"]
+    for address, spec, ref in (("eth.core_bulk", parts.CAP_1U_0402, "C59"),
+                               ("eth.core_hf", parts.CAP_470P_0402, "C60")):
+        cap = part(spec, address, ref)
+        core += cap[1]
+        gnd += cap[2]
+
+    for address, spec, ref, pin in (("eth.dec_vddio", parts.CAP_100N_0402, "C61", "VDDIO"),
+                                    ("eth.dec_vdd1a", parts.CAP_100N_0402, "C62", "VDD1A"),
+                                    ("eth.dec_vdd2a", parts.CAP_100N_0402, "C63", "VDD2A")):
+        cap = part(spec, address, ref)
+        v3v3 += cap[1]
+        gnd += cap[2]
+
+    # The bias current the whole analog front end is referenced to. 12.1 k, 1 %,
+    # because it sets transmit amplitude and nothing else adjusts it.
+    bias = part(parts.RES_12K1_0402, "eth.bias", "R81")
+    Net("ETH_RBIAS").connect(phy["RBIAS"], bias[1])
+    gnd += bias[2]
+
+    # --- the clock ----------------------------------------------------------
+    crystal = part(parts.XTAL_25M, "eth.xtal.crystal", "Y3")
+    xin = Net("ETH_XTAL1")
+    xout = Net("ETH_XTAL2")
+    xin.connect(phy["XTAL1/CLKIN"], crystal[1])
+    xout.connect(phy["XTAL2"], crystal[3])
+    gnd += crystal[2], crystal[4]
+    for address, ref, node in (("eth.xtal.c_in", "C64", xin), ("eth.xtal.c_out", "C65", xout)):
+        cap = part(parts.CAP_33P_0402, address, ref)
+        node += cap[1]
+        gnd += cap[2]
+
+    # --- RMII, and the two lines that manage it -----------------------------
+    nets["ETH_TXD0"] += phy["TXD0"]
+    nets["ETH_TXD1"] += phy["TXD1"]
+    nets["ETH_TX_EN"] += phy["TXEN"]
+    nets["ETH_RXD0"] += phy["RXD0/MODE0"]
+    nets["ETH_RXD1"] += phy["RXD1/MODE1"]
+    nets["ETH_CRS_DV"] += phy["CRS_DV/MODE2"]
+    nets["ETH_MDIO"] += phy["MDIO"]
+    nets["ETH_MDC"] += phy["MDC"]
+    nets["ETH_PHY_RESET"] += phy["~{RST}"]
+    nets["ETH_REF_CLK"] += phy["~{INT}/REFCLKO"]
+
+    # MDIO is open-drain at the PHY and idles high; nRST is held out of reset
+    # until firmware decides otherwise, so a board that never runs still has a
+    # PHY it can talk to over a debugger.
+    for address, net, ref, spec in (("eth.r_mdio_pullup", "ETH_MDIO", "R82", parts.RES_4K7_0402),
+                                    ("eth.r_reset_pullup", "ETH_PHY_RESET", "R83", parts.RES_10K_0402)):
+        resistor = part(spec, address, ref)
+        nets[net] += resistor[1]
+        v3v3 += resistor[2]
+
+    # The one strap that is not already where this design wants it.
+    strap = part(parts.RES_10K_0402, "eth.r_refclk_strap", "R84")
+    Net("ETH_NINTSEL").connect(phy["LED2/~{INTSEL}"], strap[1])
+    gnd += strap[2]
+
+    # RXER carries PHYAD0 at reset and nothing after it: the STM32's RMII has
+    # no receive-error input, and the internal pull-down gives address 0.
+    phy["RXER/PHYAD0"] += NC  # noqa: F821 - SKiDL puts NC in builtins
+    # LED1 doubles as REGOFF, whose internal pull-down keeps the 1.2 V
+    # regulator on. Driving an LED from it would make the regulator's state
+    # depend on which way the LED is wired, which is a trade this board does
+    # not need: it has its own indicators and a debug port.
+    phy["LED1/REGOFF"] += NC  # noqa: F821
+
+    # --- out to the magnetics ------------------------------------------------
+    # The jack is not here yet. It is 19 by 22 millimetres with its magnetics
+    # inside it, and there is no nineteen-millimetre square left on a board
+    # whose size the README still calls provisional. Choosing where it goes
+    # means choosing how big this board is, which is a decision with the whole
+    # layout in it rather than one block, so it waits for M7d.
+    #
+    # What is settled is which pin of the PHY each pair leaves on, so the four
+    # nets exist and say what they are waiting for.
+    Net("ETH_TD_P").connect(phy["TXP"])
+    Net("ETH_TD_N").connect(phy["TXN"])
+    Net("ETH_RD_P").connect(phy["RXP"])
+    Net("ETH_RD_N").connect(phy["RXN"])
+
+
 def pending(names: list[str]) -> dict[str, str]:
     """Every net with only the MCU on it, and the block that will change that."""
     return {net: waiting_for(net) for net in names if not _CONNECTED.match(net)}
@@ -1088,5 +1214,10 @@ if __name__ == "__main__":
     names = sorted(
         {p.net_name for p in PINMAP.PINS}
         | {name for name in PINMAP.HEADER_ANALOG if name.endswith("_SENSE")}
+        # Not MCU pins: the four wires between the PHY and a jack that is not
+        # on the board yet. Everything else here is half-connected because the
+        # MCU end exists and the other does not; these are half-connected the
+        # other way round, and wait on the same kind of block.
+        | {"ETH_TD_P", "ETH_TD_N", "ETH_RD_P", "ETH_RD_N"}
     )
     sys.exit(run(build, HERE, INTENT, pending(names)))

@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 133
+EXPECTED_CHECKS = 143
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -66,6 +66,12 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "a property of a board that does not exist yet. The same gap as VDDA's "
         "bead, and the same answer: measure it at bring-up"
     ),
+    ("eth.phy", "magnetics_supply_voltage"): (
+        "2.25 to 3.6 V for the transformer centre taps, which are inside a "
+        "jack this board does not have yet. The rail that will feed them is "
+        "3V3 and already in range, but checking that before the part exists "
+        "would be checking a plan rather than a design. M7d"
+    ),
     ("usb.receptacle", "current_rating"): (
         "5 A per contact against a port that draws none: VBUS reaches a sense "
         "pin and a clamp and stops there, which is the whole design of it. "
@@ -119,6 +125,16 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
         "both fault lines together"
     ),
     "SOD123": "pad 1 is the cathode, from the package drawing not the maker's",
+    "QFN24": (
+        "the exposed pad's thermal vias and paste aperture. The datasheet's "
+        "package outline gives the pad's size but not Microchip's recommended "
+        "via pattern, and that pad is the PHY's only ground connection"
+    ),
+    "XTAL5032_4P": (
+        "the crystal's ESR and ppm figures, which come from LCSC's parametric "
+        "data rather than a datasheet nobody here could fetch. They are the "
+        "whole reason this part was chosen over two cheaper ones"
+    ),
     "USBC16": (
         "whether the receptacle's shell overhangs the board edge, sits flush, "
         "or wants a notch in the outline. That is a question about an enclosure "
