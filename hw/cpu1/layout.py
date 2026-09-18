@@ -1645,8 +1645,11 @@ PWM_STRAY, PWM_STRAY_TURN, PWM_STRAY_EXIT = 14.2, 24.0, 24.0
 
 def _pwm_inputs() -> None:
     behind = {entry[0]: entry[1:] for entry in PWM_BEHIND}
-    for net in sorted(n for n in DESIGN["nets"]
-                      if n.startswith(("PWM1_", "PWM2_")) and "_" in n[5:]):
+    # Every net with a pin at one end and a buffer input at the other. Tested
+    # that way round because the names do not divide cleanly: the brake and the
+    # PFC channel have one word where the others have two, and a filter written
+    # on the names left both of them unrouted.
+    for net in sorted(n for n in DESIGN["nets"] if n.startswith(("PWM1_", "PWM2_"))):
         nodes = {address: pad for address, pad in DESIGN["nets"][net]}
         buffered = next((a for a in nodes if a.startswith("safety.buffer")), None)
         if buffered is None or MCU not in nodes:
@@ -1712,16 +1715,21 @@ def _tripped() -> None:
 # lane never meets a column - the same rule the analog fan uses, for the same
 # reason. A net whose lane is further south gets a column further west, which
 # is what keeps each lane clear of the other columns.
+# One PWM line crosses this strip on the back, and there is no lane south of it
+# that still reaches the latch. Anything that has to get past steps over on the
+# front for a millimetre. The signal whose lane is south of it comes out of
+# that step already on the front and simply carries on, which saves it a via
+# and, more to the point, saves the via from standing in another net's way.
+SAFETY_STEP = (13.7, 14.7)
+SAFETY_STEP_END = 15.5
+
+
+
 SAFETY_DROPS = (
-    ("TRIP_CLEAR_N", (11.9, 0.25), 11.9, 15.2),
+    ("TRIP_CLEAR_N", (11.9, 0.25), 11.9, SAFETY_STEP_END),
     ("PWM_ENABLE_N", (12.7, 1.1), 12.7, 12.4),
     ("TRIP_N", (13.5, 2.2), 13.5, 10.4),
 )
-
-# One PWM line crosses this strip on the back, and there is no lane south of it
-# that still reaches the latch. Anything that has to get past steps over on the
-# front for a millimetre.
-SAFETY_STEP = (13.7, 14.7)
 
 
 def _safety_column(net, width, column, top, bottom) -> None:
@@ -1745,7 +1753,14 @@ def _safety_signals() -> None:
                   key=lambda pad: math.dist(_point(f"{MCU}:{pad}"), drop))
         ROUTES.append((net, width, F, [f"{MCU}:{pin}", drop]))
         VIAS.append((None, drop, net, *VIA))
-        _safety_column(net, width, column, drop[1], lane)
+        if lane == SAFETY_STEP_END:
+            path(net, width, [
+                (B, [drop, (column, SAFETY_STEP[0])]),
+                (F, [(column, SAFETY_STEP[0]), (column, lane)]),
+            ])
+        else:
+            _safety_column(net, width, column, drop[1], lane)
+            VIAS.append((None, (column, lane), net, *VIA))
 
     # The latch's set input. Both timers' break inputs are on it; the second
     # comes off the south edge, round the bottom of the PWM fan and back up the
@@ -1757,19 +1772,19 @@ def _safety_signals() -> None:
                  key=lambda pad: -_point(f"{MCU}:{pad}")[1])
     # Straight out of the pad row before it turns: the pins either side of it
     # are the core's own capacitors, and their tracks leave along this line.
-    escape = (round(_point(f"{MCU}:{second}")[0], 4), 15.5)
+    escape = (round(_point(f"{MCU}:{second}")[0], 4), 15.4)
     path("TRIP_N", width, [
         (F, [f"{MCU}:{second}", escape]),
-        (B, [escape, (13.5, 15.5)]),
+        (B, [escape, (13.5, 15.4)]),
     ])
-    _safety_column("TRIP_N", width, 13.5, 15.5, 10.4)
+    _safety_column("TRIP_N", width, 13.5, 15.4, 10.4)
 
     # The clear input is on the far side of the latch, so this one carries on
     # past it on the back and comes back to the pad from the east.
     width = _width_for("TRIP_CLEAR_N", SIGNAL)
-    over, clear = (23.0, 15.2), (29.0, 9.25)
+    over, clear = (23.0, SAFETY_STEP_END), (29.0, 9.25)
     path("TRIP_CLEAR_N", width, [
-        (F, [(11.9, 15.2), over]),
+        (F, [(11.9, SAFETY_STEP_END), over]),
         (B, [over, (clear[0], over[1]), clear]),
         (F, [clear, "safety.latch:6"]),
     ])
@@ -1786,7 +1801,7 @@ def _safety_signals() -> None:
     ])
 
     # And each pull-up hangs off its own lane by the length of one pad.
-    for address, lane in (("safety.r_clear_pullup", 15.2),
+    for address, lane in (("safety.r_clear_pullup", SAFETY_STEP_END),
                           ("safety.r_enable_pullup", 12.4)):
         net = NET_AT[(address, "2")]
         pad = _point(f"{address}:2")
