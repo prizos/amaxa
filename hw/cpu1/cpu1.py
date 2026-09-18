@@ -174,8 +174,19 @@ INTENT: dict[str, tuple[float, float]] = {
     "usb.esd_level": (8e3, 15e3),
     # What IEEE 802.3 allows the link's clock to drift by, end to end. The
     # PHY's datasheet then splits it into tolerance, stability and ageing.
-    # (The pairs' impedance arrives with the jack, in M7d.)
     "ethernet.clock_budget": (0.0, 50e-6),
+    # What 100BASE-TX runs on, between the PHY and the magnetics: 100 ohm
+    # differential, with the tolerance IEEE 802.3 allows the cable itself.
+    "ethernet.differential_impedance": (85.0, 115.0),
+    # How slow 100BASE-TX's own edges are, and how much of one the two halves
+    # of a pair may be apart. As with USB this is not a timing budget - the
+    # receiver equalises far worse - it is how much of the signal is allowed to
+    # become common mode, which is what leaves on the cable.
+    "ethernet.rise_time": (3e-9, 5e-9),
+    "ethernet.skew_share": (0.0, 0.03),
+    # What has to stand between the cable and the rest of the machine. IEEE
+    # 802.3 asks 1500 V rms, and the jack's magnetics are the only barrier.
+    "ethernet.isolation": (1500.0, 4000.0),
     # The stray capacitance either side of the PHY's crystal: its own pins are
     # in the datasheet, this is what the board adds beside them. Same figure as
     # the MCU's oscillators and the same reason - it is measured at bring-up.
@@ -185,8 +196,6 @@ INTENT: dict[str, tuple[float, float]] = {
 # Which later block connects the other end of each net. Matched in order; a net
 # matching none of these is an error, so a new pin cannot slip in unexplained.
 _MILESTONES = [
-    (r"^ETH_(TD|RD)_[PN]$",
-     "M7d: the RJ45 and its magnetics, once the board's size is settled"),
     (r"^(ENC_\w+|HALL_\d)$",
      "M8: the motion-feedback connector, once the encoder type is settled"),
     (r"^(IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$",
@@ -203,7 +212,7 @@ _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
     r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d"
     r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+|USB_\w+"
-    r"|ETH_(TXD\d|TX_EN|RXD\d|CRS_DV|MDIO|MDC|PHY_RESET|REF_CLK|RBIAS|XTAL\d|VDDCR|NINTSEL)"
+    r"|ETH_\w+"
     r"|IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$"
 )
 
@@ -1190,19 +1199,36 @@ def ethernet(v3v3, gnd, nets) -> None:
     # not need: it has its own indicators and a debug port.
     phy["LED1/REGOFF"] += NC  # noqa: F821
 
-    # --- out to the magnetics ------------------------------------------------
-    # The jack is not here yet. It is 19 by 22 millimetres with its magnetics
-    # inside it, and there is no nineteen-millimetre square left on a board
-    # whose size the README still calls provisional. Choosing where it goes
-    # means choosing how big this board is, which is a decision with the whole
-    # layout in it rather than one block, so it waits for M7d.
-    #
-    # What is settled is which pin of the PHY each pair leaves on, so the four
-    # nets exist and say what they are waiting for.
-    Net("ETH_TD_P").connect(phy["TXP"])
-    Net("ETH_TD_N").connect(phy["TXN"])
-    Net("ETH_RD_P").connect(phy["RXP"])
-    Net("ETH_RD_N").connect(phy["RXN"])
+    # --- the jack -----------------------------------------------------------
+    jack = part(parts.ETH_JACK, "eth.jack", "J8")
+    Net("ETH_TD_P").connect(phy["TXP"], jack["TD+"])
+    Net("ETH_TD_N").connect(phy["TXN"], jack["TD-"])
+    Net("ETH_RD_P").connect(phy["RXP"], jack["RD+"])
+    Net("ETH_RD_N").connect(phy["RXN"], jack["RD-"])
+
+    # The transmitter is current-mode: the transformer's centre taps are where
+    # its current comes from, so they sit on the supply rather than on ground,
+    # and each gets its own bypass because the two windings switch at different
+    # moments and would otherwise share the return path through the rail.
+    v3v3 += jack["TCT"], jack["RCT"]
+    for address, ref in (("eth.tap_bypass1", "C66"), ("eth.tap_bypass2", "C67")):
+        cap = part(parts.CAP_100N_0402, address, ref)
+        v3v3 += cap[1]
+        gnd += cap[2]
+
+    # Pin 8 is the common of the jack's own termination network and the shell
+    # is the cable's screen. Both go to this board's one ground: there is no
+    # second ground here to isolate them from, and a screen left floating is an
+    # antenna that happens to be earthed at the other end of the cable.
+    gnd += jack[8], jack["SH"]
+
+    # Nothing drives the jack's four LEDs. Both of the PHY's LED pins double as
+    # configuration straps, and buying two indicators with a strap polarity
+    # each is a poor trade on a board that already has three LEDs and a debug
+    # port. The pins are left unconnected deliberately, and said so.
+    jack["NC"] += NC  # noqa: F821 - SKiDL puts NC in builtins
+    for pad in ("9", "10", "11", "12"):
+        jack[pad] += NC  # noqa: F821
 
 
 def pending(names: list[str]) -> dict[str, str]:
@@ -1214,10 +1240,5 @@ if __name__ == "__main__":
     names = sorted(
         {p.net_name for p in PINMAP.PINS}
         | {name for name in PINMAP.HEADER_ANALOG if name.endswith("_SENSE")}
-        # Not MCU pins: the four wires between the PHY and a jack that is not
-        # on the board yet. Everything else here is half-connected because the
-        # MCU end exists and the other does not; these are half-connected the
-        # other way round, and wait on the same kind of block.
-        | {"ETH_TD_P", "ETH_TD_N", "ETH_RD_P", "ETH_RD_N"}
     )
     sys.exit(run(build, HERE, INTENT, pending(names)))

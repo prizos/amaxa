@@ -11,9 +11,15 @@ Datasheets: ST's *USBLC6-2*, Doc ID 11265 Rev 5 (October 2011), and the
 STM32H743xI pin table for what a `FT_u` pin may see.
 """
 
-import math
+import sys
+from pathlib import Path
 
 import pytest
+
+# pytest imports these files by path, so the directory they share is not on
+# sys.path and the helper beside them has to be found deliberately.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pairs  # noqa: E402
 
 MCU = "mcu"
 CONNECTOR = "usb.receptacle"
@@ -54,60 +60,9 @@ def pin_names(design, board_dir):
 
 
 @pytest.fixture(scope="module")
-def stack(board_dir):
-    """The dielectric between the outer layers and the plane beside them."""
-    import sys
-
-    sys.path.insert(0, str(board_dir.parent / "tools"))
-    from layout_lib import Microstrip
-    from mcu_pins import load_source
-
-    board = load_source(board_dir / "layout.py", "cpu1_layout_usb").BOARD
-    first = board["stack"][0]
-    return Microstrip(height=first["thickness"], epsilon_r=first["epsilon_r"])
-
-
-@pytest.fixture(scope="module")
-def pair_tracks(pcb_text, design):
-    """
-    net -> the F.Cu segments it is routed with, as ((x1, y1), (x2, y2), width).
-
-    Read out of the board file. The layout computes the pair's width from the
-    stackup; this deliberately does not ask it what it computed, because the
-    whole point of the geometry checks is to measure what was drawn.
-    """
-    import re
-
-    numbers = {}
-    for block in re.findall(r"\n\t\(net (\d+) \"([^\"]*)\"\)", pcb_text):
-        numbers[block[1]] = block[0]
-
-    out: dict[str, list] = {}
-    for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
-        start = re.search(r"\(start ([-\d.]+) ([-\d.]+)\)", block)
-        end = re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", block)
-        width = re.search(r"\(width ([\d.]+)\)", block)
-        layer = re.search(r'\(layer "([^"]+)"\)', block)
-        net = re.search(r"\(net (\d+)\)", block)
-        if not (start and end and width and net and layer):
-            continue
-        for name, number in numbers.items():
-            if number == net.group(1) and name in ("USB_DP", "USB_DM") and layer.group(1) == "F.Cu":
-                out.setdefault(name, []).append((
-                    (float(start.group(1)), float(start.group(2))),
-                    (float(end.group(1)), float(end.group(2))),
-                    float(width.group(1)),
-                ))
-    return out
-
-
-@pytest.fixture(scope="module")
-def lengths(build_dir):
-    import json
-
-    report = build_dir / "lengths.json"
-    assert report.is_file(), "no lengths.json; run `make layout` first"
-    return json.loads(report.read_text())
+def pair_tracks(pcb_text):
+    """The pair's segments, read out of the board file. See checks/pairs.py."""
+    return pairs.tracks_of(pcb_text, ("USB_DP", "USB_DM"))
 
 
 # --- what the port is allowed to do to the board -----------------------------
@@ -338,15 +293,14 @@ def test_the_pair_is_drawn_for_the_impedance_it_has_to_present(spec, stack, pair
         f"the pair is {sorted(pair_tracks)}, not both halves"
     )
 
-    widths = {round(w, 4) for segments in pair_tracks.values() for *_, w in segments}
-    controlled = max(widths)
-    pairs = {
+    controlled = pairs.controlled_width(pair_tracks)
+    runs = {
         net: [seg for seg in segments if round(seg[2], 4) == controlled]
         for net, segments in pair_tracks.items()
     }
-    assert all(pairs.values()), "one half of the pair has no controlled-width run"
+    assert all(runs.values()), "one half of the pair has no controlled-width run"
 
-    gap = _separation(pairs["USB_DP"], pairs["USB_DM"]) - controlled
+    gap = pairs.separation(runs["USB_DP"], runs["USB_DM"]) - controlled
     impedance = differential_impedance(controlled, gap, stack)
     assert low <= impedance <= high, (
         f"{controlled:g} mm traces {gap:.3f} mm apart over {stack.height:g} mm "
@@ -403,7 +357,7 @@ def test_the_pair_arrives_together(spec, stack, lengths, pair_tracks):
     _, allowed = spec("usb", "skew_share")
     width = max(w for segments in pair_tracks.values() for *_, w in segments)
     mismatch = abs(lengths["USB_DP"] - lengths["USB_DM"])
-    skew = mismatch * _delay_per_mm(stack, width)
+    skew = mismatch * pairs.delay_per_mm(stack, width)
     assert skew <= allowed * edge, (
         f"{mismatch:.2f} mm of mismatch is {skew * 1e12:.0f} ps, "
         f"{skew / edge:.1%} of a {edge * 1e9:g} ns edge, over {allowed:.0%}"
@@ -438,43 +392,3 @@ def test_the_pair_runs_over_the_plane_that_returns_it(board_dir, pair_tracks):
         f"the ground plane is on {ground[0]['layer']}, which is not next to the "
         f"layer the pair is routed on"
     )
-
-
-# --- geometry ----------------------------------------------------------------
-
-
-def _separation(one: list, other: list) -> float:
-    """
-    How far apart two parallel runs are, centre to centre.
-
-    The smallest distance from any point on one to the line of the other,
-    taken over the longest segment of each so a corner or a fan-out does not
-    stand in for the run itself.
-    """
-    longest = max(one, key=lambda s: math.dist(s[0], s[1]))
-    facing = max(other, key=lambda s: math.dist(s[0], s[1]))
-    (x1, y1), (x2, y2), _ = facing
-    length = math.dist((x1, y1), (x2, y2))
-    middle = ((longest[0][0] + longest[1][0]) / 2, (longest[0][1] + longest[1][1]) / 2)
-    return abs(
-        (x2 - x1) * (y1 - middle[1]) - (x1 - middle[0]) * (y2 - y1)
-    ) / length
-
-
-LIGHT = 299.792458e9      # mm per second
-
-
-def _delay_per_mm(stack, width: float) -> float:
-    """
-    Seconds per millimetre along a microstrip, through its effective
-    permittivity.
-
-    A microstrip's field is half in the laminate and half in the air above it,
-    so it propagates faster than the laminate alone would suggest and slower
-    than air. Hammerstad's expression for that effective value; on this
-    stackup it lands near 6 ps/mm, which is the number every layout rule of
-    thumb is quoted in.
-    """
-    er = stack.epsilon_r
-    effective = (er + 1) / 2 + ((er - 1) / 2) / math.sqrt(1 + 12.0 * stack.height / width)
-    return math.sqrt(effective) / LIGHT

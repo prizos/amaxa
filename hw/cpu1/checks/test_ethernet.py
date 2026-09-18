@@ -12,10 +12,18 @@ encrypted; `parts/QFN24/QFN24.md` records how it was read.
 """
 
 import math
+import sys
+from pathlib import Path
 
 import pytest
 
+# pytest imports these files by path, so the directory they share is not on
+# sys.path and the helper beside them has to be found deliberately.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pairs  # noqa: E402
+
 PHY = "eth.phy"
+JACK = "eth.jack"
 CRYSTAL = "eth.xtal.crystal"
 GROUND = "GND"
 
@@ -336,23 +344,203 @@ def test_management_and_reset_come_up_in_a_state_that_can_be_talked_to(
         )
 
 
-def test_the_pairs_leave_on_the_pins_the_magnetics_will_meet(design, net_on, board_config):
+def test_each_pair_runs_from_the_package_to_the_jack_without_meeting_anything(
+    design, net_on, pads_of
+):
     """
-    Each of the four line pins is on its own net, and each of those is waiting
-    for the jack.
+    Four line pins, four nets, and each one reaching exactly the package and
+    the connector.
 
-    The jack is not on this board yet, so what can be checked is that the four
-    nets exist, are distinct, and are declared as waiting rather than quietly
-    left half-connected - which is the same net state and a different thing.
+    Between the PHY's line driver and the transformer there is meant to be
+    copper and nothing else: no series part, no test point, no stub. Anything
+    else on the net is a discontinuity in the one place on this board where
+    that word means something.
     """
-    pending = design.get("pending", {})
-    nets = {name: net_on(name) for name in ("TXP", "TXN", "RXP", "RXN")}
-    assert len(set(nets.values())) == 4, f"the four line pins share nets: {nets}"
-    for name, net in sorted(nets.items()):
-        assert net in pending, f"{name} is on {net}, which is not declared pending"
-        assert len(design["nets"][net]) == 1, (
-            f"{net} is pending but has {len(design['nets'][net])} connections"
+    for phy_pin, jack_pin in (("TXP", "TD+"), ("TXN", "TD-"),
+                              ("RXP", "RD+"), ("RXN", "RD-")):
+        net = net_on(phy_pin)
+        reached = sorted({address for address, _ in design["nets"][net]})
+        assert reached == sorted({PHY, JACK}), (
+            f"{net} reaches {reached}; it should reach the PHY and the jack"
         )
+        assert net in pads_of[JACK].values(), f"{net} does not arrive at the jack"
+
+
+def test_the_pairs_present_the_impedance_the_cable_expects(spec, stack, pcb_text):
+    """
+    The width and separation actually on the board, put back through the
+    stackup.
+
+    Measured, not taken from the layout: the layout solves the same formulas to
+    choose the width, so asking it what it chose would prove nothing. A pair
+    drawn at one width and spaced for another fails here.
+    """
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+    from layout_lib import differential_impedance
+
+    low, high = spec("ethernet", "differential_impedance")
+    for pair in ("ETH_TD", "ETH_RD"):
+        tracks = pairs.tracks_of(pcb_text, (f"{pair}_P", f"{pair}_N"))
+        assert set(tracks) == {f"{pair}_P", f"{pair}_N"}, f"{pair} is not both halves"
+        width = pairs.controlled_width(tracks)
+        runs = {
+            net: [seg for seg in segments if round(seg[2], 4) == width]
+            for net, segments in tracks.items()
+        }
+        gap = pairs.separation(runs[f"{pair}_P"], runs[f"{pair}_N"]) - width
+        impedance = differential_impedance(width, gap, stack)
+        assert low <= impedance <= high, (
+            f"{pair}: {width:g} mm traces {gap:.3f} mm apart make "
+            f"{impedance:.1f} ohm, outside {low:g} to {high:g}"
+        )
+
+
+def test_the_pairs_arrive_together_enough(spec, stack, lengths, pcb_text):
+    """
+    How far apart in time the two halves of each pair arrive.
+
+    The budget here is not timing. 100BASE-TX deliberately slows its edges to
+    three nanoseconds or more and its receiver equalises far worse than this;
+    what mismatch costs is common mode, and common mode leaves on eighty metres
+    of cable. Each pair crosses itself once on the way to the connector -
+    unavoidably, because the PHY and the jack order their pins oppositely - and
+    the detour that crossing needs is most of the mismatch measured here.
+    """
+    edge, _ = spec("ethernet", "rise_time")
+    _, allowed = spec("ethernet", "skew_share")
+    for pair in ("ETH_TD", "ETH_RD"):
+        tracks = pairs.tracks_of(pcb_text, (f"{pair}_P", f"{pair}_N"))
+        width = pairs.controlled_width(tracks)
+        mismatch = abs(lengths[f"{pair}_P"] - lengths[f"{pair}_N"])
+        skew = mismatch * pairs.delay_per_mm(stack, width)
+        assert skew <= allowed * edge, (
+            f"{pair}: {mismatch:.1f} mm of mismatch is {skew * 1e12:.0f} ps, "
+            f"{skew / edge:.1%} of a {edge * 1e9:g} ns edge, over {allowed:.0%}"
+        )
+
+
+def test_the_centre_taps_sit_where_the_transmitter_can_use_them(spec, pads_of, design):
+    """
+    Both transformer centre taps on a rail the magnetics are specified for,
+    each with its own bypass.
+
+    The line driver is current-mode: it pulls current *out* of the winding, and
+    the centre tap is where that current comes from. Taps on ground, which is
+    what a voltage-mode PHY wants, give a transmitter with nothing to drive
+    against and a link that never comes up.
+
+    Each tap gets its own capacitor because the two windings switch at
+    different moments; one shared bypass puts the transmit return through the
+    receive winding's tap.
+    """
+    low, high = spec(PHY, "magnetics_supply_voltage")
+    by_name = {}
+    for pad, net in pads_of[JACK].items():
+        by_name[pad] = net
+    taps = {pad: by_name[pad] for pad in ("4", "5") if pad in by_name}
+    assert len(taps) == 2, f"the jack has {len(taps)} centre taps connected"
+    for pad, net in sorted(taps.items()):
+        assert net in RAILS, f"centre tap {pad} is on {net!r}, not a rail"
+        rail_low, rail_high = spec(RAILS[net], "voltage")
+        assert low <= rail_low and rail_high <= high, (
+            f"centre tap {pad} is on {net} at {rail_low} to {rail_high} V, "
+            f"outside the {low} to {high} V the magnetics are specified for"
+        )
+
+    rail = sorted(set(taps.values()))[0]
+    bypasses = [
+        address for address, _ in design["nets"][rail]
+        if address.startswith("eth.tap_bypass")
+    ]
+    assert len(bypasses) == 2, f"{len(bypasses)} bypasses for two centre taps"
+
+
+def test_the_screen_and_the_termination_reach_ground(pads_of):
+    """
+    The jack's shell and the common of its own termination network are on the
+    board's ground.
+
+    There is one ground here - the plan says so, and the analog side is kept
+    together by placement instead of by a split - so there is nothing for a
+    screen to be isolated *from*. What there is, is the failure of leaving it
+    floating: a screen connected at the far end of the cable and nowhere here
+    is an antenna with a driven element.
+    """
+    for pad, what in (("SH", "the shell"), ("8", "the termination common")):
+        assert pads_of[JACK].get(pad) == GROUND, (
+            f"{what} is on {pads_of[JACK].get(pad)!r}, not ground"
+        )
+
+
+def test_the_jack_isolates_the_cable_from_the_board(spec):
+    """
+    The magnetics' isolation rating against what an Ethernet port has to stand.
+
+    IEEE 802.3 asks for 1500 V rms between the cable and everything else, and
+    on this board that is the only barrier there is: the cable arrives at a
+    connector bolted to the same ground as the MCU.
+    """
+    rating, _ = spec(JACK, "isolation_voltage")
+    required, _ = spec("ethernet", "isolation")
+    assert rating >= required, (
+        f"the jack isolates to {rating:g} V and the standard asks for {required:g}"
+    )
+
+
+def test_no_plane_runs_under_the_jacks_cable_end(board_dir, pcb_text):
+    """
+    The copper pours stop short of the half of the jack the cable goes into.
+
+    The jack's pads keep their copper - they have to reach the plane - and what
+    is cleared is where the contacts and the cable's screen sit.
+
+    Asked as "is there pour at this point", not "does any outline corner fall
+    in the region": the first version of this check asked the second question,
+    and a pour drawn straight across the corner answered it correctly and
+    covered the jack anyway. A plane that covers a region has no vertex in it.
+    """
+    import re
+
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from mcu_pins import load_source
+
+    description = load_source(board_dir / "layout.py", "cpu1_layout_keepout")
+    x0, y0, x1, y1 = description.JACK_KEEPOUT
+    middle = ((x0 + x1) / 2, (y0 + y1) / 2)
+
+    covered = []
+    for block in re.findall(r"\n\t\(zone\b.*?\n\t\)", pcb_text, re.S):
+        net = re.search(r'\(net_name "([^"]*)"\)', block)
+        # The whole run of (xy ...) pairs. Matching the closing parenthesis
+        # loosely drops the last point, which turns the notch back into a
+        # rectangle and makes this check pass for the wrong reason.
+        outline = re.search(r"\(polygon\s*\(pts\s*((?:\(xy [^)]*\)\s*)+)", block, re.S)
+        if not outline:
+            continue
+        points = [
+            (float(x), float(y))
+            for x, y in re.findall(r"\(xy ([-\d.]+) ([-\d.]+)\)", outline.group(1))
+        ]
+        if _inside(points, middle):
+            covered.append(net.group(1) if net else "?")
+    assert not covered, (
+        f"Pours reaching under the jack's cable end at {middle}: "
+        + ", ".join(sorted(covered))
+    )
+
+
+def _inside(polygon: list[tuple[float, float]], point: tuple[float, float]) -> bool:
+    """Ray casting: how many sides a ray from the point crosses going right."""
+    x, y = point
+    crossings = 0
+    for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]):
+        if (y1 > y) != (y2 > y):
+            where = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+            if where > x:
+                crossings += 1
+    return crossings % 2 == 1
 
 
 @pytest.fixture(scope="module")

@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 143
+EXPECTED_CHECKS = 149
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -65,12 +65,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "0.9 ohm against what the power board's sensors draw from 5VA, which is "
         "a property of a board that does not exist yet. The same gap as VDDA's "
         "bead, and the same answer: measure it at bring-up"
-    ),
-    ("eth.phy", "magnetics_supply_voltage"): (
-        "2.25 to 3.6 V for the transformer centre taps, which are inside a "
-        "jack this board does not have yet. The rail that will feed them is "
-        "3V3 and already in range, but checking that before the part exists "
-        "would be checking a plan rather than a design. M7d"
     ),
     ("usb.receptacle", "current_rating"): (
         "5 A per contact against a port that draws none: VBUS reaches a sense "
@@ -134,6 +128,12 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
         "the crystal's ESR and ppm figures, which come from LCSC's parametric "
         "data rather than a datasheet nobody here could fetch. They are the "
         "whole reason this part was chosen over two cheaper ones"
+    ),
+    "RJ45HR": (
+        "what pin 8 is, the 1500 V isolation figure, and the 0 to +70 degC "
+        "rating on a board where every other part is the industrial grade. "
+        "Hanrun's datasheet could not be fetched from any mirror reachable "
+        "here, so all three come from LCSC's parametric data"
     ),
     "USBC16": (
         "whether the receptacle's shell overhangs the board edge, sits flush, "

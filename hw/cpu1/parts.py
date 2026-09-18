@@ -706,6 +706,16 @@ XTAL_25M = PartSpec(
     },
 )
 
+# The magnetics are inside the jack. A discrete transformer plus an unshielded
+# jack is the same parts count and one more thing to get the isolation rating
+# wrong on. See RJ45HR.md.
+ETH_JACK = PartSpec(
+    symbol="Connector:RJ45_Hanrun_HR911105A_Horizontal",
+    footprint="RJ45HR:RJ45_Hanrun_HR911105A_Horizontal", prefix="J",
+    manufacturer="HANRUN", mpn="HR911105A", lcsc="C12074", value="RJ45",
+    params={"isolation_voltage": exact(1500.0)},
+)
+
 RES_12K1_0402 = PartSpec(
     **_R0402, mpn="0402WGF1212TCE", lcsc="C25852", value="12K1",
     params={"resistance": pm(12.1e3, 0.01), "max_power": exact(0.0625)},

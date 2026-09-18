@@ -59,8 +59,8 @@ BLOCKS: list[tuple[str, tuple[str, ...], str]] = [
      "a width somebody remembered."),
     ("Ethernet", ("eth",),
      "The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII "
-     "reference clock, and the straps that decide it should. The jack and its "
-     "magnetics wait for M7d, with the board size."),
+     "reference clock, the straps that decide it should, and a jack with the "
+     "magnetics inside it. The board grew to 130 by 110 mm to hold the jack."),
     ("Headers", ("header",),
      "Digital 2x20 and analog 2x15 to the power board."),
     ("Test points", ("tp_",),
@@ -72,10 +72,13 @@ LAYERS: dict[str, str] = {
     "F_Cu": (
         "The component side. Dense around the LQFP-144's escapes and the two "
         "regulators; sparse above them, where the safety chain, the "
-        "comparators and the buses are placed but not yet joined up."
+        "comparators and the buses are placed but not yet joined up. The two "
+        "pairs in the top-left corner are the Ethernet link, and the only "
+        "tracks on this board drawn to an impedance rather than a width."
     ),
     "In1_Cu": (
-        "One solid ground plane. **No AGND/DGND split anywhere on this "
+        "One solid ground plane, notched at the top-left corner where the "
+        "Ethernet jack's cable end sits. **No AGND/DGND split anywhere on this "
         "board** - analog is kept together by placement instead, which is a "
         "decision recorded in the plan rather than a habit."
     ),

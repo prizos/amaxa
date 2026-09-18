@@ -110,8 +110,8 @@
 	(severity error))
 
 # The two pairs out to the magnetics. 100 ohm differential is what 100BASE-TX
-# runs on; the width that makes it waits for M7d, with the jack that decides
-# where they go.
+# runs on, and the width that makes it comes from the same solver the USB pair
+# uses; `test_ethernet.py` reads this floor back and puts it through it.
 (rule "ethernet pairs"
 	(condition "A.NetName == 'ETH_TD_P' || A.NetName == 'ETH_TD_N' || A.NetName == 'ETH_RD_P' || A.NetName == 'ETH_RD_N'")
 	(constraint track_width (min 0.2mm))

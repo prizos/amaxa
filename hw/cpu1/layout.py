@@ -44,7 +44,12 @@ from mcu_pins import load_source  # noqa: E402
 # finished.
 
 BOARD = {
-    "size": (100.0, 80.0),       # provisional
+    # 130 x 110 rather than the 100 x 80 this started at. The RJ45 is 19 by
+    # 22 mm with its magnetics inside it and has to sit on an edge, and there
+    # was no square that size left. Growing the board is the cheap side of that
+    # trade: a larger panel costs a few cents, and the alternative is a jack
+    # crowding the analog front end.
+    "size": (130.0, 110.0),      # provisional
     "corner_radius": 3.0,
     "thickness": 1.51,
     "copper_layers": 4,
@@ -645,10 +650,21 @@ VREF_PIN = "32"
 
 
 
+# Where the RJ45 sits, and how far the planes stay out from under it. The
+# jack's own pads keep their copper - they have to reach the plane - and what
+# is cleared is the half of it the cable goes into, where the contacts and the
+# cable's screen are and where a plane under them is one more path for
+# everything arriving on eighty metres of twisted pair.
+JACK = (-50.0, -37.2)
+JACK_KEEPOUT = (-64.5, -54.5, -44.4, -42.0)   # x0, y0, x1, y1
+
+
 def _pour_outline() -> list[tuple[float, float]]:
+    """The board, less the corner the jack's cable end sits in."""
     width, height = BOARD["size"]
     x, y = width / 2 - BOARD["pour_inset"], height / 2 - BOARD["pour_inset"]
-    return [(-x, -y), (x, -y), (x, y), (-x, y)]
+    _, _, notch_x, notch_y = JACK_KEEPOUT
+    return [(notch_x, -y), (x, -y), (x, y), (-x, y), (-x, notch_y), (notch_x, notch_y)]
 
 
 def _island_outline() -> list[tuple[float, float]]:
@@ -947,6 +963,11 @@ USB_STACK = layout_lib.Microstrip(
 )
 USB_WIDTH = layout_lib.pair_geometry(90.0, USB_STACK, gap=USB_GAP)
 
+# The Ethernet pairs run on the same layer over the same prepreg, so the only
+# thing that differs is what they have to present: 100 ohm, not 90.
+ETH_GAP = 0.2
+ETH_WIDTH = layout_lib.pair_geometry(100.0, USB_STACK, gap=ETH_GAP)
+
 
 def _usb() -> None:
     # The receptacle faces out of the top edge, in the corridor between the
@@ -999,37 +1020,105 @@ def _usb() -> None:
 # not here: see cpu1.py's ethernet(), and M7d.
 
 def _ethernet() -> None:
-    PLACEMENT["eth.phy"] = (-44.5, -35.0, 0)
-    LABELS["eth.phy"] = (0.0, -3.6)
+    # The jack in the corner the board grew to hold it, opening out of the top
+    # edge; the PHY on the column below it, far enough away that the pairs
+    # between them have room to be pairs.
+    PLACEMENT["eth.jack"] = (*JACK, 180)
+    LABELS["eth.jack"] = (-9.5, 5.0)
 
-    # Decoupling on three sides of the package, each beside the pin it serves.
-    for address, at, rotation in (("eth.dec_vddio", (-40.0, -35.0), 90),
-                                  ("eth.dec_vdd1a", (-44.5, -31.0), 0),
-                                  ("eth.dec_vdd2a", (-44.5, -39.0), 0)):
+    PLACEMENT["eth.phy"] = (-53.0, -18.0, 0)
+    LABELS["eth.phy"] = (0.0, 3.6)
+
+    for address, at, rotation in (("eth.dec_vddio", (-48.5, -18.0), 90),
+                                  ("eth.dec_vdd1a", (-53.0, -13.5), 0),
+                                  ("eth.dec_vdd2a", (-57.5, -18.0), 90)):
         PLACEMENT[address] = (*at, rotation)
         LABELS[address] = (0.0, -1.3)
 
-    # The core rail's two capacitors, together, because they are one bypass
-    # split across two decades rather than two separate jobs.
-    PLACEMENT["eth.core_bulk"] = (-48.0, -33.0, 90)
-    PLACEMENT["eth.core_hf"] = (-48.0, -36.0, 90)
-    PLACEMENT["eth.bias"] = (-47.5, -38.5, 90)
-    for address in ("eth.core_bulk", "eth.core_hf", "eth.bias"):
-        LABELS[address] = (-1.5, 0.0)
-
-    # The crystal below the package, its two capacitors either side of it.
-    PLACEMENT["eth.xtal.crystal"] = (-44.5, -26.5, 90)
-    PLACEMENT["eth.xtal.c_in"] = (-47.5, -28.0, 90)
-    PLACEMENT["eth.xtal.c_out"] = (-47.5, -25.0, 90)
-    LABELS["eth.xtal.crystal"] = (2.8, 0.0)
-    for address in ("eth.xtal.c_in", "eth.xtal.c_out"):
-        LABELS[address] = (-1.5, 0.0)
-
-    PLACEMENT["eth.r_mdio_pullup"] = (-41.0, -30.0, 0)
-    PLACEMENT["eth.r_reset_pullup"] = (-41.0, -28.0, 0)
-    PLACEMENT["eth.r_refclk_strap"] = (-41.0, -23.5, 0)
-    for address in ("eth.r_mdio_pullup", "eth.r_reset_pullup", "eth.r_refclk_strap"):
+    # The core rail's two capacitors together - one bypass split across two
+    # decades, not two separate jobs - with the bias resistor beside them,
+    # because it is the other thing here that wants a short way back to ground.
+    for address, at in (("eth.core_bulk", (-61.0, -13.0)),
+                        ("eth.core_hf", (-61.0, -10.5)),
+                        ("eth.bias", (-61.0, -8.0))):
+        PLACEMENT[address] = (*at, 0)
         LABELS[address] = (0.0, -1.3)
+
+    PLACEMENT["eth.xtal.crystal"] = (-53.0, -7.5, 90)
+    PLACEMENT["eth.xtal.c_in"] = (-49.5, -9.5, 90)
+    PLACEMENT["eth.xtal.c_out"] = (-49.5, -5.5, 90)
+    LABELS["eth.xtal.crystal"] = (-3.4, 0.0)
+    for address in ("eth.xtal.c_in", "eth.xtal.c_out"):
+        LABELS[address] = (1.5, 0.0)
+
+    for address, y in (("eth.r_mdio_pullup", -22.0),
+                       ("eth.r_reset_pullup", -20.0),
+                       ("eth.r_refclk_strap", -18.0)):
+        PLACEMENT[address] = (-61.5, y, 0)
+        LABELS[address] = (0.0, -1.3)
+
+    for address, x in (("eth.tap_bypass1", -47.0), ("eth.tap_bypass2", -44.5)):
+        PLACEMENT[address] = (x, -31.0, 0)
+        LABELS[address] = (0.0, -1.3)
+
+    _ethernet_pairs()
+
+
+# Where each pair's two halves have to end up, and the fact that forces the
+# only vias on this board that sit inside a controlled-impedance run.
+#
+# The PHY's line pins go TXP, TXN, RXP, RXN from left to right. The jack's go
+# RD-, RD+, TD-, TD+. The pairs are in the same order - transmit outside,
+# receive inside - but each pair is the other way round inside itself, so each
+# one has to cross once between the package and the connector. That is
+# topology, not layout: no arrangement of two tracks on one layer swaps them.
+#
+# The alternative is to wire P to N deliberately and rely on the PHY correcting
+# the polarity. It very likely would; 10BASE-T detects inverted link pulses and
+# most PHYs carry the same correction into 100BASE-TX. But "most PHYs" and "a
+# feature firmware can switch off" are not what a physical layer should rest
+# on, so the crossing is drawn instead - on the back layer, above the point
+# where the pair starts running parallel, where it costs two vias and a
+# millimetre and a half of copper facing the wrong plane.
+
+def _ethernet_pairs() -> None:
+    phy_x, phy_y = PLACEMENT["eth.phy"][0], PLACEMENT["eth.phy"][1]
+    finish = phy_y - 1.95 - 8.0     # where the parallel run ends
+    jack_x, jack_y = JACK
+
+    # Per pair: the P and N pins, the centre line's x, the pads at the far end,
+    # and the crossing - where P steps aside to dive, at what height it runs
+    # under N, and where it comes back up. The two crossings are at different
+    # heights so their four vias are not neighbours.
+    for pair, pins, centre, pads, detour, hop, target in (
+        ("ETH_TD", ("21", "20"), phy_x + 1.2, ("1", "2"), -53.2, -30.2, jack_x),
+        ("ETH_RD", ("23", "22"), phy_x - 1.2, ("3", "6"), -57.5, -32.5, jack_x - 2.54),
+    ):
+        line = [(centre, phy_y - 1.95 - 3.0), (centre, finish)]
+        left, right = layout_lib.diff_pair(line, ETH_WIDTH, ETH_GAP)
+        if left[0][0] > right[0][0]:
+            left, right = right, left
+
+        # Out of the package and into the pair. P takes the left line because
+        # it is the left pin, so neither half crosses the other here.
+        for net, side, pin in ((f"{pair}_P", left, pins[0]),
+                               (f"{pair}_N", right, pins[1])):
+            ROUTES.append((net, ETH_WIDTH, F, [f"eth.phy:{pin}", side[0]]))
+            ROUTES.append((net, ETH_WIDTH, F, list(side)))
+
+        # N goes on to its pad in the connector's near row, moving away from P.
+        ROUTES.append((f"{pair}_N", ETH_WIDTH, F,
+                       [right[-1], f"eth.jack:{pads[1]}"]))
+
+        # P has to reach the far row, on the other side of N. It steps further
+        # away first - a via needs more room than the pair's own spacing gives
+        # it - then goes under on the back layer and comes up beyond N.
+        path(f"{pair}_P", ETH_WIDTH, [
+            (F, [left[-1], (detour, hop)]),
+            (B, [(detour, hop), (target, hop)]),
+            (F, [(target, hop), (target, jack_y), f"eth.jack:{pads[0]}"]),
+        ])
+
 
 
 _supply_vias()
