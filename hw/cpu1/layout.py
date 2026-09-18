@@ -179,7 +179,7 @@ def _analog_supply() -> None:
     inward = pin.at(SUPPLY_RING)
     VIAS.append((f"{MCU}:{VDDA_PIN}", inward, "VDDA", *VIA, STUB))
     corner_via = (-11.5, 12.5)
-    ROUTES.append(("VDDA", SUPPLY, B, [inward, (-12.0, inward[1]), (-12.0, 11.5), (-11.5, 12.0), corner_via]))
+    ROUTES.append(("VDDA", SUPPLY, B, [inward, (-10.5, inward[1]), (-10.5, 12.5), corner_via]))
     VIAS.append((None, corner_via, "VDDA", *VIA))
 
     PLACEMENT["core.vdda.c1u"] = (-13.0, 12.5, 180)
@@ -199,17 +199,23 @@ def _crystals() -> None:
     # tracks from the pins never cross.
     hse_in, hse_out = PINS["23"], PINS["24"]
     PLACEMENT["core.hse.crystal"] = (-16.0, 2.5, 270)
-    PLACEMENT["core.hse.c_in"] = (-19.2, 0.65, 180)
-    PLACEMENT["core.hse.c_out"] = (-19.2, 4.35, 180)
+    # The capacitors sit clear of the crystal's own two tracks rather than in
+    # line with them: the fifteen analog lines cross this strip on the back
+    # layer, and a ground via in line with a track is a via in a lane.
+    PLACEMENT["core.hse.c_in"] = (-19.2, -0.6, 180)
+    PLACEMENT["core.hse.c_out"] = (-19.2, 6.4, 180)
     LABELS["core.hse.crystal"] = (-3.4, 0.0)
     LABELS["core.hse.c_in"] = (0.0, -1.0)
     LABELS["core.hse.c_out"] = (0.0, 1.0)
-    ROUTES.append(("HSE_IN", 0.2, F, [f"{MCU}:23", (-13.8, hse_in.at(0)[1]), (-13.8, 0.65), "core.hse.crystal:1"]))
-    ROUTES.append(("HSE_OUT", 0.2, F, [f"{MCU}:24", (-12.8, hse_out.at(0)[1]), (-12.8, 4.35), "core.hse.crystal:2"]))
+    # Both turn well clear of the package: the strip between the pads and these
+    # two columns is where the analog pins drop to the back layer, and it needs
+    # room for three vias abreast.
+    ROUTES.append(("HSE_IN", 0.2, F, [f"{MCU}:23", (-15.0, hse_in.at(0)[1]), (-15.0, 0.65), "core.hse.crystal:1"]))
+    ROUTES.append(("HSE_OUT", 0.2, F, [f"{MCU}:24", (-13.8, hse_out.at(0)[1]), (-13.8, 4.35), "core.hse.crystal:2"]))
     ROUTES.append(("HSE_IN", 0.2, F, ["core.hse.crystal:1", "core.hse.c_in:1"]))
     ROUTES.append(("HSE_OUT", 0.2, F, ["core.hse.crystal:2", "core.hse.c_out:1"]))
-    VIAS.append(("core.hse.c_in:2", (-20.6, 0.65), "GND", *VIA, SUPPLY))
-    VIAS.append(("core.hse.c_out:2", (-20.6, 4.35), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.hse.c_in:2", (-20.6, -0.6), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.hse.c_out:2", (-20.6, 6.4), "GND", *VIA, SUPPLY))
 
     # 32.768 kHz, left of pins 8 and 9. Its crystal terminals are pads 1 and 4,
     # both on one end; turned to face the MCU.
@@ -225,7 +231,7 @@ def _crystals() -> None:
     ROUTES.append(("LSE_IN", 0.2, F, ["core.lse.crystal:1", "core.lse.c_in:1"]))
     ROUTES.append(("LSE_OUT", 0.2, F, ["core.lse.crystal:4", "core.lse.c_out:1"]))
     VIAS.append(("core.lse.c_in:2", (-16.25, -10.6), "GND", *VIA, SUPPLY))
-    VIAS.append(("core.lse.c_out:2", (-17.3, -1.22), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.lse.c_out:2", (-17.3, -0.6), "GND", *VIA, SUPPLY))
 
 
 def path(net: str, width: float, legs: list) -> None:
@@ -355,8 +361,8 @@ def _button() -> None:
     inward = PINS["7"].at(SUPPLY_RING_2)
     VIAS.append((f"{MCU}:7", inward, "BUTTON", *VIA, STUB))
     ROUTES.append(("BUTTON", SIGNAL, B, [
-        inward, (0.5, -7.0), (0.5, -11.5), (-12.6, -11.5), (-12.6, 12.0),
-        (-14.0, 16.0), "core.button.switch:2",
+        inward, (0.5, -7.0), (0.5, -11.5), (-11.2, -11.5), (-11.2, 10.0),
+        (-15.0, 16.0), "core.button.switch:2",
     ]))
     ROUTES.append(("BUTTON", SIGNAL, F, ["core.button.switch:2", "core.button.pulldown:1"]))
     VIAS.append(("core.button.pulldown:2", (-25.0, 20.5), "GND", *VIA, SUPPLY))
@@ -1416,6 +1422,82 @@ def _trip_bus() -> None:
     ])
 
 
+# --- the input networks to the package -----------------------------------------
+#
+# Fifteen filtered analog lines from the cells beside the connector to the pins
+# that sample them, and the order at the two ends has nothing in common: the
+# cells are in connector order and the pins are in whatever order the silicon
+# put them. A fan between two arbitrary orders crosses itself, and no clever
+# lane assignment fixes that.
+#
+# So it is routed the way an arbitrary permutation has to be: every east-west
+# run on the back layer, every north-south run on the front, and a via at each
+# corner. Nothing crosses anything, by construction rather than by argument.
+# The strip between the crystals and the input networks is empty on both
+# layers, which is where the north-south runs go.
+#
+# Four vias a net is a lot of holes. These are the filtered side of a 1.5 MHz
+# RC into an ADC pin, so the inductance does not matter; the alternative is
+# thirty crossings, and each of those costs two vias anyway.
+
+# Where each analog pin leaves the package, as (net, via). The vias step away
+# from the package as well as along it, because three pins at 0.5 mm pitch
+# cannot each have a via: the diagonal that gets there is what buys the room.
+# Where each analog pin leaves the package, and how far from its cell it comes
+# back up. The vias step away from the package as well as along it, because
+# three pins at 0.5 mm pitch cannot each have a via below them: the diagonal
+# that gets there is what buys the room.
+#
+# A cell is approached from half a row away - the gap the staggered columns
+# leave - except where half a row is already a sense line's lane, which is
+# what the third figure says when it is not -1.27.
+ADC_ESCAPES = (
+    ("SLOW2", ((-13.0, -2.75),), -1.27),
+    ("BOARD_ID2", ((-14.1, -2.05),), 0.87),
+    ("SLOW1", ((-14.9, -1.45),), -1.27),
+    ("AUX_FAST", ((-11.9, 0.25),), -0.75),
+    ("VC", ((-13.0, 0.8),), -1.27),
+    ("BOARD_ID1", ((-14.1, 1.75),), -1.27),
+    ("SLOW3", ((-13.0, 3.75),), -1.27),
+    ("IC", ((-13.0, 4.75),), -1.27),
+    ("VB", ((-11.9, 5.25),), -1.27),
+)
+
+# The strip the north-south runs use, and how far apart they sit in it. It is
+# bounded by the 32 kHz crystal on one side and the input networks on the other.
+ADC_LANE, ADC_LANE_PITCH = -23.0, -0.55
+
+
+def _adc_cell_of(net: str) -> str:
+    """The input network whose filtered side is this net."""
+    return next(
+        address[: -len(".shunt")]
+        for address, _ in DESIGN["nets"][net]
+        if address.endswith(".shunt")
+    )
+
+
+def _adc_to_package() -> None:
+    for index, (net, leaving, offset) in enumerate(ADC_ESCAPES):
+        escape = leaving[-1]
+        width = _width_for(net, SIGNAL)
+        cell = _adc_cell_of(net)
+        pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+        shunt = _point(f"{cell}.shunt:1")
+        approach = (shunt[0], round(shunt[1] + offset, 4))
+        lane = round(ADC_LANE + ADC_LANE_PITCH * index, 4)
+
+        # The cell's own two pads, which are a millimetre apart.
+        ROUTES.append((net, width, F, [f"{cell}.series:2", f"{cell}.shunt:1"]))
+        path(net, width, [
+            (F, [f"{MCU}:{pin}", *leaving]),
+            (B, [escape, (lane, escape[1])]),
+            (F, [(lane, escape[1]), (lane, approach[1])]),
+            (B, [(lane, approach[1]), approach]),
+            (F, [approach, f"{cell}.shunt:1"]),
+        ])
+
+
 # --- the field buses ---------------------------------------------------------
 #
 # CAN and RS-485 side by side above the package, each with its transceiver, its
@@ -1934,6 +2016,11 @@ STITCH_PLACES = (
     (0.0, 33.5),                      # power good, under the switch node
     (12.0, -26.0),                    # the CAN termination's midpoint
     (-60.0, -6.0), (-60.0, -30.0),    # the Ethernet crystal and its pairs
+    # The strip the analog fan crosses layers in. Thirty-six layer changes
+    # happened here in one commit and there was not a tie within ten
+    # millimetres of any of them; the check said so before the board did.
+    (-22.0, 2.0), (-22.0, -10.0), (-22.0, -18.0),
+    (-33.0, 1.0), (-33.0, -7.5), (-33.0, -15.5),
 )
 
 
@@ -2125,6 +2212,7 @@ _trip()
 _adc_inputs()
 _sense_routes()
 _trip_bus()
+_adc_to_package()
 _field_buses()
 _field_bus_routes()
 _usb()

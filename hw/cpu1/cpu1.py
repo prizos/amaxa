@@ -1260,15 +1260,19 @@ def plane_stitching(v3v3, gnd) -> None:
     to be near, the return has a short way over; where it does not, the current
     goes round whatever loop it can find, and the loop is what radiates.
 
-    Twelve of them, at six places: six in a row beyond the digital connector,
-    where fifteen buffered outputs dip under its first row and there is nowhere
-    nearer to put them, and one each at the USB connector's fan-out, the
-    debug escapes, the power-good line, the CAN termination and two spots on
-    the Ethernet block. These are put there for
-    them. They are the one set of parts on this board whose position is their
-    whole purpose; `test_routing.py` is what says where they have to be.
+    Eighteen of them. Six in a row beyond the digital connector, where fifteen
+    buffered outputs dip under its first row and there is nowhere nearer to put
+    them; one each at the USB connector's fan-out, the debug escapes, the
+    power-good line and the CAN termination; two on the Ethernet block; and six
+    across the strip the analog fan changes layers in, which is otherwise the
+    emptiest part of this board and was therefore the furthest from a tie.
+
+    They are the one set of parts on this board whose position is their whole
+    purpose, and not one of them was put where it is by judgement:
+    `test_routing.py` failed, named the layer changes it had stranded, and
+    these went where that list said.
     """
-    for index in range(12):
+    for index in range(18):
         cap = part(parts.CAP_100N_0402, f"stitch.{index + 1}", f"C{68 + index}")
         v3v3 += cap[1]
         gnd += cap[2]
