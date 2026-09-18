@@ -333,7 +333,9 @@ def _debug() -> None:
     VIAS.append(("core.nrst.cap:2", (26.2, -2.0), "GND", *VIA, SUPPLY))
     cap_via = (23.2, -2.0)
     path("NRST", SIGNAL, [
-        (B, [inward, (-6.5, 0.5), (23.2, 0.5), cap_via]),
+        # North of the buffer fan, not through it: fourteen PWM lines turn
+        # south in the strip this used to cross.
+        (B, [inward, (-6.5, 0.5), (-6.5, -5.0), (23.2, -5.0), cap_via]),
         (F, [cap_via, "core.nrst.cap:1"]),
     ])
     ROUTES.append(("NRST", SIGNAL, B, [cap_via, (23.2, -20.0), (DEBUG_RIGHT, -20.0)]))
@@ -410,18 +412,19 @@ def _boot_and_console() -> None:
     VIAS.append(("core.boot0.pulldown:2", boot.at(17.2), "GND", *VIA, SUPPLY))
 
     # The console's pads follow its pins' order, so the tracks never cross.
-    PLACEMENT["tp_console_tx"] = (22.0, 6.75)
-    PLACEMENT["tp_console_rx"] = (22.0, 4.0)
-    PLACEMENT["tp_gnd"] = (22.0, 9.5)
-    PLACEMENT["tp_3v3"] = (22.0, 12.25)
+    PLACEMENT["tp_console_tx"] = (22.0, 8.2)
+    PLACEMENT["tp_console_rx"] = (22.0, 5.45)
+    PLACEMENT["tp_gnd"] = (22.0, 10.95)
+    PLACEMENT["tp_3v3"] = (22.0, 13.7)
     for address in ("tp_console_tx", "tp_console_rx", "tp_gnd", "tp_3v3"):
         LABELS[address] = (2.6, 0.0)
-    ROUTES.append(("CONSOLE_TX", SIGNAL, F, [f"{MCU}:77", "tp_console_tx:1"]))
+    ROUTES.append(("CONSOLE_TX", SIGNAL, F, [f"{MCU}:77", (20.5, 6.75), "tp_console_tx:1"]))
     ROUTES.append(("CONSOLE_RX", SIGNAL, F, [
-        f"{MCU}:78", (19.0, 6.25), (19.0, 4.0), "tp_console_rx:1",
+        # The dip happens east of the buffer fan, not through it.
+        f"{MCU}:78", (21.5, 6.25), (21.5, 5.45), "tp_console_rx:1",
     ]))
-    VIAS.append(("tp_gnd:1", (23.6, 9.5), "GND", *VIA, SUPPLY))
-    VIAS.append(("tp_3v3:1", (23.6, 12.25), "3V3", *VIA, SUPPLY))
+    VIAS.append(("tp_gnd:1", (23.6, 10.95), "GND", *VIA, SUPPLY))
+    VIAS.append(("tp_3v3:1", (23.6, 13.7), "3V3", *VIA, SUPPLY))
 
 
 
@@ -828,8 +831,10 @@ def _safety() -> None:
     PLACEMENT["safety.d_faults"] = (22.0, -28.0, 0)
     PLACEMENT["safety.d_reset"] = (20.5, -32.0, 0)
     PLACEMENT["safety.r_trip_pullup"] = (22.0, -24.0, 180)
-    PLACEMENT["safety.r_clear_pullup"] = (23.0, 17.0, 0)
-    PLACEMENT["safety.r_enable_pullup"] = (23.0, 15.0, 0)
+    # South of the buffer rather than west of it: west of it is where the
+    # fourteen PWM lines arrive, seven of them abreast.
+    PLACEMENT["safety.r_clear_pullup"] = (25.0, 23.5, 0)
+    PLACEMENT["safety.r_enable_pullup"] = (22.0, 23.5, 0)
     for address in ("safety.d_faults", "safety.d_reset", "safety.r_trip_pullup",
                     "safety.r_clear_pullup", "safety.r_enable_pullup"):
         LABELS[address] = (2.6, 0.0)
@@ -1541,6 +1546,68 @@ def _adc_to_package() -> None:
             (B, [(lane, approach[1]), approach]),
             (F, [approach, f"{cell}.shunt:1"]),
         ])
+
+
+# --- the PWM lines to the buffers -----------------------------------------------
+#
+# TIM1's seven leave the package's south edge in exactly the order the buffer
+# wants them, because the pin map put them on one port in one order and the
+# buffer's channels are in that order too. So each one is a drop to its own
+# channel's height and a run east, and nothing crosses anything.
+#
+# TIM8's are not so lucky: the three CHN pins that had to move off TIM1's port
+# are on a different edge, and one of them is on the far side of the south
+# edge entirely. Each of those gets a turning column, ordered so that a line
+# turning further north turns further east.
+# TIM8's seven are not so lucky. The three CHN pins that had to move off TIM1's
+# port are on the east edge, behind the two indicator LEDs, and one more is on
+# the far west of the south edge. They go behind everything on the back layer:
+# escape via, a lane east, a turn south, and back up beside the buffer. The
+# turns are ordered so a line ending further south turns further west, which is
+# what keeps the six of them from crossing.
+#
+# Each entry is the net, the via it drops through, the column it turns in, and
+# the via it comes back up on.
+PWM_BEHIND = (
+    ("PWM2_C_LOW", (12.3, 7.25), 16.0, (20.0, 3.175)),
+    ("PWM2_B_LOW", (13.2, 7.75), 17.4, (21.0, 3.825)),
+    ("PWM2_A_HIGH", (11.9, -2.75), 19.8, (23.0, 1.875)),
+    ("PWM2_B_HIGH", (13.0, -3.25), 20.6, (24.0, 1.225)),
+    ("PWM2_C_HIGH", (14.1, -3.75), 21.4, (23.0, 0.575)),
+    ("PWM2_PFC", (15.2, -4.25), 22.2, (24.0, -0.075)),
+)
+
+PWM_STRAY, PWM_STRAY_TURN, PWM_STRAY_EXIT = 14.2, 21.6, 24.0
+
+
+def _pwm_inputs() -> None:
+    behind = {entry[0]: entry[1:] for entry in PWM_BEHIND}
+    for net in sorted(n for n in DESIGN["nets"]
+                      if n.startswith(("PWM1_", "PWM2_")) and "_" in n[5:]):
+        nodes = {address: pad for address, pad in DESIGN["nets"][net]}
+        buffered = next((a for a in nodes if a.startswith("safety.buffer")), None)
+        if buffered is None or MCU not in nodes:
+            continue
+        source, target = f"{MCU}:{nodes[MCU]}", f"{buffered}:{nodes[buffered]}"
+        width = _width_for(net, SIGNAL)
+        here, there = _point(source), _point(target)
+        if net in behind:
+            drop, turn, rise = behind[net]
+            path(net, width, [
+                (F, [source, drop]),
+                (B, [drop, (turn, drop[1]), (turn, rise[1]), rise]),
+                (F, [rise, target]),
+            ])
+        elif here[0] < 0.0:
+            rise = (PWM_STRAY_EXIT, there[1])
+            path(net, width, [
+                (F, [source, (here[0], PWM_STRAY)]),
+                (B, [(here[0], PWM_STRAY), (PWM_STRAY_TURN, PWM_STRAY),
+                     (PWM_STRAY_TURN, there[1]), rise]),
+                (F, [rise, target]),
+            ])
+        else:
+            ROUTES.append((net, width, F, [source, (here[0], there[1]), target]))
 
 
 # --- the field buses ---------------------------------------------------------
@@ -2258,6 +2325,7 @@ _adc_inputs()
 _sense_routes()
 _trip_bus()
 _adc_to_package()
+_pwm_inputs()
 _field_buses()
 _field_bus_routes()
 _usb()
