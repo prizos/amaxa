@@ -53,6 +53,10 @@ BLOCKS: list[tuple[str, tuple[str, ...], str]] = [
      "TCAN1044V with split termination on a solder jumper."),
     ("RS-485", ("rs485",),
      "THVD1450, fail-safe biased on-chip, 120 ohm on a jumper."),
+    ("USB-C", ("usb",),
+     "A device port that senses VBUS and takes no power from it. The board's "
+     "one differential pair, drawn to 90 ohm from the stackup rather than to "
+     "a width somebody remembered."),
     ("Headers", ("header",),
      "Digital 2x20 and analog 2x15 to the power board."),
     ("Test points", ("tp_",),

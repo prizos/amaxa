@@ -37,6 +37,11 @@ MCU_H743 = PartSpec(
         # Table 84: what the converter presents at an analog pin.
         "adc_sample_capacitance": exact(4e-12),
         "adc_sample_resistance": exact(50.0),
+        # What a 5 V-tolerant pin may see, as the datasheet states it: a
+        # headroom above the *lowest* of the part's supplies, not a fixed
+        # number. Recorded as the overhead so a check reads the board's own
+        # rail rather than assuming 3.3 V. Table 12, note 3.
+        "ft_input_overhead": exact(4.0),
     },
 )
 
@@ -624,6 +629,40 @@ RES_120R_0402 = PartSpec(
 CAP_4N7_0402 = PartSpec(
     **_C0402, manufacturer="FH", mpn="0402B472K500NT", lcsc="C1538", value="4.7nF",
     params={"capacitance": pm(4.7e-9, 0.10), "max_voltage": exact(50.0)},
+)
+
+
+# --- USB -----------------------------------------------------------------
+# A device port, not a power input: VBUS is sensed and goes nowhere else, and
+# both CC pins carry the pull-down that tells a source this board is a sink
+# drawing default current. Nothing here can back-feed the board's rails.
+USB_C_RECEPTACLE = PartSpec(
+    symbol="Connector:USB_C_Receptacle_USB2.0_16P",
+    footprint="USBC16:USB_C_Receptacle_HRO_TYPE-C-31-M-12", prefix="J",
+    manufacturer="Korean Hroparts Elec", mpn="TYPE-C-31-M-12", lcsc="C165948",
+    value="USB-C",
+    params={"current_rating": exact(5.0), "voltage_rating": exact(20.0)},
+)
+
+# ST's own part, not one of the dozen clones: an ESD array is bought for the
+# figures in its datasheet, and this is the one whose datasheet could be read.
+ESD_USB = PartSpec(
+    symbol="Power_Protection:USBLC6-2SC6", footprint="SOT23_6:SOT-23-6", prefix="D",
+    manufacturer="STMicroelectronics", mpn="USBLC6-2SC6", lcsc="C7519",
+    value="USBLC6-2",
+    params={
+        "standoff_voltage": exact(5.25),
+        "breakdown_voltage_min": exact(6.0),
+        "clamping_voltage_max": exact(17.0),      # 5 A, 8/20 us, any I/O to GND
+        "line_capacitance_max": exact(3.5e-12),   # I/O to GND
+        "pair_capacitance_max": exact(1.7e-12),   # I/O to I/O
+        "esd_contact_discharge": exact(15e3),     # IEC 61000-4-2
+    },
+)
+
+RES_5K1_0402 = PartSpec(
+    **_R0402, mpn="0402WGF5101TCE", lcsc="C25905", value="5K1",
+    params={"resistance": pm(5.1e3, 0.01), "max_power": exact(0.0625)},
 )
 
 

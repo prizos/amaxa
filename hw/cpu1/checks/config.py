@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 121
+EXPECTED_CHECKS = 133
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -66,6 +66,19 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "a property of a board that does not exist yet. The same gap as VDDA's "
         "bead, and the same answer: measure it at bring-up"
     ),
+    ("usb.receptacle", "current_rating"): (
+        "5 A per contact against a port that draws none: VBUS reaches a sense "
+        "pin and a clamp and stops there, which is the whole design of it. "
+        "Recorded because this is the connector to reuse if a later board does "
+        "take power from USB, and then this is the number that decides"
+    ),
+    ("usb.protection", "clamping_voltage_max"): (
+        "17 V while passing 5 A of an 8/20 us surge. There is nothing here to "
+        "compare it against: the MCU pin's 7.1 V limit is a DC rating, and "
+        "putting a microsecond clamp beside it would be comparing two "
+        "different questions. What the pin's own structures then absorb is not "
+        "a figure either datasheet gives"
+    ),
     ("buck5.c_couple", "capacitance"): (
         "the coupling capacitor into the feedback node. Its value comes from "
         "the LM5164 datasheet's Equation 26, which is a figure with no text "
@@ -106,4 +119,9 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
         "both fault lines together"
     ),
     "SOD123": "pad 1 is the cathode, from the package drawing not the maker's",
+    "USBC16": (
+        "whether the receptacle's shell overhangs the board edge, sits flush, "
+        "or wants a notch in the outline. That is a question about an enclosure "
+        "that does not exist yet, and no drawing here can settle it"
+    ),
 }

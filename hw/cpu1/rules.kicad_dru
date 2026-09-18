@@ -89,3 +89,12 @@
 	(condition "A.NetName == 'CAN_H' || A.NetName == 'CAN_L' || A.NetName == 'RS485_A' || A.NetName == 'RS485_B'")
 	(constraint track_width (min 0.2mm))
 	(severity error))
+
+# The USB pair. Wider than a signal that stays on the board, because its width
+# is what makes it 90 ohm over the prepreg beneath it rather than a number
+# chosen for etch tolerance. DRC enforces the floor; `test_usb.py` is what
+# decides the figure, from the stackup, and checks this rule against it.
+(rule "usb pair"
+	(condition "A.NetName == 'USB_DP' || A.NetName == 'USB_DM'")
+	(constraint track_width (min 0.25mm))
+	(severity error))

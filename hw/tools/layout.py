@@ -26,6 +26,7 @@ quietly drop.
 """
 
 import argparse
+import json
 import math
 import re
 import sys
@@ -208,9 +209,42 @@ def place(text: str, footprints: dict, placement: dict) -> str:
         block = text[start:end]
         new_at = f"(at {x:g} {y:g} {rotation:g})" if rotation else f"(at {x:g} {y:g})"
         block = re.sub(r"\(at [-\d.]+ [-\d.]+(?: [-\d.]+)?\)", new_at, block, count=1)
+        block = _turn_pads(block, rotation)
         block = _move_zones(block, x, y, rotation)
         text = text[:start] + block + text[end:]
     return text
+
+
+def _turn_pads(block: str, rotation: float) -> str:
+    """
+    Turn each pad with its footprint.
+
+    KiCad stores a pad's angle *absolutely*, not relative to the footprint it
+    is in: rotating a footprint in pcbnew rewrites every pad's `(at x y angle)`
+    to carry the new orientation. Setting only the footprint's own angle
+    therefore rotates where the pads are and not which way they face, and a
+    rectangular pad ends up lying across its neighbours.
+
+    Nothing notices until a rotated part has pads longer than their pitch. The
+    USB ESD array was the first: a SOT-23-6 turned a quarter turn, whose
+    1.325 mm pads sat on a 0.95 mm pitch, so DRC found four pairs of shorted
+    pads in a footprint that is fine at every other angle. Every 0402 on this
+    board had been turned the same way and never overlapped anything.
+    """
+    if not rotation:
+        return block
+
+    def turn(match: re.Match) -> str:
+        x, y, angle = match.group(1), match.group(2), match.group(3)
+        turned = (float(angle or 0) + rotation) % 360
+        return f"(at {x} {y} {turned:g})" if turned else f"(at {x} {y})"
+
+    chunks = block.split("\n\t\t(pad ")
+    return chunks[0] + "".join(
+        "\n\t\t(pad " + re.sub(r"\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)",
+                               turn, chunk, count=1)
+        for chunk in chunks[1:]
+    )
 
 
 def _move_zones(block: str, x: float, y: float, rotation: float) -> str:
@@ -269,8 +303,16 @@ def resolve(point, footprints, placement) -> tuple[float, float]:
     )
 
 
-def route(board: Board, footprints: dict, placement: dict, routes: list) -> list[str]:
-    """Turn each route into track segments."""
+def route(board: Board, footprints: dict, placement: dict, routes: list,
+          lengths: dict | None = None) -> list[str]:
+    """
+    Turn each route into track segments, and total the copper laid per net.
+
+    The totals are what a skew check reads. Measured here rather than recovered
+    from the board afterwards because this is where a route's points are known
+    to belong to that route; two nets crossing on the same layer are
+    indistinguishable in the finished file.
+    """
     objects = []
     for net_name, width, layer, points in routes:
         if net_name not in board.nets:
@@ -281,6 +323,10 @@ def route(board: Board, footprints: dict, placement: dict, routes: list) -> list
         for (x1, y1), (x2, y2) in zip(resolved, resolved[1:]):
             if (x1, y1) == (x2, y2):
                 continue
+            if lengths is not None:
+                lengths[net_name] = round(
+                    lengths.get(net_name, 0.0) + math.dist((x1, y1), (x2, y2)), 4
+                )
             objects.append(
                 f'\t(segment\n'
                 f'\t\t(start {x1:g} {y1:g})\n'
@@ -464,8 +510,9 @@ def main() -> int:
     )
     footprints = board.footprints()
 
+    lengths: dict[str, float] = {}
     objects = board_outline(description.BOARD)
-    objects += route(board, footprints, description.PLACEMENT, description.ROUTES)
+    objects += route(board, footprints, description.PLACEMENT, description.ROUTES, lengths)
     objects += stitch(board, footprints, description.PLACEMENT, description.VIAS)
     planes = getattr(description, "PLANES", None) or [description.PLANE]
     objects += [ground_plane(board, plane) for plane in planes]
@@ -475,6 +522,13 @@ def main() -> int:
         board.text[:closing] + "\n".join(objects) + "\n" + board.text[closing:]
     )
     pcb_path.write_text(board.text)
+
+    # What each net's copper measures, for the checks that care about matching.
+    # Written beside design.json rather than into it: design.json is what the
+    # circuit is, and this is what the layout made of it.
+    report = board_dir / "build" / "lengths.json"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(json.dumps(dict(sorted(lengths.items())), indent=1) + "\n")
 
     tracks = sum(1 for o in objects if o.lstrip().startswith("(segment"))
     vias = sum(1 for o in objects if o.lstrip().startswith("(via"))

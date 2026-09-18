@@ -31,6 +31,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "tools"))
 
+import layout_lib  # noqa: E402
 from layout_lib import qfp_pins  # noqa: E402
 from mcu_pins import load_source  # noqa: E402
 
@@ -754,7 +755,7 @@ def _safety() -> None:
     # The trip chain: both diodes where the two fault lanes will run, and the
     # pull-up that holds the bus high beside them.
     PLACEMENT["safety.d_faults"] = (22.0, -28.0, 0)
-    PLACEMENT["safety.d_reset"] = (22.0, -32.0, 0)
+    PLACEMENT["safety.d_reset"] = (20.5, -32.0, 0)
     PLACEMENT["safety.r_trip_pullup"] = (22.0, -24.0, 180)
     PLACEMENT["safety.r_clear_pullup"] = (23.0, 17.0, 0)
     PLACEMENT["safety.r_enable_pullup"] = (23.0, 15.0, 0)
@@ -810,7 +811,7 @@ def _static_pulls() -> None:
     named = {"FAULT1_N": "safety.r_fault1_pullup", "FAULT2_N": "safety.r_fault2_pullup"}
     for name, direction in pulls.items():
         address = named.get(name, f"safety.{'pullup' if direction == 'up' else 'pulldown'}.{name.lower()}")
-        PLACEMENT[address] = (32.3, _lane_of(name), 0 if direction == "up" else 180)
+        PLACEMENT[address] = (34.5, _lane_of(name), 0 if direction == "up" else 180)
         LABELS[address] = (0.0, -1.3)
 
 
@@ -932,6 +933,66 @@ def _field_buses() -> None:
         LABELS[address] = (0.0, -1.6)
 
 
+# --- USB ---------------------------------------------------------------------
+#
+# The one differential pair on this board. Its width and gap are not written
+# down: `pair_geometry` solves the stackup in BOARD for the width that makes
+# 90 ohm at the gap chosen, so a change to the fab's build changes the trace
+# rather than leaving a number behind that used to be right.
+
+USB_GAP = 0.2
+USB_STACK = layout_lib.Microstrip(
+    height=BOARD["stack"][0]["thickness"],
+    epsilon_r=BOARD["stack"][0]["epsilon_r"],
+)
+USB_WIDTH = layout_lib.pair_geometry(90.0, USB_STACK, gap=USB_GAP)
+
+
+def _usb() -> None:
+    # The receptacle faces out of the top edge, in the corridor between the
+    # safety chain's reset diode and its column of strap resistors, with the
+    # array immediately behind it: a protection device further from the
+    # connector than the thing it protects is protecting the wrong end.
+    PLACEMENT["usb.receptacle"] = (28.0, -37.0, 180)
+    PLACEMENT["usb.protection"] = (28.0, -26.0, 270)
+    PLACEMENT["usb.cc1_pulldown"] = (24.0, -30.5, 0)
+    PLACEMENT["usb.cc2_pulldown"] = (32.0, -30.5, 0)
+    LABELS["usb.receptacle"] = (0.0, 4.2)
+    LABELS["usb.protection"] = (-2.4, 0.0)
+    for address in ("usb.cc1_pulldown", "usb.cc2_pulldown"):
+        LABELS[address] = (0.0, -1.3)
+
+    # The pair runs south from the array, down the empty corridor east of the
+    # package. Written as one line down the middle of it; the two tracks are
+    # that line offset, so they are the same length by construction and the
+    # only difference between them is what the corners add.
+    #
+    # **It stops short of the package.** Pads 103 and 104 sit in the middle of
+    # the debug escapes - SWDIO steps onto pin 104's line to get past VCAP2's
+    # capacitor - and untangling that is the same job as the rest of the
+    # escapes, which M8 does with the whole board in view. What is drawn here
+    # is the length that decides the pair's impedance; what is missing is the
+    # two millimetres at the end of it.
+    centre = [(28.0, -22.0), (28.0, -13.0), (25.0, -10.0)]
+    west, east = layout_lib.diff_pair(centre, USB_WIDTH, USB_GAP)
+    if west[0][0] > east[0][0]:
+        west, east = east, west
+
+    # D+ leaves the array on its western pad and D- on its eastern one, so each
+    # takes the line on its own side and the pair never crosses itself.
+    #
+    # The two halves step wide before they come together. VBUS sits on the pad
+    # between them on this part, so a pair that left at its final spacing would
+    # run one track along each side of a pad it has nothing to do with. The
+    # fan-out is deliberately not at the pair's spacing, and the impedance it
+    # is drawn to starts where the fan-out ends.
+    for net, line, pad, clear in (("USB_DP", west, "4", 26.8),
+                                  ("USB_DM", east, "6", 29.2)):
+        ROUTES.append((net, USB_WIDTH, F, [
+            f"usb.protection:{pad}", (clear, -23.4), line[0]]))
+        ROUTES.append((net, USB_WIDTH, F, list(line)))
+
+
 _supply_vias()
 _decoupling()
 _analog_supply()
@@ -942,3 +1003,4 @@ _safety()
 _trip()
 _adc_inputs()
 _field_buses()
+_usb()

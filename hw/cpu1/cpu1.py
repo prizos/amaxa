@@ -143,6 +143,35 @@ INTENT: dict[str, tuple[float, float]] = {
     # What USART2 will clock the RS-485 pair at. As with the CAN rate this is a
     # firmware choice written down so the part can be held to it.
     "rs485.baud": (9600.0, 500e3),
+    # What a USB 2.0 cable's pair is, and what the spec allows a board to
+    # present to it: 90 ohm differential, plus or minus 15 %.
+    "usb.differential_impedance": (76.5, 103.5),
+    # The pull-down a sink puts on both CC pins so a source knows something is
+    # there and that it wants default current. USB Type-C calls it Rd, 5.1 kohm
+    # nominal; the band is the tolerance the specification allows.
+    "usb.cc_pulldown": (4.08e3, 6.12e3),
+    # The bus voltage a source may put on VBUS. This board senses it and does
+    # nothing else with it, so this is the figure everything on that net has to
+    # survive rather than a rail the board runs from.
+    "usb.vbus_voltage": (4.4, 5.25),
+    # What the transceiver drives the pair through, and how fast a full-speed
+    # edge may be. Both are the USB 2.0 specification's, and together they say
+    # how much capacitance the pair can afford to carry.
+    "usb.driver_impedance": (28.0, 44.0),
+    "usb.rise_time": (4e-9, 20e-9),
+    # How much of that edge the protection on the pair may spend. A tenth is
+    # the point at which the array stops being free and starts being a filter.
+    "usb.protection_edge_share": (0.0, 0.10),
+    # How far apart the pair's two halves may end up, as a share of the fastest
+    # edge they carry. This is not a timing budget - a full-speed bit is eighty
+    # nanoseconds and nothing here threatens it - it is a radiation one: a pair
+    # whose halves arrive at different times is a pair that has turned some of
+    # its signal into common mode, and common mode on a cable is an antenna.
+    "usb.skew_share": (0.0, 0.01),
+    # What a strike on the cable has to find survivable. IEC 61000-4-2 level 4
+    # is 8 kV by contact, which is the level anything with a connector on the
+    # outside of a machine is expected to meet.
+    "usb.esd_level": (8e3, 15e3),
 }
 
 # Which later block connects the other end of each net. Matched in order; a net
@@ -154,8 +183,8 @@ _MILESTONES = [
      "M6: the ADC input networks and comparator taps"),
     (r"^\w+_SENSE$",
      "M6: the anti-alias filter between this and the ADC pin it belongs to"),
-    (r"^(USB_\w+|ETH_\w+)$",
-     "M7b: USB and Ethernet"),
+    (r"^ETH_\w+$",
+     "M7c: the Ethernet PHY, its crystal and the jack"),
 ]
 
 
@@ -164,7 +193,7 @@ _MILESTONES = [
 _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
     r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d"
-    r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+"
+    r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+|USB_\w+"
     r"|IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$"
 )
 
@@ -227,6 +256,7 @@ def build() -> Net:
     trip_comparators(v3v3, gnd, nets)
     adc_inputs(v3v3, gnd, nets)
     field_buses(v3v3, gnd, nets)
+    usb(v3v3, gnd, nets)
 
     # Unused I/O is left unconnected on purpose, and said so. Firmware sets these
     # to analog mode, the lowest-leakage state.
@@ -986,6 +1016,67 @@ def field_buses(v3v3, gnd, nets) -> None:
     bus_a += rs485_jumper[1]
     Net("RS485_TERM").connect(rs485_jumper[2], termination[1])
     bus_b += termination[2]
+
+
+def usb(v3v3, gnd, nets) -> None:
+    """
+    USB-C, as a device port and nothing else.
+
+    **VBUS goes to one pin and stops.** It is not wired to a rail, through a
+    diode, or to anything that could carry current into the board: this board is
+    powered from its terminal or from the daughter-board header, and a USB host
+    plugged in beside a 24 V supply must not find itself sourcing any of it.
+    What VBUS does reach is PA9, which ST's pin table calls `FT_u` - five-volt
+    tolerant, with the USB option - and which is the pin the OTG core's own
+    session comparators sit behind. The plan said to divide it down first; a
+    divider would keep the pin safe and stop those comparators working, so the
+    board would need firmware to do something non-standard to notice a host.
+
+    Both CC pins get their own pull-down. One resistor shared between them
+    would work in exactly one cable orientation, which is the bug a Type-C
+    connector exists to prevent.
+
+    The ESD array sits between the connector and everything else, so a strike
+    arriving on the cable meets it before it meets a pin.
+    """
+    receptacle = part(parts.USB_C_RECEPTACLE, "usb.receptacle", "J7")
+    protection = part(parts.ESD_USB, "usb.protection", "D12")
+
+    # Shell and signal ground are the same here: one connector, one board, and
+    # nothing for a split to isolate from.
+    gnd += receptacle["GND"], receptacle["SHIELD"], protection["GND"]
+
+    # The cable side of the pair, between the connector and the array. Both
+    # rows of the receptacle carry the same signal, which is what makes the
+    # connector reversible.
+    # D+ takes the array's second channel and D- its first. The two channels
+    # are identical, and which way round they go decides whether the pair stays
+    # on the same sides of itself from the package to the connector or crosses
+    # inside the array - which it cannot do without a via in the middle of a
+    # controlled-impedance run.
+    cable_dp = Net("USB_DP_CABLE")
+    cable_dm = Net("USB_DM_CABLE")
+    cable_dp.connect(receptacle["D+"], protection[3])
+    cable_dm.connect(receptacle["D-"], protection[1])
+
+    # The board side, on to the MCU.
+    nets["USB_DP"] += protection[4]
+    nets["USB_DM"] += protection[6]
+
+    # VBUS: the connector, the array's clamp, and the sense pin. Nothing else.
+    nets["USB_VBUS"] += receptacle["VBUS"], protection["VBUS"]
+
+    for address, pin, ref in (("usb.cc1_pulldown", "CC1", "R79"),
+                              ("usb.cc2_pulldown", "CC2", "R80")):
+        resistor = part(parts.RES_5K1_0402, address, ref)
+        Net(f"USB_{pin}").connect(receptacle[pin], resistor[1])
+        gnd += resistor[2]
+
+    # SBU1 and SBU2 are for alternate modes this board has none of. Left
+    # unconnected deliberately, and said so, rather than left to the check that
+    # would otherwise ask why two pads have no net.
+    receptacle["SBU1"] += NC  # noqa: F821 - SKiDL puts NC in builtins
+    receptacle["SBU2"] += NC  # noqa: F821
 
 
 def pending(names: list[str]) -> dict[str, str]:

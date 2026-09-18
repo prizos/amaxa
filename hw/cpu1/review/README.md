@@ -9,10 +9,10 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 100 × 80 mm |
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
-| **Footprints** | 208 |
-| **Nets** | 179, of which 22 pending |
-| **Routing** | 251 track segments, 114 vias, 3 zones |
-| **DRC** | 0 violations, 313 connections not yet routed (`ROUTING := incomplete`) |
+| **Footprints** | 212 |
+| **Nets** | 183, of which 19 pending |
+| **Routing** | 259 track segments, 114 vias, 3 zones |
+| **DRC** | 0 violations, 329 connections not yet routed (`ROUTING := incomplete`) |
 
 > [!IMPORTANT]
 > **Routing is deliberately incomplete.** Read the plots with that in
@@ -85,11 +85,12 @@ schematic after the fact.
 | ADC networks | 31 | One RC per channel, sized from both ends: low enough to stop the switching node aliasing into the measurement, high enough to recharge inside the sampling window. |
 | CAN FD | 8 | TCAN1044V with split termination on a solder jumper. |
 | RS-485 | 5 | THVD1450, fail-safe biased on-chip, 120 ohm on a jumper. |
+| USB-C | 4 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 208, by block</summary>
+<summary><strong>Every footprint</strong> — all 212, by block</summary>
 
 #### MCU core
 
@@ -341,6 +342,15 @@ schematic after the fact.
 | `JP2` | `rs485.termination_jumper` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
 | `U17` | `rs485.transceiver` | THVD1450 | THVD1450DR | C2671361 | `SOIC-8_3.9x4.9mm_P1.27mm` |
 
+#### USB-C
+
+| Ref | Address | Value | Part number | LCSC | Footprint |
+|---|---|---|---|---|---|
+| `R79` | `usb.cc1_pulldown` | 5K1 | 0402WGF5101TCE | C25905 | `R_0402_1005Metric` |
+| `R80` | `usb.cc2_pulldown` | 5K1 | 0402WGF5101TCE | C25905 | `R_0402_1005Metric` |
+| `D12` | `usb.protection` | USBLC6-2 | USBLC6-2SC6 | C7519 | `SOT-23-6` |
+| `J7` | `usb.receptacle` | USB-C | TYPE-C-31-M-12 | C165948 | `USB_C_Receptacle_HRO_TYPE-C-31-M-12` |
+
 #### Headers
 
 | Ref | Address | Value | Part number | LCSC | Footprint |
@@ -369,25 +379,26 @@ schematic after the fact.
 
 ## Nets
 
-22 of the 179 nets are ERC waivers: each has exactly one
+19 of the 183 nets are ERC waivers: each has exactly one
 connection, because the block at its other end is not drawn yet. A check
 requires that to stay true, so when the block lands the waiver has to go.
 
 | Waiting on | Nets |
 |---|---|
-| M7b: USB and Ethernet | `ETH_CRS_DV`, `ETH_MDC`, `ETH_MDIO`, `ETH_PHY_IRQ`, `ETH_PHY_RESET`, `ETH_REF_CLK`, `ETH_RXD0`, `ETH_RXD1`, `ETH_TXD0`, `ETH_TXD1`, `ETH_TX_EN`, `USB_DM`, `USB_DP`, `USB_VBUS` |
+| M7c: the Ethernet PHY, its crystal and the jack | `ETH_CRS_DV`, `ETH_MDC`, `ETH_MDIO`, `ETH_PHY_IRQ`, `ETH_PHY_RESET`, `ETH_REF_CLK`, `ETH_RXD0`, `ETH_RXD1`, `ETH_TXD0`, `ETH_TXD1`, `ETH_TX_EN` |
 | M8: the motion-feedback connector, once the encoder type is settled | `ENC_A`, `ENC_B`, `ENC_SERIAL_RX`, `ENC_SERIAL_TX`, `ENC_Z`, `HALL_1`, `HALL_2`, `HALL_3` |
 
 <details>
-<summary><strong>Every net</strong> — all 179, by size</summary>
+<summary><strong>Every net</strong> — all 183, by size</summary>
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 170 |  |
+| `GND` | 178 |  |
 | `3V3` | 63 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
+| `USB_VBUS` | 6 |  |
 | `VREF+` | 6 |  |
 | `5VA` | 5 |  |
 | `FAULT1_N` | 4 |  |
@@ -458,6 +469,8 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `TRIPPED` | 3 |  |
 | `TRIP_CLEAR_N` | 3 |  |
 | `TRIP_N` | 3 |  |
+| `USB_DM_CABLE` | 3 |  |
+| `USB_DP_CABLE` | 3 |  |
 | `UVLO` | 3 |  |
 | `VA` | 3 |  |
 | `VB` | 3 |  |
@@ -532,6 +545,10 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `TRIP_IC_HIGH` | 2 |  |
 | `TRIP_IC_LOW` | 2 |  |
 | `TRIP_VDC_HIGH` | 2 |  |
+| `USB_CC1` | 2 |  |
+| `USB_CC2` | 2 |  |
+| `USB_DM` | 2 |  |
+| `USB_DP` | 2 |  |
 | `VA_SENSE` | 2 |  |
 | `VB_SENSE` | 2 |  |
 | `VCAP1` | 2 |  |
@@ -559,9 +576,6 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `HALL_1` | 1 | pending |
 | `HALL_2` | 1 | pending |
 | `HALL_3` | 1 | pending |
-| `USB_DM` | 1 | pending |
-| `USB_DP` | 1 | pending |
-| `USB_VBUS` | 1 | pending |
 
 </details>
 
