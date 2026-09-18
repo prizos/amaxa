@@ -1694,6 +1694,7 @@ def _inside(polygon: list[tuple[float, float]], point: tuple[float, float]) -> b
 STITCH_PLACES = (
     (50.0, -2.0), (50.0, 2.5), (50.0, 7.0),
     (50.0, 11.5), (50.0, 16.0), (50.0, 20.5),   # beyond the digital connector
+    (31.5, -28.5),                    # the USB connector's fan-out
     (20.0, -16.0),                    # the debug escapes
     (0.0, 33.5),                      # power good, under the switch node
     (12.0, -26.0),                    # the CAN termination's midpoint

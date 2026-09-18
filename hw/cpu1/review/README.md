@@ -9,9 +9,9 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 130 × 110 mm |
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
-| **Footprints** | 239 |
+| **Footprints** | 240 |
 | **Nets** | 191, of which 8 pending |
-| **Routing** | 620 track segments, 290 vias, 3 zones |
+| **Routing** | 622 track segments, 292 vias, 3 zones |
 | **DRC** | 0 violations, 146 connections not yet routed (`ROUTING := incomplete`) |
 
 > [!IMPORTANT]
@@ -88,11 +88,11 @@ schematic after the fact.
 | USB-C | 4 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
 | Ethernet | 16 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
-| Plane stitching | 11 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
+| Plane stitching | 12 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 239, by block</summary>
+<summary><strong>Every footprint</strong> — all 240, by block</summary>
 
 #### MCU core
 
@@ -388,6 +388,7 @@ schematic after the fact.
 | `C68` | `stitch.1` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C77` | `stitch.10` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C78` | `stitch.11` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C79` | `stitch.12` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C69` | `stitch.2` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C70` | `stitch.3` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C71` | `stitch.4` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -431,8 +432,8 @@ requires that to stay true, so when the block lands the waiver has to go.
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 205 |  |
-| `3V3` | 86 |  |
+| `GND` | 206 |  |
+| `3V3` | 87 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
