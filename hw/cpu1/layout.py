@@ -314,8 +314,11 @@ def _debug() -> None:
         # beyond them.
         legs = [f"{MCU}:{pin}"]
         if pin == "105":
-            legs += [p.at(11.9), p.at(12.4, 0.65)]
-            out = p.at(15.6, 0.65)
+            # It used to step onto the line between the two USB data pins to
+            # get past VCAP2's capacitor. That line is a quarter of a
+            # millimetre from one of them, and both of them need it now, so it
+            # goes down where it is instead.
+            out = p.at(11.9)
         elif pin == "133":
             # SWO stays on the front until it is clear of the band the four
             # field-bus signals cross in. Where it used to go down, at 12.3 mm,
@@ -326,7 +329,7 @@ def _debug() -> None:
             out = p.at(12.3)
         path(net, SIGNAL, [
             (F, legs + [out]),
-            (B, [out, (out[0], pad_y) if pin != "105" else (out[0], pad_y), (DEBUG_LEFT, pad_y)]),
+            (B, [out, (out[0], pad_y), (DEBUG_LEFT, pad_y)]),
         ])
 
     # NRST leaves inward - the 8 MHz crystal fills the outward side of its pin -
@@ -2053,13 +2056,54 @@ def _usb() -> None:
     # run one track along each side of a pad it has nothing to do with. The
     # fan-out is deliberately not at the pair's spacing, and the impedance it
     # is drawn to starts where the fan-out ends.
-    for net, line, pad, clear in (("USB_DP", west, "4", 26.8),
-                                  ("USB_DM", east, "6", 29.2)):
+    for net, line, pad, clear, lane in (("USB_DP", west, "4", 26.8, -6.75),
+                                        ("USB_DM", east, "6", 29.2, -6.25)):
         ROUTES.append((net, USB_WIDTH, F, [
             f"usb.protection:{pad}", (clear, -23.4), line[0]]))
         ROUTES.append((net, USB_WIDTH, F, list(line)))
+        # And the last stretch to the package, which is not part of the
+        # controlled length: the two pins sit where the debug escapes used to
+        # be, and this is what it took to get that back.
+        pin = next(p for a, p in DESIGN["nets"][net] if a == MCU)
+        ROUTES.append((net, USB_WIDTH, F,
+                       [line[-1], (14.5, lane), f"{MCU}:{pin}"]))
 
+    _usb_bus_voltage()
     _usb_fanout()
+
+
+# The bus voltage goes round the outside of everything: north of the pair the
+# whole way, down the east of the buffers, and back underneath the pair to the
+# array's middle pad, which is the only pad on that side the pair does not
+# fan out around.
+USB_VBUS_EAST, USB_VBUS_LANE, USB_VBUS_RISE = 29.5, -22.0, (28.0, -23.0)
+
+
+def _usb_bus_voltage() -> None:
+    net = "USB_VBUS"
+    width = _width_for(net, SIGNAL)
+    pin = next(p for a, p in DESIGN["nets"][net] if a == MCU)
+    array = next(f"{a}:{p}" for a, p in DESIGN["nets"][net] if a == "usb.protection")
+    path(net, width, [
+        (F, [f"{MCU}:{pin}", (USB_VBUS_EAST, -5.25), (USB_VBUS_EAST, USB_VBUS_LANE)]),
+        (B, [(USB_VBUS_EAST, USB_VBUS_LANE), USB_VBUS_RISE]),
+        (F, [USB_VBUS_RISE, array]),
+    ])
+    # The receptacle carries it on four pads, two at each end of the row, with
+    # the pair's own fan-out filling the space between them. Both ends step
+    # away from the row before they turn - the pads either side of each are
+    # ground - and go under the connector's own fan-out on the back. Each steps
+    # back onto the front for a millimetre to get past the trip bus, which runs
+    # across this corner on the back on its way to the latch.
+    for pad, step, column in (("A4", (30.45, -31.6), 29.95),
+                              ("A9", (25.55, -32.4), 24.0)):
+        here = (USB_VBUS_EAST, USB_VBUS_LANE) if pad == "A4" else USB_VBUS_RISE
+        path(net, width, [
+            (F, [f"usb.receptacle:{pad}", step]),
+            (B, [step, (column, step[1]), (column, -26.6)]),
+            (F, [(column, -26.6), (column, -25.4)]),
+            (B, [(column, -25.4), (column, here[1]), here]),
+        ])
 
 
 # --- Ethernet ----------------------------------------------------------------
@@ -2280,6 +2324,12 @@ def _pads_of(address: str) -> dict[str, list]:
     return layout_lib.footprint_pads(HERE / "parts" / library / f"{name}.kicad_mod")
 
 
+def _holes_of(address: str) -> list:
+    """The part's unplated holes, which carry no net and stop no less copper."""
+    library, _, name = DESIGN["parts"][address]["footprint"].partition(":")
+    return layout_lib.footprint_holes(HERE / "parts" / library / f"{name}.kicad_mod")
+
+
 def _absolute(address: str, x: float, y: float) -> tuple[float, float]:
     """A point in a footprint's frame, placed on the board."""
     import math
@@ -2309,17 +2359,21 @@ def _obstacles() -> tuple[list, list]:
     0.6 by 1.3 mm pads, and measuring them by their diagonal says there is no
     room anywhere on an SOIC. Every part on this board is placed at a right
     angle, so the rectangles stay upright and the arithmetic stays simple.
+
+    Unplated holes count too. They carry no net, so the pad parser leaves them
+    out, and the stitching generator put a ground via half a millimetre from
+    the USB receptacle's mounting post before this line existed.
     """
     pads = []
     for address in PLACEMENT:
         turned = round((PLACEMENT[address][2] if len(PLACEMENT[address]) > 2 else 0)) % 180 == 90
-        for copies in _pads_of(address).values():
-            for pad in copies:
-                x, y = _absolute(address, pad.x, pad.y)
-                half_w, half_h = pad.width / 2, pad.height / 2
-                if turned:
-                    half_w, half_h = half_h, half_w
-                pads.append((x, y, half_w, half_h))
+        copper = [pad for copies in _pads_of(address).values() for pad in copies]
+        for pad in copper + _holes_of(address):
+            x, y = _absolute(address, pad.x, pad.y)
+            half_w, half_h = pad.width / 2, pad.height / 2
+            if turned:
+                half_w, half_h = half_h, half_w
+            pads.append((x, y, half_w, half_h))
     return pads, [_point(entry[1]) for entry in VIAS]
 
 

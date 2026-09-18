@@ -48,6 +48,24 @@ def footprint_pads(path: Path) -> dict[str, list[Pad]]:
     return pads
 
 
+def footprint_holes(path: Path) -> list[Pad]:
+    """
+    The unplated holes in a `.kicad_mod` - mounting holes and connector posts.
+
+    They carry no net and `footprint_pads` leaves them out for that reason, but
+    a via cannot sit in one: the drill goes through whatever copper is there.
+    Anything placing copper by searching for room has to see them.
+    """
+    return [
+        Pad("", float(x), float(y), float(w), float(h), "npth")
+        for x, y, w, h in re.findall(
+            r'\(pad "[^"]*" np_thru_hole \w+\s*\(at ([-\d.]+) ([-\d.]+)(?: [-\d.]+)?\)\s*'
+            r"\(size ([\d.]+) ([\d.]+)\)",
+            path.read_text(),
+        )
+    ]
+
+
 @dataclass(frozen=True)
 class QfpPin:
     """
