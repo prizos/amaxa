@@ -316,6 +316,12 @@ def _debug() -> None:
         if pin == "105":
             legs += [p.at(11.9), p.at(12.4, 0.65)]
             out = p.at(15.6, 0.65)
+        elif pin == "133":
+            # SWO stays on the front until it is clear of the band the four
+            # field-bus signals cross in. Where it used to go down, at 12.3 mm,
+            # its back-layer run cut that band to two lines and there are four
+            # of them.
+            out = p.at(16.5)
         else:
             out = p.at(12.3)
         path(net, SIGNAL, [
@@ -1406,7 +1412,7 @@ SENSE_LANES = (
     # the row and its own threshold bus surfaces where it would have risen, so
     # it runs along the empty back layer under the input networks and comes up
     # beyond it.
-    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-5.0, -15.65))),
+    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-5.2, -15.65))),
 )
 
 
@@ -1937,6 +1943,51 @@ def _field_bus_routes() -> None:
         (B, [(CHAIN_X, -29.25), (11.5, -29.25)]),
         (F, [(11.5, -29.25), "can.termination_split:1"]),
     ])
+
+
+# The six field-bus signals, from the package's north edge to the two
+# transceivers sitting above it.
+#
+# The CAN pair goes over the top of its transceiver and down its west side,
+# where its receive and transmit pins are. The RS-485 trio has the CAN block in
+# the way, so it goes under it on the back layer and comes up beyond.
+#
+# Each entry is the net, the pad it lands on, and - for the three that go
+# under - the via they drop through, the y they come back up on, and the column
+# they turn down. Those three are ordered so that a signal landing further
+# north turns further west, which is what keeps the three from crossing.
+CAN_SIGNALS = (
+    ("CAN_RX", "can.transceiver:4", ((6.25, -18.0), (-1.8, -18.0), (-1.8, -20.09))),
+    ("CAN_TX", "can.transceiver:1", ((5.75, -17.4), (-2.4, -17.4), (-2.4, -23.91))),
+)
+
+# The other four go under the CAN block on the back. Each drops through a via
+# north of the decoupling row, runs west on its own line, turns south in the
+# corridor between the transceivers' west pads and their capacitors, and comes
+# up beside the pin it lands on. A signal landing further north turns further
+# east, which is what keeps the four columns and four legs apart.
+CAN_UNDER = (
+    ("CAN_STANDBY", "can.transceiver:8", (4.75, -14.8), -3.8, -24.8, (5.3, -24.8)),
+    ("RS485_TX", "rs485.transceiver:4", (3.75, -13.4), -4.1, -38.09, (-1.6, -38.09)),
+    ("RS485_DE", "rs485.transceiver:3", (4.25, -12.6), -4.4, -39.37, (-1.6, -39.37)),
+    ("RS485_RX", "rs485.transceiver:1", (2.25, -11.8), -4.7, -41.91, (-1.6, -41.91)),
+)
+
+
+def _field_bus_mcu() -> None:
+    for net, target, corners in CAN_SIGNALS:
+        pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+        ROUTES.append((net, _width_for(net, SIGNAL), F,
+                       [f"{MCU}:{pin}", *corners, target]))
+
+    for net, target, drop, column, leg, rise in CAN_UNDER:
+        width = _width_for(net, SIGNAL)
+        pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+        path(net, width, [
+            (F, [f"{MCU}:{pin}", drop]),
+            (B, [drop, (column, drop[1]), (column, leg), rise]),
+            (F, [rise, target]),
+        ])
 
 
 # --- USB ---------------------------------------------------------------------
@@ -2530,6 +2581,7 @@ _safety_signals()
 _static_routes()
 _field_buses()
 _field_bus_routes()
+_field_bus_mcu()
 _usb()
 _ethernet()
 _stitching_capacitors()
