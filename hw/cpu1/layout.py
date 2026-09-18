@@ -25,6 +25,7 @@ board are placed.
 """
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -414,8 +415,11 @@ def _boot_and_console() -> None:
     # The console's pads follow its pins' order, so the tracks never cross.
     PLACEMENT["tp_console_tx"] = (22.0, 8.2)
     PLACEMENT["tp_console_rx"] = (22.0, 5.45)
-    PLACEMENT["tp_gnd"] = (22.0, 10.95)
-    PLACEMENT["tp_3v3"] = (22.0, 13.7)
+    # The two rail pads go north-east, out of the strip the latch's signals
+    # cross. They carry no signal - a plane via each is the whole net - so
+    # anywhere the planes reach will do.
+    PLACEMENT["tp_gnd"] = (33.5, -8.0)
+    PLACEMENT["tp_3v3"] = (33.5, -11.0)
     for address in ("tp_console_tx", "tp_console_rx", "tp_gnd", "tp_3v3"):
         LABELS[address] = (2.6, 0.0)
     ROUTES.append(("CONSOLE_TX", SIGNAL, F, [f"{MCU}:77", (20.5, 6.75), "tp_console_tx:1"]))
@@ -423,8 +427,8 @@ def _boot_and_console() -> None:
         # The dip happens east of the buffer fan, not through it.
         f"{MCU}:78", (21.5, 6.25), (21.5, 5.45), "tp_console_rx:1",
     ]))
-    VIAS.append(("tp_gnd:1", (23.6, 10.95), "GND", *VIA, SUPPLY))
-    VIAS.append(("tp_3v3:1", (23.6, 13.7), "3V3", *VIA, SUPPLY))
+    VIAS.append(("tp_gnd:1", (35.0, -8.0), "GND", *VIA, SUPPLY))
+    VIAS.append(("tp_3v3:1", (35.0, -11.0), "3V3", *VIA, SUPPLY))
 
 
 
@@ -831,10 +835,11 @@ def _safety() -> None:
     PLACEMENT["safety.d_faults"] = (22.0, -28.0, 0)
     PLACEMENT["safety.d_reset"] = (20.5, -32.0, 0)
     PLACEMENT["safety.r_trip_pullup"] = (22.0, -24.0, 180)
-    # South of the buffer rather than west of it: west of it is where the
-    # fourteen PWM lines arrive, seven of them abreast.
-    PLACEMENT["safety.r_clear_pullup"] = (25.0, 23.5, 0)
-    PLACEMENT["safety.r_enable_pullup"] = (22.0, 23.5, 0)
+    # On the lane each one holds up, in the strip between the package and the
+    # latch. South of the buffer put their ground vias across the only way the
+    # four signals from the package have of getting here.
+    PLACEMENT["safety.r_clear_pullup"] = (21.0, 13.6, 0)
+    PLACEMENT["safety.r_enable_pullup"] = (18.0, 11.3, 0)
     for address in ("safety.d_faults", "safety.d_reset", "safety.r_trip_pullup",
                     "safety.r_clear_pullup", "safety.r_enable_pullup"):
         LABELS[address] = (2.6, 0.0)
@@ -1451,7 +1456,7 @@ def _trip_bus() -> None:
 
     # And up the east side of the board to the latch, on the back: the front
     # of that column is the package's own escapes for its whole length.
-    drop, rise = (19.75, -24.0), (28.7, 8.75)
+    drop, rise = (19.75, -24.0), (29.6, 8.75)
     path(net, width, [
         (F, ["safety.r_trip_pullup:2", drop]),
         (B, [drop, (drop[0], -26.0), (TRIP_LATCH_LANE, -26.0),
@@ -1574,15 +1579,15 @@ def _adc_to_package() -> None:
 # Each entry is the net, the via it drops through, the column it turns in, and
 # the via it comes back up on.
 PWM_BEHIND = (
-    ("PWM2_C_LOW", (12.3, 7.25), 16.0, (20.0, 3.175)),
-    ("PWM2_B_LOW", (13.2, 7.75), 17.4, (21.0, 3.825)),
+    ("PWM2_C_LOW", (16.5, 7.25), 18.0, (20.0, 3.175)),
+    ("PWM2_B_LOW", (17.5, 7.75), 19.0, (21.0, 3.825)),
     ("PWM2_A_HIGH", (11.9, -2.75), 19.8, (23.0, 1.875)),
     ("PWM2_B_HIGH", (13.0, -3.25), 20.6, (24.0, 1.225)),
     ("PWM2_C_HIGH", (14.1, -3.75), 21.4, (23.0, 0.575)),
     ("PWM2_PFC", (15.2, -4.25), 22.2, (24.0, -0.075)),
 )
 
-PWM_STRAY, PWM_STRAY_TURN, PWM_STRAY_EXIT = 14.2, 21.6, 24.0
+PWM_STRAY, PWM_STRAY_TURN, PWM_STRAY_EXIT = 14.2, 24.0, 24.0
 
 
 def _pwm_inputs() -> None:
@@ -1613,6 +1618,126 @@ def _pwm_inputs() -> None:
             ])
         else:
             ROUTES.append((net, width, F, [source, (here[0], there[1]), target]))
+
+
+# --- the latch's two ends -------------------------------------------------------
+#
+# Both buffers' second enable comes from the latch, and both of those pins are
+# on the far side of their package from it. Everything east of the buffers is
+# the output fan-out, on the front; this goes underneath it.
+TRIPPED_LANE = 32.6
+
+
+def _tripped() -> None:
+    """The latch's output to the enable pin of both buffers."""
+    net = "TRIPPED"
+    width = _width_for(net, SIGNAL)
+    ends = sorted((f"safety.buffer{n}:19" for n in (1, 2)),
+                  key=lambda ref: -_point(ref)[1])
+    rises = [(TRIPPED_LANE, round(_point(ref)[1], 4)) for ref in ends]
+    tap = (29.8, 10.6)
+    path(net, width, [
+        (F, [ends[0], rises[0]]),
+        (B, [rises[0], rises[1]]),
+        (F, [rises[1], ends[1]]),
+    ])
+    path(net, width, [
+        (F, ["safety.latch:5", tap]),
+        (B, [tap, (TRIPPED_LANE, tap[1])]),
+    ])
+
+
+# --- the safety signals the package drives ---------------------------------------
+#
+# Four pins on the package's east edge, half a millimetre apart, whose ends are
+# the latch and both buffers. All four drop to the back layer between the
+# indicator LEDs' resistors, run south in their own column past the PWM fan,
+# and go east in the strip between the package and the latch.
+#
+# Each entry is the net, the via it drops through, the column it runs south in,
+# and the lane it runs east on. Columns on the back, lanes on the front, so a
+# lane never meets a column - the same rule the analog fan uses, for the same
+# reason. A net whose lane is further south gets a column further west, which
+# is what keeps each lane clear of the other columns.
+SAFETY_DROPS = (
+    ("TRIP_CLEAR_N", (11.9, 0.25), 11.9, 15.2),
+    ("PWM_ENABLE_N", (12.7, 1.1), 12.7, 12.4),
+    ("TRIP_N", (13.5, 2.2), 13.5, 10.4),
+)
+
+# One PWM line crosses this strip on the back, and there is no lane south of it
+# that still reaches the latch. Anything that has to get past steps over on the
+# front for a millimetre.
+SAFETY_STEP = (13.7, 14.7)
+
+
+def _safety_column(net, width, column, top, bottom) -> None:
+    """A back-layer run down the strip, stepping over the PWM lane on the way."""
+    first, last = min(top, bottom), max(top, bottom)
+    if not first < SAFETY_STEP[0] < last:
+        ROUTES.append((net, width, B, [(column, top), (column, bottom)]))
+        return
+    path(net, width, [
+        (B, [(column, first), (column, SAFETY_STEP[0])]),
+        (F, [(column, SAFETY_STEP[0]), (column, SAFETY_STEP[1])]),
+        (B, [(column, SAFETY_STEP[1]), (column, last)]),
+    ])
+
+
+def _safety_signals() -> None:
+    """The latch's inputs and the buffers' first enable, from the package."""
+    for net, drop, column, lane in SAFETY_DROPS:
+        width = _width_for(net, SIGNAL)
+        pin = min((pad for address, pad in DESIGN["nets"][net] if address == MCU),
+                  key=lambda pad: math.dist(_point(f"{MCU}:{pad}"), drop))
+        ROUTES.append((net, width, F, [f"{MCU}:{pin}", drop]))
+        VIAS.append((None, drop, net, *VIA))
+        _safety_column(net, width, column, drop[1], lane)
+
+    # The latch's set input. Both timers' break inputs are on it; the second
+    # comes off the south edge, round the bottom of the PWM fan and back up the
+    # same column, which is why this column is the shortest of the three.
+    width = _width_for("TRIP_N", SIGNAL)
+    ROUTES.append(("TRIP_N", width, F,
+                   [(13.5, 10.4), (23.2, 10.4), (23.2, 9.25), "safety.latch:3"]))
+    second = min((pad for address, pad in DESIGN["nets"]["TRIP_N"] if address == MCU),
+                 key=lambda pad: -_point(f"{MCU}:{pad}")[1])
+    # Straight out of the pad row before it turns: the pins either side of it
+    # are the core's own capacitors, and their tracks leave along this line.
+    escape = (round(_point(f"{MCU}:{second}")[0], 4), 15.5)
+    path("TRIP_N", width, [
+        (F, [f"{MCU}:{second}", escape]),
+        (B, [escape, (13.5, 15.5)]),
+    ])
+    _safety_column("TRIP_N", width, 13.5, 15.5, 10.4)
+
+    # The clear input is on the far side of the latch, so this one carries on
+    # past it on the back and comes back to the pad from the east.
+    width = _width_for("TRIP_CLEAR_N", SIGNAL)
+    over, clear = (23.0, 15.2), (29.0, 9.25)
+    path("TRIP_CLEAR_N", width, [
+        (F, [(11.9, 15.2), over]),
+        (B, [over, (clear[0], over[1]), clear]),
+        (F, [clear, "safety.latch:6"]),
+    ])
+
+    # The enable reaches one buffer along its lane and the other underneath the
+    # fan, on the one line east of the indicators that nothing else uses.
+    width = _width_for("PWM_ENABLE_N", SIGNAL)
+    ROUTES.append(("PWM_ENABLE_N", width, F,
+                   [(12.7, 12.4), (22.6, 12.4), "safety.buffer1:1"]))
+    under = (14.5, -0.65)
+    path("PWM_ENABLE_N", width, [
+        (B, [(12.7, 1.1), under]),
+        (F, [under, (20.0, -0.65), "safety.buffer2:1"]),
+    ])
+
+    # And each pull-up hangs off its own lane by the length of one pad.
+    for address, lane in (("safety.r_clear_pullup", 15.2),
+                          ("safety.r_enable_pullup", 12.4)):
+        net = NET_AT[(address, "2")]
+        pad = _point(f"{address}:2")
+        ROUTES.append((net, _width_for(net, SIGNAL), F, [(pad[0], lane), f"{address}:2"]))
 
 
 # --- the field buses ---------------------------------------------------------
@@ -2331,6 +2456,8 @@ _sense_routes()
 _trip_bus()
 _adc_to_package()
 _pwm_inputs()
+_tripped()
+_safety_signals()
 _field_buses()
 _field_bus_routes()
 _usb()
