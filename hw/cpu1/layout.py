@@ -178,8 +178,8 @@ def _analog_supply() -> None:
     pin = PINS[VDDA_PIN]
     inward = pin.at(SUPPLY_RING)
     VIAS.append((f"{MCU}:{VDDA_PIN}", inward, "VDDA", *VIA, STUB))
-    corner_via = (-11.5, 12.5)
-    ROUTES.append(("VDDA", SUPPLY, B, [inward, (-10.5, inward[1]), (-10.5, 12.5), corner_via]))
+    corner_via = (-10.5, 10.9)
+    ROUTES.append(("VDDA", SUPPLY, B, [inward, (-10.5, inward[1]), corner_via]))
     VIAS.append((None, corner_via, "VDDA", *VIA))
 
     PLACEMENT["core.vdda.c1u"] = (-13.0, 12.5, 180)
@@ -219,19 +219,23 @@ def _crystals() -> None:
 
     # 32.768 kHz, left of pins 8 and 9. Its crystal terminals are pads 1 and 4,
     # both on one end; turned to face the MCU.
+    # North-west of the package rather than beside it. Where it used to sit is
+    # the only strip on this side of the board wide enough for the fifteen
+    # analog lines to change layer in, and a watch crystal is the one thing
+    # here that does not mind being a few millimetres further away.
     lse_in, lse_out = PINS["8"], PINS["9"]
-    PLACEMENT["core.lse.crystal"] = (-19.0, -5.5, 180)
-    PLACEMENT["core.lse.c_in"] = (-16.25, -9.6, 90)
-    PLACEMENT["core.lse.c_out"] = (-16.25, -1.7, 270)
+    PLACEMENT["core.lse.crystal"] = (-19.0, -12.0, 180)
+    PLACEMENT["core.lse.c_in"] = (-16.25, -16.1, 90)
+    PLACEMENT["core.lse.c_out"] = (-16.25, -8.2, 270)
     LABELS["core.lse.crystal"] = (0.0, 0.0)
     LABELS["core.lse.c_in"] = (-1.3, 0.0)
     LABELS["core.lse.c_out"] = (-1.3, 0.0)
-    ROUTES.append(("LSE_IN", 0.2, F, [f"{MCU}:8", (-15.0, lse_in.at(0)[1]), (-15.0, -7.1), "core.lse.crystal:1"]))
-    ROUTES.append(("LSE_OUT", 0.2, F, [f"{MCU}:9", (-14.4, lse_out.at(0)[1]), (-14.4, -3.9), "core.lse.crystal:4"]))
+    ROUTES.append(("LSE_IN", 0.2, F, [f"{MCU}:8", (-15.0, lse_in.at(0)[1]), (-15.0, -13.6), "core.lse.crystal:1"]))
+    ROUTES.append(("LSE_OUT", 0.2, F, [f"{MCU}:9", (-15.6, lse_out.at(0)[1]), (-15.6, -10.4), "core.lse.crystal:4"]))
     ROUTES.append(("LSE_IN", 0.2, F, ["core.lse.crystal:1", "core.lse.c_in:1"]))
     ROUTES.append(("LSE_OUT", 0.2, F, ["core.lse.crystal:4", "core.lse.c_out:1"]))
-    VIAS.append(("core.lse.c_in:2", (-16.25, -10.6), "GND", *VIA, SUPPLY))
-    VIAS.append(("core.lse.c_out:2", (-17.3, -0.6), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.lse.c_in:2", (-16.25, -17.5), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.lse.c_out:2", (-17.3, -7.1), "GND", *VIA, SUPPLY))
 
 
 def path(net: str, width: float, legs: list) -> None:
@@ -261,9 +265,9 @@ DEBUG_LEFT, DEBUG_RIGHT = 18.2, 21.8   # via columns either side of the SWD pads
 
 def _placed() -> None:
     # Bulk capacitance in the two top corners, where no pin escapes.
-    PLACEMENT["core.bulk"] = (-13.5, -13.5, 0)
-    VIAS.append(("core.bulk:1", (-15.0, -13.5), "3V3", *VIA, SUPPLY))
-    VIAS.append(("core.bulk:2", (-12.0, -13.5), "GND", *VIA, SUPPLY))
+    PLACEMENT["core.bulk"] = (-13.5, -16.5, 0)
+    VIAS.append(("core.bulk:1", (-15.0, -16.5), "3V3", *VIA, SUPPLY))
+    VIAS.append(("core.bulk:2", (-12.0, -16.5), "GND", *VIA, SUPPLY))
     PLACEMENT["core.usb_bulk"] = (13.5, -13.5, 0)
     VIAS.append(("core.usb_bulk:1", (12.5, -13.5), "3V3", *VIA, SUPPLY))
     VIAS.append(("core.usb_bulk:2", (14.5, -13.5), "GND", *VIA, SUPPLY))
@@ -355,17 +359,30 @@ def _button() -> None:
     directly, and the pole tied to 3V3 meets that plane through its own holes.
     """
     PLACEMENT["core.button.switch"] = (-30.0, 14.0)
-    PLACEMENT["core.button.pulldown"] = (-26.5, 20.5, 0)
+    # West of the switch rather than east: east of it is the strip the analog
+    # lines change layer in, and this resistor's ground via was in it.
+    PLACEMENT["core.button.pulldown"] = (-33.5, 20.5, 180)
     LABELS["core.button.switch"] = (3.2, -2.4)
     LABELS["core.button.pulldown"] = (0.0, -1.3)
     inward = PINS["7"].at(SUPPLY_RING_2)
     VIAS.append((f"{MCU}:7", inward, "BUTTON", *VIA, STUB))
+    # It goes the long way round, north of the package and down the west edge,
+    # rather than across the strip south of it: six analog lines have to cross
+    # that strip to reach the connector, and a button is the one net here that
+    # can afford the detour.
+    # It passes south of the strip the analog lines cross, not through it.
     ROUTES.append(("BUTTON", SIGNAL, B, [
         inward, (0.5, -7.0), (0.5, -11.5), (-11.2, -11.5), (-11.2, 10.0),
-        (-15.0, 16.0), "core.button.switch:2",
+        (-40.0, 10.0), (-40.0, 18.5), "core.button.switch:2",
     ]))
     ROUTES.append(("BUTTON", SIGNAL, F, ["core.button.switch:2", "core.button.pulldown:1"]))
-    VIAS.append(("core.button.pulldown:2", (-25.0, 20.5), "GND", *VIA, SUPPLY))
+    # A tactile switch has two legs on each pole, and they are separate pads:
+    # the netlist calls them one node and the fabricator does not.
+    legs = [_absolute("core.button.switch", pad.x, pad.y)
+            for pad in _pads_of("core.button.switch")["2"]]
+    if len(legs) > 1:
+        ROUTES.append(("BUTTON", SIGNAL, F, legs))
+    VIAS.append(("core.button.pulldown:2", (-35.0, 20.5), "GND", *VIA, SUPPLY))
 
 
 def _boot_and_console() -> None:
@@ -2019,7 +2036,7 @@ STITCH_PLACES = (
     # The strip the analog fan crosses layers in. Thirty-six layer changes
     # happened here in one commit and there was not a tie within ten
     # millimetres of any of them; the check said so before the board did.
-    (-22.0, 2.0), (-22.0, -10.0), (-22.0, -18.0),
+    (-22.0, 2.0), (-22.0, -6.0), (-22.0, -18.0),
     (-33.0, 1.0), (-33.0, -7.5), (-33.0, -15.5),
 )
 
