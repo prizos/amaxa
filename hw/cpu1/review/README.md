@@ -9,10 +9,10 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 130 × 110 mm |
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
-| **Footprints** | 228 |
+| **Footprints** | 239 |
 | **Nets** | 191, of which 8 pending |
-| **Routing** | 587 track segments, 264 vias, 3 zones |
-| **DRC** | 0 violations, 151 connections not yet routed (`ROUTING := incomplete`) |
+| **Routing** | 608 track segments, 286 vias, 3 zones |
+| **DRC** | 0 violations, 152 connections not yet routed (`ROUTING := incomplete`) |
 
 > [!IMPORTANT]
 > **Routing is deliberately incomplete.** Read the plots with that in
@@ -88,10 +88,11 @@ schematic after the fact.
 | USB-C | 4 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
 | Ethernet | 16 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
+| Plane stitching | 11 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 228, by block</summary>
+<summary><strong>Every footprint</strong> — all 239, by block</summary>
 
 #### MCU core
 
@@ -380,6 +381,22 @@ schematic after the fact.
 | `J4` | `header.analog` | analog | PZ254-2-15-Z-8.5 | C3012255 | `PinHeader_2x15_P2.54mm_Vertical` |
 | `J3` | `header.digital` | digital | PZ254-2-20-Z-8.5 | C2894981 | `PinHeader_2x20_P2.54mm_Vertical` |
 
+#### Plane stitching
+
+| Ref | Address | Value | Part number | LCSC | Footprint |
+|---|---|---|---|---|---|
+| `C68` | `stitch.1` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C77` | `stitch.10` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C78` | `stitch.11` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C69` | `stitch.2` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C70` | `stitch.3` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C71` | `stitch.4` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C72` | `stitch.5` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C73` | `stitch.6` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C74` | `stitch.7` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C75` | `stitch.8` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C76` | `stitch.9` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+
 #### Test points
 
 | Ref | Address | Value | Part number | LCSC | Footprint |
@@ -414,8 +431,8 @@ requires that to stay true, so when the block lands the waiver has to go.
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 194 |  |
-| `3V3` | 75 |  |
+| `GND` | 205 |  |
+| `3V3` | 86 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |

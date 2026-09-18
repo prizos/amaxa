@@ -538,13 +538,17 @@ def _buck_5v() -> None:
 
     # Power good: out from between two pins, under the switch node on the bottom
     # layer, and up again where there is room for the pull-up and its pad.
+    # It surfaces inside the 5 V island rather than beyond it. The back layer
+    # is referenced to whatever inner copper is under it, and that changes at
+    # the island's edge: a track that crosses it hands its return current from
+    # one plane to another halfway along.
     out = (-0.9, 30.64)
     path("PGOOD", SIGNAL, [
         (F, ["buck5.ic:6", out]),
-        (B, [out, (-0.9, 39.0), (4.0, 39.0)]),
-        (F, [(4.0, 39.0), (4.0, 37.5), "buck5.r_pgood:1"]),
+        (B, [out, (-0.9, 35.5), (4.0, 35.5)]),
+        (F, [(4.0, 35.5), "buck5.r_pgood:1"]),
     ])
-    ROUTES.append(("PGOOD", SIGNAL, F, ["tp_pgood:1", (4.0, 37.5)]))
+    ROUTES.append(("PGOOD", SIGNAL, F, ["tp_pgood:1", "buck5.r_pgood:1"]))
     VIAS.append(("buck5.r_pgood:2", (7.2, 37.5), "3V3", *VIA, SUPPLY))
 
 
@@ -893,7 +897,11 @@ def _output_routes() -> None:
         if number % 2:                    # the header's first row, in the clear
             ROUTES.append((name, width, F, [f"{series}:2", f"{pulldown}:1", pin]))
         else:
-            # Under the first row, crossing it midway between two positions.
+            # Under the first row, crossing midway between two of its pins.
+            # Threading between them on the front is 0.42 mm from each pad -
+            # enough copper clearance, not enough to keep their solder mask
+            # apertures apart - so it goes underneath, and the capacitors that
+            # give its return current a way across sit beyond the connector.
             between = _header_at(number)[1] + HEADER_PITCH / 2
             path(name, width, [
                 (F, [f"{series}:2", f"{pulldown}:1"]),
@@ -1636,6 +1644,24 @@ def _inside(polygon: list[tuple[float, float]], point: tuple[float, float]) -> b
     return crossings % 2 == 1
 
 
+# Where a layer change had no crossing between the planes within reach. Each
+# of these is a place `test_routing.py` named, not a place that looked empty.
+STITCH_PLACES = (
+    (50.0, -2.0), (50.0, 2.5), (50.0, 7.0),
+    (50.0, 11.5), (50.0, 16.0), (50.0, 20.5),   # beyond the digital connector
+    (20.0, -16.0),                    # the debug escapes
+    (0.0, 33.5),                      # power good, under the switch node
+    (12.0, -26.0),                    # the CAN termination's midpoint
+    (-60.0, -6.0), (-60.0, -30.0),    # the Ethernet crystal and its pairs
+)
+
+
+def _stitching_capacitors() -> None:
+    for index, at in enumerate(STITCH_PLACES, start=1):
+        PLACEMENT[f"stitch.{index}"] = (*at, 0)
+        LABELS[f"stitch.{index}"] = (0.0, -1.3)
+
+
 def _plane_stitches() -> None:
     """
     A via for every surface pad that belongs to a plane and has no other way
@@ -1820,4 +1846,5 @@ _field_buses()
 _field_bus_routes()
 _usb()
 _ethernet()
+_stitching_capacitors()
 _plane_stitches()

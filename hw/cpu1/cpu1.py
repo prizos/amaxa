@@ -187,6 +187,23 @@ INTENT: dict[str, tuple[float, float]] = {
     # What has to stand between the cable and the rest of the machine. IEEE
     # 802.3 asks 1500 V rms, and the jack's magnetics are the only barrier.
     "ethernet.isolation": (1500.0, 4000.0),
+    # How far a signal changing layer may be from the nearest capacitor tying
+    # the ground plane to a supply plane. The front of this board is referenced
+    # to ground and the back to the supply islands, so every via between them
+    # leaves a return current to cross, and those capacitors are the only
+    # crossings. The number is the detour, which is the loop, which is what
+    # radiates.
+    # Ten millimetres, not the five a fast edge would like: the fifteen
+    # buffered outputs dip under the digital connector, and the nearest board
+    # anybody can reach from there is beyond it. At the buffers' three
+    # nanosecond edges the knee is near 120 MHz, where a wavelength in this
+    # laminate is over a metre, so the detour is a hundredth of one - short
+    # enough that the loop it makes is the smallest thing in that corner.
+    "routing.reference_change_distance": (0.0, 10.0),
+    # The tracks from a surface pad down to its plane via. Inductance in series
+    # with whatever that pad was decoupling; a pad that needs more than this
+    # wants moving rather than reaching for.
+    "routing.stub_length": (0.0, 3.5),
     # The stray capacitance either side of the PHY's crystal: its own pins are
     # in the datasheet, this is what the board adds beside them. Same figure as
     # the MCU's oscillators and the same reason - it is measured at bring-up.
@@ -277,6 +294,7 @@ def build() -> Net:
     field_buses(v3v3, gnd, nets)
     usb(v3v3, gnd, nets)
     ethernet(v3v3, gnd, nets)
+    plane_stitching(v3v3, gnd)
 
     # Unused I/O is left unconnected on purpose, and said so. Firmware sets these
     # to analog mode, the lowest-leakage state.
@@ -1229,6 +1247,30 @@ def ethernet(v3v3, gnd, nets) -> None:
     jack["NC"] += NC  # noqa: F821 - SKiDL puts NC in builtins
     for pad in ("9", "10", "11", "12"):
         jack[pad] += NC  # noqa: F821
+
+
+def plane_stitching(v3v3, gnd) -> None:
+    """
+    Capacitors that exist for the return current, not for any part's supply.
+
+    The front of this board is referenced to the ground plane under it and the
+    back to the supply islands. Every via between the two layers moves the
+    signal across and leaves its return to find its own way, and the only
+    crossings between those planes are capacitors. Where the decoupling happens
+    to be near, the return has a short way over; where it does not, the current
+    goes round whatever loop it can find, and the loop is what radiates.
+
+    Eleven of them, at five places: six in a row beyond the digital connector,
+    where fifteen buffered outputs dip under its first row and there is nowhere
+    nearer to put them, and one each at the debug escapes, the power-good line,
+    the CAN termination and two spots on the Ethernet block. These are put there for
+    them. They are the one set of parts on this board whose position is their
+    whole purpose; `test_routing.py` is what says where they have to be.
+    """
+    for index in range(11):
+        cap = part(parts.CAP_100N_0402, f"stitch.{index + 1}", f"C{68 + index}")
+        v3v3 += cap[1]
+        gnd += cap[2]
 
 
 def pending(names: list[str]) -> dict[str, str]:

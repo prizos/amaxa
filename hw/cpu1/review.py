@@ -63,6 +63,11 @@ BLOCKS: list[tuple[str, tuple[str, ...], str]] = [
      "magnetics inside it. The board grew to 130 by 110 mm to hold the jack."),
     ("Headers", ("header",),
      "Digital 2x20 and analog 2x15 to the power board."),
+    ("Plane stitching", ("stitch",),
+     "Capacitors that exist for the return current rather than for any part's "
+     "supply: the front of this board is referenced to ground and the back to "
+     "the supply islands, and these are where a signal changing layer can hand "
+     "its return across."),
     ("Test points", ("tp_",),
      "A pad on every rail and on the signals bring-up needs."),
 ]
