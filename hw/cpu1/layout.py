@@ -122,6 +122,13 @@ def _supply_vias() -> None:
 # --- decoupling: capacitors outward ------------------------------------------------
 
 CAP_CENTRE, CAP_VIA = 12.9, 14.2
+
+# The south side's row sits half a millimetre further out. Six analog channels
+# come off that edge and their input networks are on the other side of the
+# board, so the gap between the pads and this row is the only way west for
+# them; everywhere else the row is where it wants to be. `test_core.py` allows
+# three millimetres and this is 2.7.
+CAP_CENTRE_SOUTH, CAP_VIA_SOUTH = 13.4, 14.7
 # An 0402 is 0.62 mm across and the pins are 0.5 mm apart, so two capacitors on
 # neighbouring pins cannot both sit on their pin's line. Each moves this far
 # away from the other, and its track jogs out to it once clear of the pads.
@@ -148,13 +155,17 @@ def _decoupling() -> None:
         else:
             raise ValueError(f"no room for a capacitor on pin {number}")
         lines.append(pin.centre_along + across)
-        PLACEMENT[address] = (*pin.at(CAP_CENTRE, across), pin.facing())
+        south = pin.normal[1] > 0
+        centre = CAP_CENTRE_SOUTH if south else CAP_CENTRE
+        PLACEMENT[address] = (*pin.at(centre, across), pin.facing())
         LABELS[address] = _label_beside(pin)
         path = [f"{MCU}:{number}"]
         if across:
             path += [pin.at(JOG), pin.at(JOG + abs(across), across)]
         ROUTES.append((NET_OF_PIN[number], SUPPLY, F, path + [f"{address}:1"]))
-        VIAS.append((f"{address}:2", pin.at(CAP_VIA, across), "GND", *VIA, SUPPLY))
+        VIAS.append((f"{address}:2",
+                     pin.at(CAP_VIA_SOUTH if south else CAP_VIA, across),
+                     "GND", *VIA, SUPPLY))
 
 
 def _label_beside(pin) -> tuple[float, float]:
@@ -202,8 +213,8 @@ def _crystals() -> None:
     # The capacitors sit clear of the crystal's own two tracks rather than in
     # line with them: the fifteen analog lines cross this strip on the back
     # layer, and a ground via in line with a track is a via in a lane.
-    PLACEMENT["core.hse.c_in"] = (-19.2, -0.6, 180)
-    PLACEMENT["core.hse.c_out"] = (-19.2, 6.4, 180)
+    PLACEMENT["core.hse.c_in"] = (-17.5, -1.6, 180)
+    PLACEMENT["core.hse.c_out"] = (-17.5, 6.4, 180)
     LABELS["core.hse.crystal"] = (-3.4, 0.0)
     LABELS["core.hse.c_in"] = (0.0, -1.0)
     LABELS["core.hse.c_out"] = (0.0, 1.0)
@@ -214,8 +225,8 @@ def _crystals() -> None:
     ROUTES.append(("HSE_OUT", 0.2, F, [f"{MCU}:24", (-13.8, hse_out.at(0)[1]), (-13.8, 4.35), "core.hse.crystal:2"]))
     ROUTES.append(("HSE_IN", 0.2, F, ["core.hse.crystal:1", "core.hse.c_in:1"]))
     ROUTES.append(("HSE_OUT", 0.2, F, ["core.hse.crystal:2", "core.hse.c_out:1"]))
-    VIAS.append(("core.hse.c_in:2", (-20.6, -0.6), "GND", *VIA, SUPPLY))
-    VIAS.append(("core.hse.c_out:2", (-20.6, 6.4), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.hse.c_in:2", (-18.9, -0.75), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.hse.c_out:2", (-18.9, 6.4), "GND", *VIA, SUPPLY))
 
     # 32.768 kHz, left of pins 8 and 9. Its crystal terminals are pads 1 and 4,
     # both on one end; turned to face the MCU.
@@ -358,10 +369,10 @@ def _button() -> None:
     Its leads are through holes, so the bottom-layer track reaches one pole
     directly, and the pole tied to 3V3 meets that plane through its own holes.
     """
-    PLACEMENT["core.button.switch"] = (-30.0, 14.0)
+    PLACEMENT["core.button.switch"] = (-38.0, 14.0)
     # West of the switch rather than east: east of it is the strip the analog
     # lines change layer in, and this resistor's ground via was in it.
-    PLACEMENT["core.button.pulldown"] = (-33.5, 20.5, 180)
+    PLACEMENT["core.button.pulldown"] = (-36.0, 23.0, 0)
     LABELS["core.button.switch"] = (3.2, -2.4)
     LABELS["core.button.pulldown"] = (0.0, -1.3)
     inward = PINS["7"].at(SUPPLY_RING_2)
@@ -372,8 +383,8 @@ def _button() -> None:
     # can afford the detour.
     # It passes south of the strip the analog lines cross, not through it.
     ROUTES.append(("BUTTON", SIGNAL, B, [
-        inward, (0.5, -7.0), (0.5, -11.5), (-11.2, -11.5), (-11.2, 10.0),
-        (-40.0, 10.0), (-40.0, 18.5), "core.button.switch:2",
+        inward, (0.5, -7.0), (0.5, -11.5), (-11.2, -11.5), (-11.2, 9.75),
+        (-46.5, 9.75), (-46.5, 18.5), "core.button.switch:2",
     ]))
     ROUTES.append(("BUTTON", SIGNAL, F, ["core.button.switch:2", "core.button.pulldown:1"]))
     # A tactile switch has two legs on each pole, and they are separate pads:
@@ -382,7 +393,7 @@ def _button() -> None:
             for pad in _pads_of("core.button.switch")["2"]]
     if len(legs) > 1:
         ROUTES.append(("BUTTON", SIGNAL, F, legs))
-    VIAS.append(("core.button.pulldown:2", (-35.0, 20.5), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.button.pulldown:2", (-34.2, 23.0), "GND", *VIA, SUPPLY))
 
 
 def _boot_and_console() -> None:
@@ -655,16 +666,16 @@ def _reference() -> None:
     pin = PINS[VREF_PIN]
     inward = pin.at(SUPPLY_RING_2)
     VIAS.append((f"{MCU}:{VREF_PIN}", inward, "VREF+", *VIA, STUB))
-    surfaced = (-10.0, 18.05)
-    # Out through the corner well inside the ring, then down the one lane past
-    # the package's bottom-left corner that no via of any kind reaches: the
-    # inner vias stop at the last pin on each side, and the outer ones are
-    # further out still.
+    surfaced = (-5.5, 12.2)
+    # Out through the corner well inside the ring, then up to the front as soon
+    # as it is clear of the package: south of here is the channel the six
+    # analog pins on this edge cross on the back, and this is the one net that
+    # would otherwise have to cross all six of them.
     path("VREF+", SUPPLY, [
-        (B, [inward, (-6.5, 8.0), (-6.5, 10.5), (-10.0, 13.5), surfaced]),
-        (F, [surfaced, "vref.ic:2"]),
+        (B, [inward, (-6.5, 8.0), (-6.5, 10.5), surfaced]),
+        (F, [surfaced, (-5.5, 18.05), "tp_vref:1"]),
     ])
-    ROUTES.append(("VREF+", SUPPLY, F, ["tp_vref:1", surfaced]))
+    ROUTES.append(("VREF+", SUPPLY, F, ["tp_vref:1", "vref.ic:2"]))
     ROUTES.append(("VREF+", SUPPLY, F, [
         "vref.ic:2", (-12.56, 16.0), (-15.99, 16.0), "core.vref.c1u:1",
     ]))
@@ -1460,29 +1471,46 @@ def _trip_bus() -> None:
 # Where each analog pin leaves the package, as (net, via). The vias step away
 # from the package as well as along it, because three pins at 0.5 mm pitch
 # cannot each have a via: the diagonal that gets there is what buys the room.
-# Where each analog pin leaves the package, and how far from its cell it comes
-# back up. The vias step away from the package as well as along it, because
-# three pins at 0.5 mm pitch cannot each have a via below them: the diagonal
-# that gets there is what buys the room.
+# Where each analog pin leaves the package, the way out to that point, and
+# where beside its cell it comes back up.
 #
-# A cell is approached from half a row away - the gap the staggered columns
-# leave - except where half a row is already a sense line's lane, which is
-# what the third figure says when it is not -1.27.
+# The nine on the west edge get a diagonal apiece: three pins at 0.5 mm pitch
+# cannot each have a via below them, and the length of the diagonal that buys
+# the room depends on which neighbour is in the way - a pad with no net on one
+# side, a decoupling capacitor on the other. The six on the south edge leave
+# through the gap between the pads and the decoupling row, which is a
+# millimetre and a half wide and holds all six of them.
+#
+# The third figure is where the cell is approached from, relative to its
+# capacitor's input pad. Half a row north is the gap the staggered columns
+# leave; where that gap is already a sense line's lane, or where the cell has
+# a neighbour on both sides, it says something else.
+#
+# The order is the order the lanes run in, west to east, which is the order of
+# the approaches, southernmost first. Nothing depends on it - the fan crosses nothing whatever the
+# order - but it keeps each lane's two vias away from its neighbours'.
 ADC_ESCAPES = (
-    ("SLOW2", ((-13.0, -2.75),), -1.27),
-    ("BOARD_ID2", ((-14.1, -2.05),), 0.87),
-    ("SLOW1", ((-14.9, -1.45),), -1.27),
-    ("AUX_FAST", ((-11.9, 0.25),), -0.75),
-    ("VC", ((-13.0, 0.8),), -1.27),
-    ("BOARD_ID1", ((-14.1, 1.75),), -1.27),
-    ("SLOW3", ((-13.0, 3.75),), -1.27),
-    ("IC", ((-13.0, 4.75),), -1.27),
-    ("VB", ((-11.9, 5.25),), -1.27),
+    ("BOARD_ID2", ((-14.1, -2.05),), (0.0, 1.0)),
+    ("BOARD_ID1", ((-14.1, 1.75),), (0.0, -1.27)),
+    ("SLOW3", ((-12.4, 3.75),), (0.0, -1.85)),
+    ("SLOW4", ((-9.6, 11.7),), (-0.6375, -0.55)),
+    ("SLOW2", ((-13.0, -2.75),), (0.0, -1.27)),
+    ("SLOW1", ((-14.9, -1.45),), (0.0, -0.64)),
+    ("AUX_FAST", ((-11.9, 0.25),), (0.0, 0.75)),
+    ("VC", ((-13.0, 0.8),), (0.0, -0.75)),
+    ("VA", ((-3.75, 13.5),), (-0.6375, 0.65)),
+    ("VB", ((-11.9, 5.1),), (0.0, -1.27)),
+    ("OV_COMP", ((-3.25, 14.0), (-4.5, 15.9)), (0.0, -0.75)),
+    ("VDC", ((-6.25, 13.0),), (-0.6375, 0.65)),
+    ("IC", ((-12.9, 4.3),), (0.0, -1.27)),
+    ("IB", ((-0.75, 11.7), (0.3, 12.4), (0.3, 16.5)), (0.0, -1.27)),
+    ("IA", ((-2.75, 15.3),), (-0.6375, 0.65)),
 )
 
 # The strip the north-south runs use, and how far apart they sit in it. It is
-# bounded by the 32 kHz crystal on one side and the input networks on the other.
-ADC_LANE, ADC_LANE_PITCH = -23.0, -0.55
+# bounded by the 8 MHz crystal's capacitors on one side and the input networks
+# on the other.
+ADC_LANE, ADC_LANE_PITCH = -19.7, -0.5
 
 
 def _adc_cell_of(net: str) -> str:
@@ -1501,7 +1529,7 @@ def _adc_to_package() -> None:
         cell = _adc_cell_of(net)
         pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
         shunt = _point(f"{cell}.shunt:1")
-        approach = (shunt[0], round(shunt[1] + offset, 4))
+        approach = (round(shunt[0] + offset[0], 4), round(shunt[1] + offset[1], 4))
         lane = round(ADC_LANE + ADC_LANE_PITCH * index, 4)
 
         # The cell's own two pads, which are a millimetre apart.
@@ -2036,8 +2064,8 @@ STITCH_PLACES = (
     # The strip the analog fan crosses layers in. Thirty-six layer changes
     # happened here in one commit and there was not a tie within ten
     # millimetres of any of them; the check said so before the board did.
-    (-22.0, 2.0), (-22.0, -6.0), (-22.0, -18.0),
-    (-33.0, 1.0), (-33.0, -7.5), (-33.0, -15.5),
+    (-19.5, 8.5), (-19.5, -6.0), (-19.5, -18.0),
+    (-30.0, 8.5), (-33.0, -1.0), (-33.0, -7.5), (-33.0, -15.5),
 )
 
 
