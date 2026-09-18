@@ -1174,16 +1174,51 @@ def _trip() -> None:
                     "trip.r_sda_pullup", "tp_dac_spare"):
         LABELS[address] = (0.0, -1.6)
 
-    # The analog supply for the power board's own sensors: the 5 V rail through
-    # a bead, which is what VDDA gets and for the same reason.
-    PLACEMENT["analog.bead"] = (-48.0, 14.0, 0)
-    PLACEMENT["analog.bulk"] = (-48.0, 16.0, 0)
-    PLACEMENT["analog.decoupling"] = (-48.0, 18.0, 0)
-    for address in ("analog.bead", "analog.bulk", "analog.decoupling"):
-        LABELS[address] = (0.0, -1.6)
+    _analog_header_supply()
 
     _trip_supply()
     _trip_routes()
+
+
+# The analog supply for the power board's own sensors: the 5 V rail through a
+# bead, which is what VDDA gets and for the same reason. It sits west of the
+# connector and level with the two pins it leaves on, so the bead is at the
+# load rather than at the rail - which is the only place a bead is worth
+# fitting.
+ANALOG_SUPPLY = 7.21                      # midway between pins 23 and 25
+ANALOG_SUPPLY_LANE, ANALOG_SUPPLY_TAP = 22.0, (-7.0, 26.0)
+ANALOG_SUPPLY_COLUMN = -53.0
+
+
+def _analog_header_supply() -> None:
+    PLACEMENT["analog.bead"] = (-51.5, ANALOG_SUPPLY, 0)
+    PLACEMENT["analog.bulk"] = (-49.5, ANALOG_SUPPLY + 2.6, 270)
+    PLACEMENT["analog.decoupling"] = (-47.5, ANALOG_SUPPLY + 2.6, 270)
+    for address in ("analog.bead", "analog.bulk", "analog.decoupling"):
+        LABELS[address] = (0.0, -1.6)
+
+    # 5 V from the island, the long way round the west of the board: the
+    # connector is as far from the regulator as anything on this board is.
+    rail = _width_for("5V", RAIL)
+    VIAS.append((None, ANALOG_SUPPLY_TAP, "5V", *VIA))
+    ROUTES.append(("5V", rail, B, [
+        ANALOG_SUPPLY_TAP,
+        (ANALOG_SUPPLY_TAP[0], ANALOG_SUPPLY_LANE),
+        (ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY_LANE),
+        (ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY),
+    ]))
+    VIAS.append((None, (ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY), "5V", *VIA))
+    ROUTES.append(("5V", rail, F,
+                   [(ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY), "analog.bead:1"]))
+
+    # And out the other side of the bead to the two pins and both capacitors.
+    supply = _width_for("5VA", RAIL)
+    ROUTES.append(("5VA", supply, F, [
+        "analog.bead:2", (-45.5, ANALOG_SUPPLY), "header.analog:23"]))
+    ROUTES.append(("5VA", supply, F, [(-45.5, ANALOG_SUPPLY), "header.analog:25"]))
+    for address in ("analog.bulk", "analog.decoupling"):
+        x = PLACEMENT[address][0]
+        ROUTES.append(("5VA", supply, F, [(x, ANALOG_SUPPLY), f"{address}:1"]))
 
 
 # --- the ADC input networks --------------------------------------------------
