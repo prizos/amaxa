@@ -982,7 +982,29 @@ def _static_pulls() -> None:
 #
 # Placed, not routed, for the same reason the safety chain is: M8.
 
-ANALOG_HEADER = (-46.0, -18.0)
+# The connector stands on the west edge with its pins in a column, and
+# everything it feeds stands east of it.
+ANALOG_HEADER = (-44.0, -22.0)
+
+# The comparator row along the north edge, turned so the inputs face south -
+# towards the connector the signals arrive on - and the outputs north, towards
+# the diodes. The pitch is what leaves each one room for its capacitor beside
+# it; the two offsets are where that capacitor and the diode row go.
+TRIP_ROW, TRIP_PITCH = (-40.0, -35.0), 5.0
+TRIP_DECOUPLING = (2.2, -2.6)
+TRIP_DIODES = -43.0
+
+# 5 V arrives along a lane between the comparators and the diodes, and the
+# outputs cross it on the front. That is the whole reason it is on the back:
+# seven outputs cross this lane and none of them should have to change layer.
+TRIP_SUPPLY_LANE = -39.0
+
+# The threshold DAC, in the channel between the connector's column and the
+# comparator row and east of every tap but one, so its three buses run the one
+# way. Where it leaves the island the 5 V spine starts.
+TRIP_DAC = (-12.0, -25.0)
+ISLAND_TAP = (-8.5, 25.5)
+TRIP_SPINE_X, TRIP_SPINE_Y = 36.5, -51.5
 
 
 # The comparators, in the order the analog header presents them, so the two
@@ -992,104 +1014,101 @@ TRIP_ORDER = (
     "ia_high", "ia_low", "ib_high", "ib_low", "ic_high", "ic_low", "vdc_high",
 )
 
-# The 5 V spine down that column, and where it leaves the island.
-TRIP_SPINE_X = -32.0
-ISLAND_TAP = (-8.5, 25.5)
+# The three threshold buses: the net, the DAC pad it leaves on, the lane it
+# runs down, the comparator pin it lands on, and the comparators it feeds.
+#
+# They run on the back layer under the comparator row. The four sense lines
+# share this channel and run on the front, and between the two sets there are
+# seven crossings: putting one set on each layer is what makes those crossings
+# cost nothing. Which set goes on the back is decided by the taps - a
+# threshold tap surfaces beside the pin it feeds and goes nowhere else, while a
+# sense line has to reach the input networks as well.
+THRESHOLDS = (
+    ("I_TRIP_HIGH", "6", -31.0, "3", ("ia_high", "ib_high", "ic_high")),
+    ("I_TRIP_LOW", "7", -31.8, "1", ("ia_low", "ib_low", "ic_low")),
+    ("VDC_TRIP", "8", -32.6, "3", ("vdc_high",)),
+)
 
 
 def _trip_supply() -> None:
     """
-    5 V from the regulator's island to the comparators, thirty millimetres away.
+    5 V from the regulator's island to the comparators, forty millimetres away.
 
     The island on the inner layer stops beside the buck; the comparators do not
     reach it, so their supply pads have no plane under them and stitching them
-    gave four vias connected to nothing. The supply is routed instead - on the
-    back layer, which is empty here - and tapped up to each comparator in turn.
+    gave four vias connected to nothing. The supply is routed instead.
 
-    Each tap goes to the comparator's own supply pin first and to its
-    decoupling capacitor second, so the capacitor is on the pin's side of the
-    inductance rather than the spine's.
+    It goes the long way round, east of the package, because the short way is
+    through the channel these comparators are fed from - and everything in that
+    channel is already using both layers. A supply that has to thread between
+    seven signals is a supply in the wrong place, not a harder routing problem.
+
+    Each tap lands on the comparator's decoupling capacitor and reaches the
+    supply pin from there, so the capacitor is on the pin's side of the
+    inductance rather than the lane's.
     """
+    taps = [_point(f"trip.{key}.decoupling:1")[0] for key in TRIP_ORDER]
     spine = [
         ISLAND_TAP,
         (ISLAND_TAP[0], 21.0),
         (TRIP_SPINE_X, 21.0),
-        (TRIP_SPINE_X, -19.0 + 0.95),
+        # North of the USB receptacle rather than through it, and along the
+        # top of the board to the far end of the row, so the lane itself
+        # starts where the comparators do.
+        (TRIP_SPINE_X, TRIP_SPINE_Y),
+        (min(taps), TRIP_SPINE_Y),
+        (min(taps), TRIP_SUPPLY_LANE),
+        (max(taps), TRIP_SUPPLY_LANE),
     ]
     VIAS.append((None, ISLAND_TAP, "5V", *VIA))
     ROUTES.append(("5V", _width_for("5V", RAIL), B, spine))
 
-    for index, key in enumerate(TRIP_ORDER):
-        y = round(-19.0 + 4.6 * index, 4)
-        tap = (TRIP_SPINE_X, round(y + 3.0, 4))
+    for key in TRIP_ORDER:
+        pad = _point(f"trip.{key}.decoupling:1")
+        tap = (pad[0], TRIP_SUPPLY_LANE)
         VIAS.append((None, tap, "5V", *VIA))
-        # Over the top of the comparator and down onto its supply pin. Straight
-        # across at the pin's own height would lie along the output leaving the
-        # pin beneath it, which is on its way to the diode above.
         ROUTES.append(("5V", _width_for("5V", SUPPLY), F, [
-            tap, (-34.86, round(y + 3.0, 4)), f"trip.{key}:4",
-            f"trip.{key}.decoupling:1",
+            tap, f"trip.{key}.decoupling:1", f"trip.{key}:4",
         ]))
-
-
-# The two threshold buses and the one that carries the DC link's. They run up
-# the far side of the comparator column, where the inverting and non-inverting
-# inputs both are.
-HIGH_LANE, LOW_LANE, VDC_LANE = -40.5, -38.3, -39.4
 
 
 def _trip_routes() -> None:
     """
     The thresholds in, and the comparator outputs out.
 
-    Three buses have to reach one column of pins, and the pins they want
-    alternate down it: the high thresholds land on each comparator's
-    non-inverting input and the low ones on the inverting input of the
-    comparator below. Two lanes side by side cannot both tap a column that
-    interleaves - whichever is further out crosses the other's taps.
+    Each threshold drops to the back layer beside the DAC, runs its own lane
+    west under the comparator row, and surfaces directly below the pin it
+    feeds. Nothing it passes on the way is on the back, so the three lanes are
+    parallel for their whole length and cross nothing at all.
 
-    So the low bus runs underneath at the *inner* lane and surfaces beside each
-    pin it feeds, while the high bus runs on the front further out and taps
-    across it. The crossings are then between layers, and the only copper on
-    the front between the lanes and the package belongs to the taps themselves.
+    The outputs need no via: they leave the north side of the row, cross the
+    supply lane - which is on the back for exactly this reason - and land on
+    the diode above. Two comparators share a diode, and the two that share it
+    approach from opposite sides, so no two outputs cross either.
     """
-    thresholds = (
-        ("I_TRIP_HIGH", "6", HIGH_LANE, "3", ("ia_high", "ib_high", "ic_high"), F),
-        ("I_TRIP_LOW", "7", LOW_LANE, "1", ("ia_low", "ib_low", "ic_low"), B),
-        ("VDC_TRIP", "8", VDC_LANE, "3", ("vdc_high",), B),
-    )
-    for index, (net, dac_pad, lane, pin, keys, layer) in enumerate(thresholds):
+    for index, (net, dac_pad, lane, pin, keys) in enumerate(THRESHOLDS):
         width = _width_for(net, SIGNAL)
-        heights = [
-            round(-19.0 + 4.6 * TRIP_ORDER.index(key) + (0.95 if pin == "3" else -0.95), 4)
-            for key in keys
-        ]
-        # All three thresholds leave the DAC's right-hand column and the lanes
-        # they want are on its left, so each goes out sideways, up past the
-        # package and back across above it. Its own step out and its own height
-        # to cross at, so the three never share a line.
         pad_x, pad_y = _point(f"trip.dac:{dac_pad}")
-        beside = (round(pad_x + 1.2 + index * 0.6, 4), pad_y)
-        over = (beside[0], round(-23.6 + index * 0.6, 4))
-        entry = (lane, over[1])
-        if layer is F:
-            ROUTES.append((net, width, F, [f"trip.dac:{dac_pad}", beside, over,
-                                           entry, (lane, heights[-1])]))
+        # Out of the package and straight down. The three pads are half a
+        # millimetre apart and a via is half a millimetre across, so they step
+        # away from the package as well as along it.
+        # The deeper a bus's lane, the further east it drops: a lane that has
+        # to get past another one's horizontal has to start east of where that
+        # horizontal ends, and the DAC's pins come out in that order already.
+        drop = (round(pad_x - 1.3 - (len(THRESHOLDS) - 1 - index) * 0.7, 4), pad_y)
+        taps = sorted(_point(f"trip.{key}:{pin}")[0] for key in keys)
+        if taps[-1] < drop[0]:
+            legs = [drop, (drop[0], lane), (taps[0], lane)]
         else:
-            path(net, width, [
-                (F, [f"trip.dac:{dac_pad}", beside, over, entry]),
-                (B, [entry, (lane, heights[-1])]),
-            ])
-        for key, y in zip(keys, heights):
-            if layer is F:
-                ROUTES.append((net, width, F, [(lane, y), f"trip.{key}:{pin}"]))
-            else:
-                VIAS.append((None, (lane, y), net, *VIA))
-                ROUTES.append((net, width, F, [(lane, y), f"trip.{key}:{pin}"]))
+            legs = [drop, (taps[-1], pad_y), (taps[-1], lane)]
+        path(net, width, [
+            (F, [f"trip.dac:{dac_pad}", drop]),
+            (B, legs),
+        ])
+        for x in taps:
+            VIAS.append((None, (x, lane), net, *VIA))
+            ROUTES.append((net, width, F, [(x, lane), f"trip.{key_at(keys, pin, x)}:{pin}"]))
 
-    # Each comparator's output to the diode that puts it on the trip bus. The
-    # outputs leave on the side the 5 V spine runs down, one pin below its
-    # taps, so they pass under the spine rather than through it.
     for index, key in enumerate(TRIP_ORDER):
         diode = f"trip.d_outputs{index // 2 + 1}"
         pad = "1" if index % 2 == 0 else "2"
@@ -1098,85 +1117,127 @@ def _trip_routes() -> None:
                        [f"trip.{key}:5", f"{diode}:{pad}"]))
 
 
-def _trip() -> None:
-    PLACEMENT["header.analog"] = (*ANALOG_HEADER, 0)
-    LABELS["header.analog"] = (3.0, -2.0)
+def key_at(keys: tuple[str, ...], pin: str, x: float) -> str:
+    """Which of a bus's comparators has its tap at this x."""
+    return next(k for k in keys if abs(_point(f"trip.{k}:{pin}")[0] - x) < 1e-6)
 
-    # One comparator per trip point, in the order the header presents them, so
-    # the two that watch one phase sit together.
+
+def _trip() -> None:
+    """
+    The analog front end, laid out as the chain it is.
+
+    The connector stands on the west edge with its pins in a column; the input
+    networks stand beside it in two columns, one per column of pins, each cell
+    level with the pin it belongs to; and the comparators sit in a row along
+    the north edge, where the four signals they watch are the four nearest
+    pins.
+
+    It was a column of comparators between the connector and the cells before,
+    with the threshold buses in the gap. Nothing could get past: fourteen sense
+    lines had one two-millimetre corridor to share with three threshold lanes,
+    and no arrangement of them fitted. The fix was not a cleverer route.
+    """
+    PLACEMENT["header.analog"] = (*ANALOG_HEADER, 0)
+    LABELS["header.analog"] = (-3.0, -2.0)
+
     for index, key in enumerate(TRIP_ORDER):
-        y = round(-19.0 + 4.6 * index, 4)
-        PLACEMENT[f"trip.{key}"] = (-36.0, y, 0)
-        LABELS[f"trip.{key}"] = (0.0, -2.4)
-        # Turned round so its supply pad faces the comparator's: both 5 V
-        # points then sit on the same side and the spine taps them in one run.
-        PLACEMENT[f"trip.{key}.decoupling"] = (-36.0, y + 2.2, 180)
+        x = round(TRIP_ROW[0] + TRIP_PITCH * index, 4)
+        PLACEMENT[f"trip.{key}"] = (x, TRIP_ROW[1], 90)
+        LABELS[f"trip.{key}"] = (-2.4, 0.0)
+        # North-east of the part, clear of both its courtyard and the output
+        # leaving the pin beside it: a capacitor level with the supply pin sits
+        # in the courtyard, and one directly north of it sits on the output.
+        PLACEMENT[f"trip.{key}.decoupling"] = (
+            round(x + TRIP_DECOUPLING[0], 4),
+            round(TRIP_ROW[1] + TRIP_DECOUPLING[1], 4), 0)
         LABELS[f"trip.{key}.decoupling"] = (0.0, -1.3)
 
-    _trip_supply()
+    # The four dual Schottkys north of the row, each between the pair it
+    # serves - which is what lets both outputs reach it without crossing.
+    for index in range(4):
+        first = TRIP_ROW[0] + TRIP_PITCH * 2 * index
+        PLACEMENT[f"trip.d_outputs{index + 1}"] = (
+            round(first + (TRIP_PITCH / 2 if index < 3 else 0.0), 4),
+            TRIP_DIODES, 90)
+        LABELS[f"trip.d_outputs{index + 1}"] = (0.0, -2.2)
 
-    # The threshold DAC, below the comparators it feeds, with its own supply
-    # decoupling and the two pull-ups its bus needs.
-    PLACEMENT["trip.dac"] = (-38.0, -26.0, 0)
-    LABELS["trip.dac"] = (0.0, -3.0)
-    PLACEMENT["trip.dac.decoupling"] = (-35.5, -21.5, 0)
-    PLACEMENT["trip.dac.bulk"] = (-38.0, -30.0, 0)
-    PLACEMENT["trip.r_scl_pullup"] = (-32.0, -26.0, 0)
-    PLACEMENT["trip.r_sda_pullup"] = (-32.0, -28.0, 0)
-    PLACEMENT["tp_dac_spare"] = (-32.0, -22.0)
+    # The threshold DAC, turned so the three outputs face the lanes they drop
+    # into and the bus and supply pins face the package they come from.
+    PLACEMENT["trip.dac"] = (*TRIP_DAC, 180)
+    LABELS["trip.dac"] = (0.0, 3.0)
+    PLACEMENT["trip.dac.decoupling"] = (-14.0, -21.5, 0)
+    PLACEMENT["trip.dac.bulk"] = (-11.0, -21.5, 0)
+    PLACEMENT["trip.r_scl_pullup"] = (-8.0, -21.5, 0)
+    PLACEMENT["trip.r_sda_pullup"] = (-6.5, -23.5, 0)
+    PLACEMENT["tp_dac_spare"] = (-11.0, -18.5)
     for address in ("trip.dac.decoupling", "trip.dac.bulk", "trip.r_scl_pullup",
                     "trip.r_sda_pullup", "tp_dac_spare"):
         LABELS[address] = (0.0, -1.6)
 
-    # The four dual Schottkys, in a column between the comparators and the bus.
-    for index in range(4):
-        # Level with the two comparators it serves, so each output is a short
-        # run straight out rather than a diagonal down the column.
-        first = -19.0 + 4.6 * 2 * index
-        PLACEMENT[f"trip.d_outputs{index + 1}"] = (
-            -29.0, round(first + (2.3 if index < 3 else 0.0), 4), 0)
-        LABELS[f"trip.d_outputs{index + 1}"] = (2.6, 0.0)
-
     # The analog supply for the power board's own sensors: the 5 V rail through
     # a bead, which is what VDDA gets and for the same reason.
-    PLACEMENT["analog.bead"] = (-40.5, 10.0, 0)
-    PLACEMENT["analog.bulk"] = (-40.5, 12.0, 0)
-    PLACEMENT["analog.decoupling"] = (-40.5, 14.0, 0)
+    PLACEMENT["analog.bead"] = (-48.0, 14.0, 0)
+    PLACEMENT["analog.bulk"] = (-48.0, 16.0, 0)
+    PLACEMENT["analog.decoupling"] = (-48.0, 18.0, 0)
     for address in ("analog.bead", "analog.bulk", "analog.decoupling"):
         LABELS[address] = (0.0, -1.6)
 
+    _trip_supply()
     _trip_routes()
 
 
 # --- the ADC input networks --------------------------------------------------
 #
-# Fifteen identical RC pairs in a grid above the package, between the connector
-# the signals arrive on and the pins that measure them. Nothing here is
-# hand-placed: the order is the order `cpu1.py` builds them in, which is the
-# order the pin map lists the channels.
+# One cell per connector pin, level with its pin, in two columns because the
+# connector has two. A single column ordered alphabetically, which is what was
+# here, had every one of the fourteen sense lines crossing every other.
 
-ADC_GRID = (-24.0, -37.0)        # first cell
-ADC_STEP = (5.0, 2.4)            # between columns, between rows
-ADC_ROWS = 5
+ADC_COLUMNS = (-38.0, -31.0)     # the series resistor of each column's cells
+ADC_SHUNT_OFFSET = 2.2
+
+# One connector pin can feed more than one cell: the DC link's does, once for
+# the measurement and once for the faster tap the over-voltage comparator
+# watches. The second cell goes east of both columns, level with the first.
+ADC_SPILL = -24.0
+
+# The connector's two pin columns are 2.54 mm apart along the row and their
+# cells would be level with each other. Half a row of stagger puts each east
+# column cell in the gap between two west column cells, which is the gap the
+# line reaching it has to pass through.
+ADC_STAGGER = 1.27
+
+HEADER_PITCH = 2.54
+
+
+def _adc_pins() -> dict[str, int]:
+    """Which connector pin each input network belongs to."""
+    out = {}
+    for net, nodes in DESIGN["nets"].items():
+        pins = [int(pad) for address, pad in nodes if address == "header.analog"]
+        if not pins:
+            continue
+        for address, _ in nodes:
+            if address.startswith("adc.") and address.endswith(".series"):
+                out[address[: -len(".series")]] = pins[0]
+    return out
 
 
 def _adc_inputs() -> None:
-    cells = sorted(
-        address.rsplit(".", 1)[0]
-        for address in DESIGN["parts"]
-        if address.startswith("adc.") and address.endswith(".shunt")
-    )
-    for index, cell in enumerate(cells):
-        column, row = divmod(index, ADC_ROWS)
-        x = round(ADC_GRID[0] + ADC_STEP[0] * column, 4)
-        y = round(ADC_GRID[1] + ADC_STEP[1] * row, 4)
+    spilled: dict[int, int] = {}
+    for cell, pin in sorted(_adc_pins().items()):
+        row, column = divmod(pin - 1, 2)
+        seen = spilled.get(pin, 0)
+        spilled[pin] = seen + 1
+        x = ADC_COLUMNS[column] if not seen else ADC_SPILL + (seen - 1) * 4.6
+        y = round(ANALOG_HEADER[1] + HEADER_PITCH * row + ADC_STAGGER * column, 4)
         PLACEMENT[f"{cell}.series"] = (x, y, 0)
-        PLACEMENT[f"{cell}.shunt"] = (round(x + 2.2, 4), y, 90)
+        PLACEMENT[f"{cell}.shunt"] = (round(x + ADC_SHUNT_OFFSET, 4), y, 0)
         LABELS[f"{cell}.series"] = (0.0, -1.3)
-        LABELS[f"{cell}.shunt"] = (-1.6, 0.0)
+        LABELS[f"{cell}.shunt"] = (0.0, -1.3)
 
-    PLACEMENT["adc.dac_test.series"] = (-8.0, -31.0, 0)
-    PLACEMENT["tp_dac_test"] = (-8.0, -34.0)
+    # The spare DAC output's own network, beside the DAC it comes from.
+    PLACEMENT["adc.dac_test.series"] = (-14.0, -19.0, 0)
+    PLACEMENT["tp_dac_test"] = (-17.0, -19.0)
     LABELS["adc.dac_test.series"] = (0.0, -1.3)
     LABELS["tp_dac_test"] = (0.0, -2.0)
 
