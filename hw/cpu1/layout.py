@@ -985,7 +985,7 @@ TRIP_ORDER = (
 )
 
 # The 5 V spine down that column, and where it leaves the island.
-TRIP_SPINE_X = -33.0
+TRIP_SPINE_X = -32.0
 ISLAND_TAP = (-8.5, 25.5)
 
 
@@ -1013,11 +1013,81 @@ def _trip_supply() -> None:
 
     for index, key in enumerate(TRIP_ORDER):
         y = round(-19.0 + 4.6 * index, 4)
-        tap = (TRIP_SPINE_X, y + 0.95)
+        tap = (TRIP_SPINE_X, round(y + 3.0, 4))
         VIAS.append((None, tap, "5V", *VIA))
+        # Over the top of the comparator and down onto its supply pin. Straight
+        # across at the pin's own height would lie along the output leaving the
+        # pin beneath it, which is on its way to the diode above.
         ROUTES.append(("5V", _width_for("5V", SUPPLY), F, [
-            tap, f"trip.{key}:4", f"trip.{key}.decoupling:1",
+            tap, (-34.86, round(y + 3.0, 4)), f"trip.{key}:4",
+            f"trip.{key}.decoupling:1",
         ]))
+
+
+# The two threshold buses and the one that carries the DC link's. They run up
+# the far side of the comparator column, where the inverting and non-inverting
+# inputs both are.
+HIGH_LANE, LOW_LANE, VDC_LANE = -40.5, -38.3, -39.4
+
+
+def _trip_routes() -> None:
+    """
+    The thresholds in, and the comparator outputs out.
+
+    Three buses have to reach one column of pins, and the pins they want
+    alternate down it: the high thresholds land on each comparator's
+    non-inverting input and the low ones on the inverting input of the
+    comparator below. Two lanes side by side cannot both tap a column that
+    interleaves - whichever is further out crosses the other's taps.
+
+    So the low bus runs underneath at the *inner* lane and surfaces beside each
+    pin it feeds, while the high bus runs on the front further out and taps
+    across it. The crossings are then between layers, and the only copper on
+    the front between the lanes and the package belongs to the taps themselves.
+    """
+    thresholds = (
+        ("I_TRIP_HIGH", "6", HIGH_LANE, "3", ("ia_high", "ib_high", "ic_high"), F),
+        ("I_TRIP_LOW", "7", LOW_LANE, "1", ("ia_low", "ib_low", "ic_low"), B),
+        ("VDC_TRIP", "8", VDC_LANE, "3", ("vdc_high",), B),
+    )
+    for index, (net, dac_pad, lane, pin, keys, layer) in enumerate(thresholds):
+        width = _width_for(net, SIGNAL)
+        heights = [
+            round(-19.0 + 4.6 * TRIP_ORDER.index(key) + (0.95 if pin == "3" else -0.95), 4)
+            for key in keys
+        ]
+        # All three thresholds leave the DAC's right-hand column and the lanes
+        # they want are on its left, so each goes out sideways, up past the
+        # package and back across above it. Its own step out and its own height
+        # to cross at, so the three never share a line.
+        pad_x, pad_y = _point(f"trip.dac:{dac_pad}")
+        beside = (round(pad_x + 1.2 + index * 0.6, 4), pad_y)
+        over = (beside[0], round(-23.6 + index * 0.6, 4))
+        entry = (lane, over[1])
+        if layer is F:
+            ROUTES.append((net, width, F, [f"trip.dac:{dac_pad}", beside, over,
+                                           entry, (lane, heights[-1])]))
+        else:
+            path(net, width, [
+                (F, [f"trip.dac:{dac_pad}", beside, over, entry]),
+                (B, [entry, (lane, heights[-1])]),
+            ])
+        for key, y in zip(keys, heights):
+            if layer is F:
+                ROUTES.append((net, width, F, [(lane, y), f"trip.{key}:{pin}"]))
+            else:
+                VIAS.append((None, (lane, y), net, *VIA))
+                ROUTES.append((net, width, F, [(lane, y), f"trip.{key}:{pin}"]))
+
+    # Each comparator's output to the diode that puts it on the trip bus. The
+    # outputs leave on the side the 5 V spine runs down, one pin below its
+    # taps, so they pass under the spine rather than through it.
+    for index, key in enumerate(TRIP_ORDER):
+        diode = f"trip.d_outputs{index // 2 + 1}"
+        pad = "1" if index % 2 == 0 else "2"
+        net = f"TRIP_{key.upper()}"
+        ROUTES.append((net, _width_for(net, SIGNAL), F,
+                       [f"trip.{key}:5", f"{diode}:{pad}"]))
 
 
 def _trip() -> None:
@@ -1041,7 +1111,7 @@ def _trip() -> None:
     # decoupling and the two pull-ups its bus needs.
     PLACEMENT["trip.dac"] = (-38.0, -26.0, 0)
     LABELS["trip.dac"] = (0.0, -3.0)
-    PLACEMENT["trip.dac.decoupling"] = (-38.0, -22.0, 0)
+    PLACEMENT["trip.dac.decoupling"] = (-35.5, -21.5, 0)
     PLACEMENT["trip.dac.bulk"] = (-38.0, -30.0, 0)
     PLACEMENT["trip.r_scl_pullup"] = (-32.0, -26.0, 0)
     PLACEMENT["trip.r_sda_pullup"] = (-32.0, -28.0, 0)
@@ -1052,7 +1122,11 @@ def _trip() -> None:
 
     # The four dual Schottkys, in a column between the comparators and the bus.
     for index in range(4):
-        PLACEMENT[f"trip.d_outputs{index + 1}"] = (-29.0, round(-17.0 + 4.0 * index, 4), 0)
+        # Level with the two comparators it serves, so each output is a short
+        # run straight out rather than a diagonal down the column.
+        first = -19.0 + 4.6 * 2 * index
+        PLACEMENT[f"trip.d_outputs{index + 1}"] = (
+            -29.0, round(first + (2.3 if index < 3 else 0.0), 4), 0)
         LABELS[f"trip.d_outputs{index + 1}"] = (2.6, 0.0)
 
     # The analog supply for the power board's own sensors: the 5 V rail through
@@ -1062,6 +1136,8 @@ def _trip() -> None:
     PLACEMENT["analog.decoupling"] = (-40.5, 14.0, 0)
     for address in ("analog.bead", "analog.bulk", "analog.decoupling"):
         LABELS[address] = (0.0, -1.6)
+
+    _trip_routes()
 
 
 # --- the ADC input networks --------------------------------------------------
