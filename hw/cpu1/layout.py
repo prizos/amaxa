@@ -1339,8 +1339,13 @@ def _usb() -> None:
     # connector than the thing it protects is protecting the wrong end.
     PLACEMENT["usb.receptacle"] = (28.0, -37.0, 180)
     PLACEMENT["usb.protection"] = (28.0, -26.0, 270)
-    PLACEMENT["usb.cc1_pulldown"] = (24.0, -30.5, 0)
-    PLACEMENT["usb.cc2_pulldown"] = (32.0, -30.5, 0)
+    # Swapped over: CC1 is the connector's eastern pin and CC2 its western,
+    # so the resistors sit on the same sides their pins do and neither route
+    # crosses the pair between them.
+    # Each turned so its first pad faces the pin it serves: a pull-down
+    # approached from the wrong side is reached across its own ground pad.
+    PLACEMENT["usb.cc1_pulldown"] = (32.0, -30.5, 0)
+    PLACEMENT["usb.cc2_pulldown"] = (24.0, -30.5, 180)
     LABELS["usb.receptacle"] = (0.0, 4.2)
     LABELS["usb.protection"] = (-2.4, 0.0)
     for address in ("usb.cc1_pulldown", "usb.cc2_pulldown"):
@@ -1376,11 +1381,51 @@ def _usb() -> None:
             f"usb.protection:{pad}", (clear, -23.4), line[0]]))
         ROUTES.append((net, USB_WIDTH, F, list(line)))
 
+    _usb_fanout()
+
 
 # --- Ethernet ----------------------------------------------------------------
 #
 # The PHY and its clock, in the corner left of the threshold DAC. The jack is
 # not here: see cpu1.py's ethernet(), and M7d.
+
+def _usb_fanout() -> None:
+    """
+    The connector's own pins, joined up.
+
+    A Type-C receptacle carries each of D+ and D- on both of its rows, which is
+    what makes the plug reversible and what makes the fan-out awkward: at the
+    pads the two nets interleave - B6, A7, A6, B7 from west to east - so
+    joining one net's two pads passes over the other's.
+
+    Each net takes the pad on the side its own destination is on and reaches
+    its second pad underneath. Two vias each, on a full-speed pair, in the
+    three millimetres between the connector and the array.
+    """
+    for net, trunk, second, hop in (
+        ("USB_DP_CABLE", "B6", "A6", -31.8),
+        ("USB_DM_CABLE", "B7", "A7", -31.2),
+    ):
+        first = _point(f"usb.receptacle:{trunk}")
+        pad = "3" if net.endswith("DP_CABLE") else "1"
+        width = _width_for(net, SIGNAL)
+        ROUTES.append((net, width, F, [
+            f"usb.receptacle:{trunk}", (first[0], -30.2), f"usb.protection:{pad}",
+        ]))
+        other = _point(f"usb.receptacle:{second}")
+        path(net, width, [
+            (F, [f"usb.receptacle:{second}", (other[0], hop)]),
+            (B, [(other[0], hop), (first[0], hop)]),
+        ])
+        VIAS.append((None, (first[0], hop), net, *VIA))
+
+    for net, pad, resistor in (("USB_CC1", "A5", "usb.cc1_pulldown"),
+                               ("USB_CC2", "B5", "usb.cc2_pulldown")):
+        here = _point(f"usb.receptacle:{pad}")
+        ROUTES.append((net, _width_for(net, SIGNAL), F, [
+            f"usb.receptacle:{pad}", (here[0], -31.5), f"{resistor}:1",
+        ]))
+
 
 def _ethernet() -> None:
     # The jack in the corner the board grew to hold it, opening out of the top
