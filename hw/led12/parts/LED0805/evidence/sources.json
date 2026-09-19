@@ -1,0 +1,13 @@
+{
+  "polarity": {
+    "assumes": "nothing about pad numbering: Everlight numbers their cathode 2 and the KiCad land pattern numbers its marked end 1, so the part is oriented by the mark and not by either number",
+    "crop": "80,240,1413,427",
+    "document": "Everlight 17-21SURC/S530-A3/4T, DSE-0025713 Rev.2, release date 2022-01-06",
+    "dpi": 200,
+    "page": 5,
+    "read": "2026-09-20",
+    "sha256": "ddaccd2b08982ae35822d5b49495f4755fab3b26713010a74a0ec876e138f7d4",
+    "shows": "the package drawing's polarity symbol: terminal 2 is the cathode, marked minus and carrying the diode's bar, terminal 1 is the anode, and the cathode mark on the top view is at the terminal 2 end",
+    "url": "https://www.everlighteurope.com/custom/files/datasheets/DSE-0025713.pdf"
+  }
+}

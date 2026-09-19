@@ -62,15 +62,10 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOD123": ["cathode"],
     "SOT223": ["pin_description", "package_outline"],
     "SOT23": ["pinout"],
+    "LED0805": ["polarity"],
 }
 
 # Questions no document can answer. None on this board.
 WAITING_ON_A_DECISION: dict[str, str] = {}
 
-NEEDS_A_HUMAN_EYE = {
-    "LED0805": (
-        "pad 1 is the cathode. The datasheet LCSC serves for C2943978 is a "
-        "NATIONSTAR document for an EVERLIGHT part number, so it cannot "
-        "settle this, and Everlight's own is not reachable from here"
-    ),
-}
+NEEDS_A_HUMAN_EYE: dict[str, str] = {}
