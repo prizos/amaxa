@@ -52,6 +52,24 @@ BOARD = {
     # crowding the analog front end.
     "size": (130.0, 110.0),      # provisional
     "corner_radius": 3.0,
+    # M3 clearance holes, 3.2 mm, milled rather than drilled - they are
+    # circles on the edge layer, so they carry no net, no line in the bill of
+    # materials and no entry in the pick and place.
+    #
+    # A board this size held only by 0.1-inch header pins puts its whole mass
+    # on those solder joints, and this one is meant to be soldered onto a
+    # power board and then live in a machine. Three corners take a hole. The
+    # south-west one cannot: the Ethernet jack spans x -63.9 to -44.9 there.
+    # The fourth hole sits just east of the jack instead, at the first place
+    # along the south edge with five millimetres of clear copper around it -
+    # and the jack is itself a through-hole part, which anchors the corner it
+    # occupies.
+    "mounting_holes": (
+        (-60.0, 50.0, 3.2),
+        (60.0, 50.0, 3.2),
+        (60.0, -50.0, 3.2),
+        (-43.5, -51.0, 3.2),
+    ),
     # Six layers, not four. Four was chosen before this board had an Ethernet
     # jack, a 144-pin package and 191 nets on it, and it cost: the RMII took
     # two attempts and ended up crossing under the die, and eight reserved

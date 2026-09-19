@@ -10,6 +10,9 @@ Proximity rules are a board's own, in `<board>/checks/`.
 
 import math
 import re
+import sys
+
+import pytest
 
 
 def test_every_part_is_on_the_board(footprints, board_outline):
@@ -204,3 +207,51 @@ def test_every_polarised_part_marks_its_cathode_on_the_silkscreen(pcb_text, desi
         "Polarised parts whose silkscreen does not mark the cathode:\n" + "\n".join(problems)
         + "\nSee <board>/parts/*/LED*.md."
     )
+
+
+def test_the_board_has_mounting_holes_and_nothing_is_in_them(pcb_text, board_dir):
+    """
+    Every declared mounting hole is on the board, with clear copper around it.
+
+    The holes are circles on the edge layer, which is how an unplated hole is
+    milled - so they carry no net and DRC has no pad to measure clearance
+    from. That makes this the only thing standing between a hole and the track
+    someone routes through it later.
+
+    The margin is the hole's own radius plus a screw head's worth: an M3 washer
+    is 7 mm across, so 3.5 mm from the centre is what has to stay empty for the
+    fastener, never mind the drill.
+    """
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from mcu_pins import load_source
+
+    description = load_source(board_dir / "layout.py", f"{board_dir.name}_layout_holes")
+    holes = description.BOARD.get("mounting_holes", ())
+    if not holes:
+        pytest.skip(f"{board_dir.name} declares no mounting holes")
+
+    circles = {(round(float(x), 3), round(float(y), 3)) for x, y in
+               re.findall(r"\(gr_circle\s*\(center ([-\d.]+) ([-\d.]+)\)", pcb_text)}
+    missing = [(x, y) for x, y, _ in holes if (round(x, 3), round(y, 3)) not in circles]
+    assert not missing, f"mounting holes declared but not on the board: {missing}"
+
+    copper = [(float(a), float(b), float(c), float(d)) for a, b, c, d in
+              re.findall(r"\(segment\s*\(start ([-\d.]+) ([-\d.]+)\)\s*\(end ([-\d.]+) ([-\d.]+)\)",
+                         pcb_text)]
+    vias = [(float(a), float(b)) for a, b in
+            re.findall(r"\(via\s*\(at ([-\d.]+) ([-\d.]+)\)", pcb_text)]
+
+    fouled = []
+    for hx, hy, diameter in holes:
+        keep = max(3.5, diameter)
+        for x1, y1, x2, y2 in copper:
+            if min(math.dist((hx, hy), (x1, y1)), math.dist((hx, hy), (x2, y2))) < keep:
+                fouled.append(f"  a track ends {min(math.dist((hx,hy),(x1,y1)), math.dist((hx,hy),(x2,y2))):.1f} mm "
+                              f"from the hole at ({hx:g}, {hy:g})")
+                break
+        for vx, vy in vias:
+            if math.dist((hx, hy), (vx, vy)) < keep:
+                fouled.append(f"  a via is {math.dist((hx,hy),(vx,vy)):.1f} mm "
+                              f"from the hole at ({hx:g}, {hy:g})")
+                break
+    assert not fouled, "Mounting holes with copper in the way:\n" + "\n".join(sorted(set(fouled)))

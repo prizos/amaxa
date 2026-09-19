@@ -146,7 +146,7 @@ class Board:
 
 def strip_generated(text: str) -> str:
     """Remove every object a previous run wrote."""
-    for head in ("segment", "via", "zone", "gr_line", "gr_arc"):
+    for head in ("segment", "via", "zone", "gr_line", "gr_arc", "gr_circle"):
         while True:
             spans = [
                 (a, b)
@@ -574,6 +574,22 @@ def board_outline(spec: dict) -> list[str]:
             f"\t\t(stroke\n\t\t\t(width 0.05)\n\t\t\t(type solid)\n\t\t)\n"
             f'\t\t(layer "Edge.Cuts")\n'
             f'\t\t(uuid "{stable_uuid(TAG, "edge-arc", sx, sy, ex, ey)}")\n'
+            f"\t)"
+        )
+
+    # Mounting holes, as circles on the edge layer rather than as footprints.
+    # A circle on Edge.Cuts is milled, which is what an unplated hole is, and
+    # it keeps them out of the netlist, the bill of materials and the pick and
+    # place - none of which has anything to say about a hole.
+    for hx, hy, diameter in spec.get("mounting_holes", ()):
+        objects.append(
+            f"\t(gr_circle\n"
+            f"\t\t(center {hx:g} {hy:g})\n"
+            f"\t\t(end {hx + diameter / 2:g} {hy:g})\n"
+            f"\t\t(stroke\n\t\t\t(width 0.05)\n\t\t\t(type solid)\n\t\t)\n"
+            f"\t\t(fill none)\n"
+            f'\t\t(layer "Edge.Cuts")\n'
+            f'\t\t(uuid "{stable_uuid(TAG, "mount", hx, hy, diameter)}")\n'
             f"\t)"
         )
     return objects
