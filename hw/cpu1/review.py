@@ -131,9 +131,14 @@ for spacing, connector access and silkscreen legibility, and for nothing else.
 The parts still waiting on a person are listed in `checks/config.py`, and not
 one of them can be settled from a picture.
 """),
-    ("The silkscreen still overlaps", """
-Visible in the assembly plot, in the dense passive fields - the ADC network
-column and the comparator outputs. Known, and deferred with the rest of the
-finishing work.
+    ("The silkscreen is placed, not drawn", """
+Every reference designator's position is searched for rather than written
+down: above the part, then below, either side, the corners, taking the first
+place that clears every pad and every designator already placed. No two are
+printed over each other, which a check enforces.
+
+Sixteen still cross a neighbour's *outline*, and four of those are a part's own
+reference over its own outline. Those are untidy and still legible; a
+designator over another designator is not, and there are none.
 """),
 ]

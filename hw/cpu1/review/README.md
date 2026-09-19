@@ -11,7 +11,7 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
 | **Footprints** | 249 |
 | **Nets** | 191, of which 8 pending |
-| **Routing** | 1227 track segments, 552 vias, 3 zones |
+| **Routing** | 1227 track segments, 525 vias, 3 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -649,9 +649,14 @@ for spacing, connector access and silkscreen legibility, and for nothing else.
 The parts still waiting on a person are listed in `checks/config.py`, and not
 one of them can be settled from a picture.
 
-**The silkscreen still overlaps.** Visible in the assembly plot, in the dense passive fields - the ADC network
-column and the comparator outputs. Known, and deferred with the rest of the
-finishing work.
+**The silkscreen is placed, not drawn.** Every reference designator's position is searched for rather than written
+down: above the part, then below, either side, the corners, taking the first
+place that clears every pad and every designator already placed. No two are
+printed over each other, which a check enforces.
+
+Sixteen still cross a neighbour's *outline*, and four of those are a part's own
+reference over its own outline. Those are untidy and still legible; a
+designator over another designator is not, and there are none.
 
 ---
 
