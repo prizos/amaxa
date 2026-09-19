@@ -48,6 +48,8 @@ THVD1452*, SLLSEY3E (May 2018, revised May 2019).
 | THVD1450 signalling rate | 50 Mbps | §7.4 |
 | TCAN1044V bus ESD | ±8 kV powered contact, SAE J2962-2 per ISO 10650 | §6.3, `evidence/can_esd_ratings.png` |
 | THVD1450 bus ESD | ±18 kV contact, IEC 61000-4-2 | §7.3, `evidence/rs485_esd_ratings.png` |
+| TCAN1044V common mode | −12 to 12 V, normal and standby | §6.6, `evidence/can_common_mode.png` |
+| THVD1450 common mode | ±15 V, the range the thresholds hold over | §7.5, `evidence/rs485_common_mode.png` |
 
 **The signalling rate was wrong here once.** It was recorded as 500 kbps, which
 is the THVD1410's figure — the same datasheet covers four parts and the rate is
@@ -82,6 +84,35 @@ the same voltage, and TI's document never quotes IEC 61000-4-2 at all. Treating
 8 kV powered as meeting an 8 kV IEC requirement is the one assumption here, and
 it is written into `evidence/sources.json` beside the crop rather than left in
 the arithmetic.
+
+## Both cable grounds go straight to the board's, and that is the decision too
+
+Each connector's third pin is the cable's reference, and on both it is tied
+directly to board ground. Industrial practice on RS-485 — TI's own design
+guide included — puts 100 Ω in that path, so that two machines whose grounds
+sit a few volts apart drive a bounded current down the cable rather than
+whatever the wire will carry.
+
+**What makes the hard tie affordable is the margin in these two parts.** Each
+standard states the ground offset a receiver must tolerate: ISO 11898-2 asks
+CAN for −2 to +7 V, TIA-485 asks RS-485 for −7 to +12. These are specified to
+±12 V and ±15 V. The offset that would break either link is one no standard
+requires anybody to survive.
+
+**And a resistor sized to cover more than that cannot be an 0402.** Two 100 Ω,
+one at each end of the cable, carry ΔV/200 between them; at the ±15 V edge of
+the THVD1450's range that is a ground difference of 30 V and 560 mW in each
+resistor — nine times what an 0402 is rated for, and more than a 1206 with any
+derating. Sizing the part honestly means choosing the offset it is allowed to
+fail at, which is a property of the installation and not of this board.
+
+`test_a_cable_ground_tied_straight_to_the_boards_is_one_the_parts_can_afford`
+holds the margin rather than the decision: swap either transceiver for one that
+merely meets its standard and the justification is gone and the check fails.
+
+**What none of this covers** is a long cable between two machines on separate
+supplies, where the offset is bounded by nothing. The answer there is an
+isolated transceiver, not a resistor — a different part, and not in this plan.
 
 ## The orderable is the automotive part
 

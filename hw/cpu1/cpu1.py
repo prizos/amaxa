@@ -211,6 +211,13 @@ INTENT: dict[str, tuple[float, float]] = {
     # unpowered one; the two are not the same test, and that is recorded in
     # parts/SOIC8/evidence rather than smoothed over here.
     "bus.esd_level": (8e3, 18e3),
+    # What each bus standard requires a receiver to tolerate between the two
+    # ends' grounds: ISO 11898-2 for CAN, TIA-485 for RS-485. Both connectors
+    # carry the cable's reference straight onto this board's ground with no
+    # resistor in the way, which is only safe because both transceivers are
+    # specified well past these - and a check is what holds that true.
+    "can.common_mode_required": (-2.0, 7.0),
+    "rs485.common_mode_required": (-7.0, 12.0),
     # What IEEE 802.3 allows the link's clock to drift by, end to end. The
     # PHY's datasheet then splits it into tolerance, stability and ageing.
     "ethernet.clock_budget": (0.0, 50e-6),

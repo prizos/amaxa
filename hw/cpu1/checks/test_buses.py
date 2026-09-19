@@ -498,3 +498,47 @@ def test_nothing_unrated_for_a_strike_sits_on_a_bus_terminal(
                     f"against the {required / 1e3:g} kV a connector on the "
                     f"outside of a machine has to survive"
                 )
+
+
+def test_a_cable_ground_tied_straight_to_the_boards_is_one_the_parts_can_afford(
+    design, pads_of, spec, buses
+):
+    """
+    Neither connector's ground pin has a resistor in it, and that is a choice.
+
+    Industrial practice on RS-485 puts a hundred ohms between the cable's
+    reference and the board's, so that two machines whose grounds sit a few
+    volts apart drive a bounded current down the cable instead of whatever the
+    wire will carry. TI's own design guide says so. This board does not do it.
+
+    What makes that defensible is the transceivers. Each standard states the
+    ground offset a receiver must tolerate - ISO 11898-2 asks CAN for -2 to
+    7 V, TIA-485 asks RS-485 for -7 to 12 - and both parts here are specified
+    well past it, ±12 V and ±15 V. The offset that would break the link is
+    therefore one the standards do not require anybody to survive, and a
+    resistor sized to protect against more than that has to dissipate it: at
+    the ±15 V edge, a hundred ohms at each end of the cable is more than half
+    a watt in an 0402.
+
+    So the check is on the thing the choice rests on, not on the choice. Swap
+    either transceiver for one that only meets its standard and the margin
+    that justified the hard tie is gone, and this fails.
+
+    **What it does not cover**: a long cable between two machines on separate
+    supplies, where the offset is not bounded by anything. The answer there is
+    an isolated transceiver, not a resistor, and that is a different part and a
+    different plan.
+    """
+    for bus, (transceiver, header, _) in sorted(buses.items()):
+        grounds = [pad for pad, net in pads_of[header].items() if net == GROUND]
+        if not grounds:
+            continue    # a bus whose reference is not tied straight down
+        low, high = spec(bus, "common_mode_required")
+        part_low, _ = spec(transceiver, "common_mode_low")
+        _, part_high = spec(transceiver, "common_mode_high")
+        assert part_low < low and part_high > high, (
+            f"{bus}: its connector's ground pin goes straight to the board's, "
+            f"and {transceiver} tolerates {part_low:g} to {part_high:g} V of "
+            f"offset against the {low:g} to {high:g} V its standard requires - "
+            f"no margin, so the tie is no longer free"
+        )

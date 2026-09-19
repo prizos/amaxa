@@ -1,4 +1,15 @@
 {
+  "can_common_mode": {
+    "assumes": "nothing: the row names the parameter, the modes and both limits",
+    "crop": "147,800,1413,400",
+    "document": "TCAN1044-Q1, TCAN1044V-Q1, ZHCSIP6B, August 2019, revised October 2021",
+    "dpi": 200,
+    "page": 7,
+    "read": "2026-09-20",
+    "sha256": "77637416f54d96558d83286db364d58777b81b58176501f81809db0ca956089f",
+    "shows": "V_CM, common mode range, normal and standby modes: minus 12 to 12 V, against the minus 2 to 7 V ISO 11898-2 requires",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/61d3abbc4d53936543404dab3e63be01.pdf"
+  },
   "can_esd_ratings": {
     "assumes": "that a powered contact discharge under ISO 10650 is not weaker than the same voltage under IEC 61000-4-2, which this document does not quote at all",
     "crop": "160,1280,1400,307",
@@ -9,6 +20,17 @@
     "sha256": "77637416f54d96558d83286db364d58777b81b58176501f81809db0ca956089f",
     "shows": "Section 6.3: the CAN bus terminals are qualified to SAE J2962-2 per ISO 10650, plus/minus 8 kV powered contact discharge and plus/minus 15 kV powered air discharge",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/61d3abbc4d53936543404dab3e63be01.pdf"
+  },
+  "rs485_common_mode": {
+    "assumes": "nothing: the test condition column states the range the thresholds hold over",
+    "crop": "147,747,1413,587",
+    "document": "THVD1410, THVD1450, THVD1451, THVD1452, ZHCSI82E, May 2018, revised May 2019",
+    "dpi": 200,
+    "page": 10,
+    "read": "2026-09-20",
+    "sha256": "db9fc93709d880e670769f9e9a1b0313c6a8fca7fe9ee953d1225b2a29d19a0f",
+    "shows": "the receiver's thresholds are specified over a common-mode range of plus or minus 15 V, against the minus 7 to 12 V TIA-485 requires",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/9f2a8443c84023845b66c00fea3c3b36.pdf"
   },
   "rs485_esd_ratings": {
     "assumes": "nothing further: the standard, the pins and the number are all named in the table",

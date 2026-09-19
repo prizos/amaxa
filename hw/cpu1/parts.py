@@ -632,6 +632,10 @@ CAN_TRANSCEIVER = PartSpec(
         # part is powered and working, which is the harder of the two, so the
         # number is recorded and the standard is recorded beside it.
         "esd_contact_discharge": exact(8e3),
+        # V_CM, normal and standby modes, from the table in SOIC8/evidence.
+        # ISO 11898-2 asks for -2 to 7 V, so this is a wide part.
+        "common_mode_low": exact(-12.0),
+        "common_mode_high": exact(12.0),
     },
 )
 
@@ -647,11 +651,16 @@ RS485_TRANSCEIVER = PartSpec(
         "supply_voltage": between(3.0, 5.5),
         "bus_fault_voltage": exact(18.0),
         "data_rate_max": exact(50e6),
-        "esd_contact_discharge": exact(18e3),
         # Section 7.3, "ESD Ratings [IEC]", on the bus pins. TI's own summary
         # says this is what removes the need for external protection on the
         # bus, and at 18 kV contact it is more than twice what the connector
         # requirement asks for.
+        "esd_contact_discharge": exact(18e3),
+        # The range the receiver's thresholds are specified over. TIA-485 asks
+        # for -7 to 12 V; this part is one of TI's extended-range ones, which
+        # is what lets the connector's ground go straight to the board's.
+        "common_mode_low": exact(-15.0),
+        "common_mode_high": exact(15.0),
     },
 )
 
