@@ -3234,6 +3234,7 @@ PLANE_NETS = {"GND": 0.25, "3V3": 0.25, "5V": 0.3}
 STITCH_REACH = 0.85       # how far beyond a pad its via sits
 VIA_TO_PAD = 0.45         # via edge to pad edge, with clearance to spare
 VIA_TO_VIA = 0.95         # centre to centre, which hole-to-hole decides
+STITCH_PITCH = 14      # a twentieth of a wavelength at 500 MHz in FR4
 SHARE_REACH = 1.8         # how far a pad will reach to use a via already there
 
 
@@ -3567,6 +3568,46 @@ def _plane_stitches() -> None:
                 stranded.append(f"{address}:{number} ({net})")
     if stranded:
         sys.exit("no room for a plane via beside: " + ", ".join(stranded))
+
+    # A ring of ground vias round the edge, stitching the two ground planes to
+    # each other where the board stops.
+    #
+    # Without it the GND and 3V3 planes are a parallel-plate cavity 129 by 109
+    # millimetres with open edges, and its half-wave resonances - about 540 MHz
+    # along and 640 MHz across, in FR4 - sit inside the 30 MHz to 1 GHz window
+    # CISPR 32 measures. Every switching current that flows in a plane drives
+    # it. Before this the board had twelve ground vias within 10 mm of the
+    # plane's edge and all twelve were on the west side, by the PHY: one via
+    # per hundred and nineteen millimetres of perimeter, against the quarter
+    # wavelength that decides the spacing.
+    #
+    # The pitch is a twentieth of a wavelength at 500 MHz in FR4, which is the
+    # usual figure and works out near fourteen millimetres. Candidates that
+    # land on something are skipped rather than nudged: the ring is a
+    # statistical measure, not a net, and a gap in it costs a little of the
+    # effect where a part already fills the space.
+    inset = 1.5
+    half_w, half_h = BOARD["size"][0] / 2 - inset, BOARD["size"][1] / 2 - inset
+    corner = BOARD["corner_radius"]
+    edge: list[tuple[float, float]] = []
+    for along in range(0, int(2 * (half_w - corner)) + 1, STITCH_PITCH):
+        x = -half_w + corner + along
+        edge += [(x, -half_h), (x, half_h)]
+    for along in range(0, int(2 * (half_h - corner)) + 1, STITCH_PITCH):
+        y = -half_h + corner + along
+        edge += [(-half_w, y), (half_w, y)]
+
+    x0, y0, x1, y1 = JACK_KEEPOUT
+    for at in edge:
+        if x0 <= at[0] <= x1 and y0 <= at[1] <= y1:
+            continue                      # the jack's cable end: no copper here
+        if not _inside(_pour_outline(), at):
+            continue                      # outside the pour is a via to nothing
+        if not clear(at, at, 0.0, 0.3):
+            continue
+        VIAS.append((None, at, "GND", *VIA, SUPPLY))
+        vias.append(at)
+        placed.setdefault("GND", []).append(at)
 
 
 

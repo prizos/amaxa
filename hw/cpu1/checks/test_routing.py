@@ -557,3 +557,54 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
         f"({SEPARATION_IN_HEIGHTS} x the {height:g} mm prepreg) to a foreign track:\n"
         + "\n".join(sorted(set(close)))
     )
+
+
+def test_the_plane_edges_are_stitched(vias, board_dir):
+    """
+    No long stretch of board edge without a ground via behind it.
+
+    The two ground planes and the supply plane between them are parallel
+    plates with open edges, and a cavity 129 by 109 mm resonates at about
+    540 MHz along and 640 MHz across in FR4 - inside the window CISPR 32
+    measures, and driven by every switching current that flows in a plane.
+    Stitching the grounds to each other round the perimeter is what damps it
+    and what stops the edge radiating.
+
+    This board had twelve ground vias within 10 mm of the plane's edge and
+    **all twelve were on the west side**, by the PHY: one via per hundred and
+    nineteen millimetres of perimeter. The ring the layout now generates is on
+    a fourteen-millimetre pitch, a twentieth of a wavelength at 500 MHz, and
+    skips candidates that land on something - so this asks that no stretch of
+    edge is bare, not that every intended via exists.
+    """
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from mcu_pins import load_source
+
+    description = load_source(board_dir / "layout.py", "cpu1_layout_stitching")
+    width, height = description.BOARD["size"]
+    pitch = description.STITCH_PITCH
+    keepout = description.JACK_KEEPOUT
+
+    grounds = [(x, y) for x, y, net in vias if net == GROUND]
+    assert grounds, "no ground vias at all"
+
+    bare = []
+    for along in range(0, int(width) + 1, 5):
+        for edge_y in (-height / 2, height / 2):
+            here = (-width / 2 + along, edge_y)
+            if keepout[0] <= here[0] <= keepout[2] and keepout[1] <= here[1] <= keepout[3]:
+                continue
+            if min(math.dist(here, g) for g in grounds) > 1.5 * pitch:
+                bare.append(f"  ({here[0]:.0f}, {here[1]:.0f})")
+    for along in range(0, int(height) + 1, 5):
+        for edge_x in (-width / 2, width / 2):
+            here = (edge_x, -height / 2 + along)
+            if keepout[0] <= here[0] <= keepout[2] and keepout[1] <= here[1] <= keepout[3]:
+                continue
+            if min(math.dist(here, g) for g in grounds) > 1.5 * pitch:
+                bare.append(f"  ({here[0]:.0f}, {here[1]:.0f})")
+
+    assert not bare, (
+        f"Board edge more than {1.5 * pitch:.0f} mm from a ground via:\n"
+        + "\n".join(sorted(set(bare)))
+    )
