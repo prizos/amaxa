@@ -90,11 +90,32 @@ neighbours sitting beside it in the same library.
 **Footprint.** KiCad stock
 `Package_DFN_QFN:QFN-24-1EP_4x4mm_P0.5mm_EP2.5x2.5mm`, unmodified.
 
-## Needs a human eye
+## The exposed pad
 
-The **exposed pad's thermal vias and solder mask**. The footprint chosen has no
-thermal vias in it, and the datasheet's package outline gives the pad's size
-but not Microchip's recommended via pattern or paste aperture — that lives in
-an application note this has not read. The pad is the part's only ground
-connection, so getting it wrong is not a thermal problem, it is an electrical
-one.
+![24-QFN package outline](evidence/package_outline.png)
+
+LAN8742A/LAN8742Ai Revision 1.1, Chapter 6. Body 4.00, terminal pitch 0.50 BSC,
+exposed pad **2.40 / 2.50 / 2.60**, pin-to-pad clearance 0.25 minimum. KiCad's
+`EP2.5x2.5` is the nominal exactly, and the body and pitch match.
+
+**That chapter is the package outline and nothing else.** Microchip publish no
+recommended land pattern for this part, no via pattern and no paste aperture —
+the earlier note was right about that, and fetching the document confirms it
+rather than leaving it open. So the two things the outline does not settle are
+decisions, recorded here as decisions:
+
+- **Four vias in the pad.** The pad is the part's only ground connection and
+  its only path for heat, and the stitching generator gives any pad exactly
+  one. Four is what TI draw inside the comparable PowerPAD on the LM5164, the
+  one manufacturer on this board who publishes a figure; see
+  [`../SO8EP/evidence/land_pattern.png`](../SO8EP/evidence/land_pattern.png).
+  `test_every_exposed_pad_has_its_thermal_vias` holds every `-1EP` footprint on
+  the board to it, and it is how the single via here was found.
+- **The paste aperture is KiCad's**, and it is already segmented: four
+  1.01 × 1.01 mm windows at ±0.625, which is 4.08 mm² of a 6.25 mm² pad, or
+  65 % — inside the 50–80 % band IPC-7093 asks for, and low enough that the
+  part will not float. The four vias sit in the gaps *between* those windows
+  rather than under them, so none of them wicks paste away from the joint.
+
+What remains unconfirmed is only whether Microchip would ask for something
+different, which no document reachable from here says.

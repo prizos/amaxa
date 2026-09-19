@@ -1,0 +1,13 @@
+{
+  "factory_default": {
+    "assumes": "",
+    "crop": "80,640,1120,420",
+    "document": "Microchip MCP4728, DS22187E (2010)",
+    "dpi": 150,
+    "page": 24,
+    "read": "2026-09-19",
+    "sha256": "7e6515c45a02ffe4ad7506f3347cce7714cdd56659ff2fb22b858fc0472f381e",
+    "shows": "Table 4-2, EEPROM memory map and factory default settings: every channel ships with D11..D0 = 0, VREF = 1 (internal 2.048 V), PD = 00, gain = 1, and I2C address bits 000",
+    "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/22187E.pdf"
+  }
+}

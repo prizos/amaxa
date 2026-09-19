@@ -431,3 +431,48 @@ def test_a_comparator_pulls_the_trip_bus_to_a_valid_low(design, pad_net, compara
             f"{address} asserting leaves the bus at {reached:.2f} V against a "
             f"{threshold:g} V threshold"
         )
+
+
+# Microchip's MCP4728 Table 3-1, Pin Function Table, read as text from
+# DS22187E. `parts/MSOP10/evidence/sources.json` identifies the document.
+# Pin 5, RDY/BSY, is deliberately absent: the datasheet says to leave it
+# floating when it is not used, and this board does not use it.
+DAC_PINS = {
+    "1": "3V3",          # VDD
+    "2": "DAC_SCL",      # I2C serial clock, open drain
+    "3": "DAC_SDA",      # I2C serial data, open drain
+    "4": "GND",          # LDAC, held low so an output follows its register
+    "10": "GND",         # VSS
+}
+
+
+def test_the_threshold_dac_is_wired_the_way_its_pin_table_says(design, pad_net):
+    """
+    Every supply and control pin of the threshold DAC is on the right net.
+
+    The review note said this part's pinout came from KiCad's symbol and
+    LCSC's data because the datasheet could not be read here. It can: the pin
+    table is text. So the netlist is asserted against Microchip's own table,
+    and the four analog outputs are asserted to be four distinct nets rather
+    than named here - which channel drives which threshold is this board's
+    choice, but two thresholds sharing a channel would be a wiring mistake.
+
+    Pin 5 is checked by its absence: the datasheet says to float RDY/BSY when
+    it is unused, and a board that ties it anywhere has misread that.
+    """
+    wrong = [f"  pin {pin}: on {pad_net.get(('trip.dac', pin))!r}, "
+             f"Microchip's table says {expected!r}"
+             for pin, expected in sorted(DAC_PINS.items())
+             if pad_net.get(("trip.dac", pin)) != expected]
+
+    if pad_net.get(("trip.dac", "5")) is not None:
+        wrong.append("  pin 5 (RDY/BSY): connected, and the datasheet says to leave it floating")
+
+    outputs = [pad_net.get(("trip.dac", pin)) for pin in ("6", "7", "8", "9")]
+    if len(set(outputs)) != len(outputs):
+        wrong.append(f"  the four outputs are not four distinct nets: {outputs}")
+
+    assert not wrong, (
+        "Threshold DAC pins:\n" + "\n".join(wrong)
+        + "\nSee parts/MSOP10/MSOP10.md."
+    )

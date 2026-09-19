@@ -1,0 +1,13 @@
+{
+  "package_outline": {
+    "assumes": "nothing about the land pattern: Chapter 6 is the package outline only, and Microchip publish no recommended footprint, via pattern or paste aperture for this part",
+    "crop": "140,280,880,800",
+    "document": "SMSC/Microchip LAN8742A/LAN8742Ai, Revision 1.1 (05-21-13), Chapter 6 Package Outline",
+    "dpi": 130,
+    "page": 128,
+    "read": "2026-09-19",
+    "sha256": "7f3c0c1f27c20293837f8d3be0d92f0abe62258dc41e7ca1f04802e859276d8f",
+    "shows": "24-QFN outline: body 4.00, terminal pitch 0.50 BSC, exposed pad D2/E2 2.40/2.50/2.60, pin-to-pad clearance k 0.25 min",
+    "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/8742a.pdf"
+  }
+}

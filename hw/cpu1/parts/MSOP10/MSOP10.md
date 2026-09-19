@@ -35,19 +35,29 @@ is what makes an unprogrammed board trip as it powers up. **Firmware must never
 write the EEPROM**, only the input registers, or the board's power-up state
 changes silently and permanently.
 
-**Needs a human eye.** The datasheet for this part is a scanned-font PDF that no
-text extraction here could read, so the factory default and the EEPROM write
-sequence were not confirmed from it. Read §4.1 and §5.5 before ordering. The
-safety argument does not rest on it — NRST presets the trip latch regardless —
-but the second line of defence does.
+**Confirmed from Microchip's own table.**
+
+![Table 4-2, factory default settings](evidence/factory_default.png)
+
+DS22187E, Table 4-2: every channel ships with `D11..D0 = 0`, `VREF = 1`
+(internal 2.048 V), `PD = 00`, gain 1, and I²C address bits `000`. Code zero on
+all four outputs is exactly the power-up state the safety argument wants, and
+it is now a picture rather than a hope.
+
+The earlier note said this datasheet was "a scanned-font PDF that no text
+extraction here could read". It is not: `pdftotext` reads the whole document,
+including this table and the pin table below. What was missing was a tool, not
+a readable document.
 
 ## Pin mapping
 
 Pin 1 VDD, 2 SCL, 3 SDA, 4 LDAC, 5 RDY/BSY, 6–9 VOUTA–VOUTD, 10 VSS.
 
-Taken from **two independent sources that agree**: KiCad's `Analog_DAC:MCP4728`
-symbol, and LCSC's own symbol data for C478093. Neither is the manufacturer's
-drawing, which is the same gap as the factory default above.
+That is Microchip's own Table 3-1, *Pin Function Table*, and it agrees with the
+two sources this used to rest on — KiCad's `Analog_DAC:MCP4728` symbol and
+LCSC's symbol data for C478093. `test_the_threshold_dac_is_wired_the_way_its_pin_table_says`
+now asserts the netlist against it, including pin 5 by its *absence*: the
+datasheet says to float RDY/BSY when it is unused, and this board does.
 
 LDAC is tied low, so a write reaches the output when it lands; nothing here
 needs four thresholds to change at one instant. RDY/BSY reports an EEPROM write

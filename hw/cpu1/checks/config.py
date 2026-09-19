@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 159
+EXPECTED_CHECKS = 160
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -100,6 +100,8 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
 # test_a_confirmed_review_left_its_evidence_behind makes that checkable.
 CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOT223": ["pinout", "land_pattern"],
+    "MSOP10": ["factory_default"],
+    "QFN24": ["package_outline"],
     "SO8EP": ["land_pattern"],
     "TC2030": ["pad_signals"],
 }
@@ -114,23 +116,12 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
     "XTAL_MC306": "that the crystal is between pads 1 and 4, as KiCad's footprint has it",
     "LED0603": "pad 1 is the cathode, from KiCad's convention not KENTO's drawing",
     "SMB": "pad 1 is the cathode, the banded end",
-    "MSOP10": (
-        "the threshold DAC's factory-default EEPROM value, which is what makes "
-        "an unprogrammed board trip as it powers up. Its datasheet is a "
-        "scanned-font PDF nothing here could read, and the pinout came from two "
-        "other sources instead"
-    ),
     "SOT23": (
         "the BAT54A's common anode on pin 3, from its marking diagram rather "
         "than a package drawing. A common-cathode part in its place would tie "
         "both fault lines together"
     ),
     "SOD123": "pad 1 is the cathode, from the package drawing not the maker's",
-    "QFN24": (
-        "the exposed pad's thermal vias and paste aperture. The datasheet's "
-        "package outline gives the pad's size but not Microchip's recommended "
-        "via pattern, and that pad is the PHY's only ground connection"
-    ),
     "XTAL5032_4P": (
         "the crystal's ESR and ppm figures, which come from LCSC's parametric "
         "data rather than a datasheet nobody here could fetch. They are the "
