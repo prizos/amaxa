@@ -154,9 +154,20 @@ build: $(PY) ## Turn the design source into KiCad files for BOARD
 # by deleting elec/ - which is where the generated rules live. Without this, a
 # kicad-cli run that does not go through `make drc` silently checks the board
 # against no custom rules at all and reports a clean board.
+# The fill is retried once because KiCad's own zone filler segfaults on this
+# board perhaps one run in four, and only on 9.0.9 - the version CI installs
+# from the PPA. It has never done it on the 9.0.8 this repository's `make
+# versions` reports, across hundreds of runs, so it cannot be reproduced or
+# bisected here. A crash happens inside ZONE_FILLER::Fill, before SaveBoard,
+# so the board file is untouched and a retry starts from the same input; if
+# the second attempt crashes too, the build fails as it should. The retry says
+# so on stdout rather than hiding it, because a fill that starts needing two
+# goes every time is a different problem from one that needs two occasionally.
 layout: build $(DRU) ## Apply the board's placement and routing, then fill the plane
 	@python3 tools/layout.py $(BOARD)
-	@python3 tools/fill_zones.py $(LAYOUT_DIR)/default.kicad_pcb
+	@python3 tools/fill_zones.py $(LAYOUT_DIR)/default.kicad_pcb \
+	    || { echo "zone fill crashed; retrying once (see Makefile)"; \
+	         python3 tools/fill_zones.py $(LAYOUT_DIR)/default.kicad_pcb; }
 
 # hw/README.md claims a build reaches nothing over the network. This is what
 # makes that a claim rather than a memory: the design source is run with every

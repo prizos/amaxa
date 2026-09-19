@@ -81,6 +81,13 @@ package, points along it, which way to turn a two-pad part to face it — so
 decoupling, stitching and fan-out are generated from the netlist and the
 footprint rather than typed as coordinates. `cpu1` is the example.
 
+**The zone fill is retried once.** KiCad's zone filler segfaults on cpu1
+roughly one run in four on 9.0.9, the version CI installs, and never on the
+9.0.8 this repository builds with - so it cannot be reproduced or bisected
+here. The crash is inside the fill, before the board is saved, so a retry
+starts from the same input and the build still fails if the second attempt
+crashes too. `hw/Makefile`'s `layout` target says so on stdout.
+
 **Board layers** come from `layout.py`'s `BOARD`: `copper_layers`, and for more
 than two, a `stack` of the dielectrics between them, taken from the fab's
 published stackup. Every route, via and plane is refused on a layer the board
