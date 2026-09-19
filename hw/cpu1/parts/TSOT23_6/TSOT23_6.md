@@ -61,3 +61,28 @@ VFB 4, EN 5, VBST 6 — match the datasheet's Pin Functions table exactly, which
 was read in full. No doubt here.
 
 **Footprint.** KiCad stock `Package_TO_SOT_SMD:TSOT-23-6`, unmodified.
+
+## The bootstrap loop, and why it is the size it is
+
+Measured on the board: the bootstrap capacitor's loop encloses **13.1 mm²**,
+against **2.4 mm²** for the 5 V buck's. That loop carries the high-side
+gate-drive current, so its inductance is bootstrap sag at turn-on and the
+ringing after it.
+
+The difference is the package, not the placement. On this part VBST is pin 6
+and SW is pin 2 — diagonally opposite, with the body between them — where the
+5 V buck's SO-8 has them adjacent, so its capacitor sits directly across the
+two pins and needs no detour at all.
+
+Three tighter arrangements were tried and each hits the same wall: **pins 1,
+2 and 3 share a column**, so the switch node cannot reach the top of the
+package without passing the ground pad *and* the plane via that pad needs.
+Going east first, north, then back west over the top — which is what the
+layout does — is the shortest path that does not cross either. Dropping to
+the back layer under the package shortens it only if the outgoing and
+returning runs sit on top of each other, which the pin positions do not allow
+either, and it would add two vias to a gate-drive path.
+
+So this is recorded rather than fixed. If it ever matters, the fix is the
+`TPS563200` in the same family and the same footprint with a different pin
+order, or a part whose VBST and SW are neighbours.

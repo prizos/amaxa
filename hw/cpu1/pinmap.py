@@ -112,6 +112,18 @@ PINS = [
     Pin("PF5", "ADC3_INP4", "SLOW1"),
     Pin("PF3", "ADC3_INP5", "SLOW2"),
     Pin("PC0", "ADC3_INP10", "SLOW3"),
+    # The one housekeeping channel not on ADC3, and a firmware constraint
+    # rather than a free choice. Both declared simultaneous pairs have ADC1 as
+    # their master, so ADC1's regular sequence holds FAST1, FAST4 and this,
+    # while ADC2's holds FAST2 and FAST5 - and in dual regular simultaneous
+    # mode the two sequences step together, so a third rank in the master has
+    # no partner. **SLOW4 does not belong in the simultaneous group**: put it
+    # in ADC1's injected sequence, or convert it separately.
+    #
+    # Moving it to ADC3 with the other three would remove the constraint -
+    # PF6 is ADC3_INP8 and unused - but the west edge's analog fan assigns
+    # every net a back-layer lane and there is no free one at that pin's
+    # height, so it would cost a re-plan of the fan rather than a pin swap.
     Pin("PA3", "ADC1_INP15", "SLOW4"),
     Pin("PF10", "ADC3_INP6", "BOARD_ID1", note="resistor divider on the power board"),
     Pin("PF4", "ADC3_INP9", "BOARD_ID2"),
