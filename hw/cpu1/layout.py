@@ -2613,6 +2613,7 @@ def _ethernet() -> None:
     _ethernet_local()
     _ethernet_north()
     _ethernet_west()
+    _gate_enable()
 
 
 def _ethernet_local() -> None:
@@ -2658,6 +2659,38 @@ def _ethernet_local() -> None:
         (B, [(-57.3, -15.2), (-62.0, -9.8)]),
         (F, [(-62.0, -9.8), "eth.xtal.c_in:1", "eth.xtal.crystal:1"]),
     ])
+
+
+# The buffer enable, from the package's north edge to the safety chain in the
+# south-east corner. Its pin is on the wrong edge for where it goes and the
+# interior is held by the relay columns, so it does what the Ethernet transmit
+# lines do: it goes inward, drops through inside the pin ring, and crosses the
+# die on the back, where the only things in the way are the static band's own
+# legs - and those stop short of this column.
+GATE_ENABLE_PATH = (
+    # It drops as far east as the relay columns let it: a layer change under
+    # the middle of the package is ten millimetres from the nearest capacitor
+    # that ties the planes, and the return current would have to go round.
+    (F, [(1.75, -9.3), (1.75, -8.9), (3.2, -7.0), (3.2, -1.0)]),
+    (B, [(3.2, -1.0), (1.5, 1.0), (1.5, 13.6)]),
+    # Over the one back-layer line that crosses the whole width below the
+    # package, the A-phase low-side gate drive. West of the PWM fan, because
+    # that fan is eight columns at half a millimetre and leaves no gap a via
+    # fits in: this is the last column before it starts.
+    (F, [(1.5, 13.6), (1.5, 14.8)]),
+    # South of every one of the eight lines the buffer's other inputs arrive
+    # on - its enable is the pin below all of them, so the line that feeds it
+    # never has to cross one.
+    (B, [(1.5, 14.8), (1.5, 20.5), (24.3, 20.5)]),
+    (F, [(24.3, 20.5), "safety.buffer1:9"]),
+)
+
+
+def _gate_enable() -> None:
+    net = "GATE_ENABLE"
+    pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+    first = (F, [f"{MCU}:{pin}", *GATE_ENABLE_PATH[0][1]])
+    path(net, _width_for(net, SIGNAL), [first, *GATE_ENABLE_PATH[1:]])
 
 
 # --- the RMII, from the north edge to the PHY --------------------------------

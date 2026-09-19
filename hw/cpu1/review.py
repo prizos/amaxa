@@ -75,11 +75,12 @@ BLOCKS: list[tuple[str, tuple[str, ...], str]] = [
 # What to say about each plotted layer. Keyed by the file's stem.
 LAYERS: dict[str, str] = {
     "F_Cu": (
-        "The component side. Dense around the LQFP-144's escapes and the two "
-        "regulators; sparse above them, where the safety chain, the "
-        "comparators and the buses are placed but not yet joined up. The two "
-        "pairs in the top-left corner are the Ethernet link, and the only "
-        "tracks on this board drawn to an impedance rather than a width."
+        "The component side, and most of the board's copper. Dense around the "
+        "LQFP-144's escapes, the two regulators and the PWM fan; the long "
+        "parallel runs across the middle are the analog inputs on their way "
+        "from the header to the comparators. The two pairs in the top-left "
+        "corner are the Ethernet link, and the only tracks on this board "
+        "drawn to an impedance rather than a width."
     ),
     "In1_Cu": (
         "One solid ground plane, notched at the top-left corner where the "
@@ -93,9 +94,10 @@ LAYERS: dict[str, str] = {
         "the two share a layer without a hand-drawn boundary between them."
     ),
     "B_Cu": (
-        "The solder side, nearly empty. Placement is single-sided for this "
-        "spin, so the back carries only what had to change layer to escape "
-        "the package."
+        "The solder side. Placement is single-sided for this spin, so the "
+        "back carries only what had to change layer: the analog sense lines "
+        "crossing the input bank, the static signals running under the "
+        "package, and the six RMII lines taking the long way round it."
     ),
     "assembly": (
         "Silkscreen over the fabrication layer: every designator, every "
@@ -111,17 +113,14 @@ RENDERS = {
 
 # Said before anyone draws a conclusion from a picture of this board.
 CAVEATS = [
-    ("The copper is unfinished on purpose", """
-`board.mk` says `ROUTING := incomplete`. The MCU core and the power block are
-routed; everything from the safety chain onward is placed only, and its
-connections are left for M8, when the whole board is in view. DRC runs in the
-mode that still refuses anything drawn wrongly but does not demand what has not
-been drawn at all - so a clean DRC here does not mean a finished board, and the
-unrouted count above is the honest number.
+    ("The copper is finished, the board is not", """
+`board.mk` says `ROUTING := complete`, and DRC now runs in the mode that
+demands every connection: it reports no unconnected items and no violations.
+Every net on this board is drawn.
 
-Every pad that belongs to a plane now reaches one: that part is generated, not
-drawn, and it is what the via count above is mostly made of. What is left is
-signal routing.
+That is a statement about copper and nothing else. The parts still waiting on a
+person are listed in `checks/config.py`, the silkscreen still overlaps in the
+dense passive fields, and nothing here has been built.
 """),
     ("The renders confirm nothing electrical", """
 No 3D model library is installed in the environment these were generated in, so
