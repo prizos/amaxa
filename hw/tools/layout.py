@@ -354,8 +354,16 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
 
     A pad of `None` is a free via, with no stub: where a route changes layer, or
     where a track already reaches the via's position.
+
+    Two vias asked for at the same point on the same net are one hole. That
+    happens whenever a route branches at a layer change - each branch asks for
+    the via it needs and neither knows about the other - and the board file
+    happily took both. The drill file then carried the same coordinate twice,
+    which a fab either merges silently or queries. The stub is not
+    deduplicated with it: two pads may legitimately reach the same via.
     """
     objects = []
+    drilled: set = set()
     top, bottom = board.copper[0], board.copper[-1]
     for entry in vias:
         pad_ref, where, net_name, size, drill, *rest = entry
@@ -379,6 +387,9 @@ def stitch(board: Board, footprints: dict, placement: dict, vias: list) -> list[
                 f'\t\t(uuid "{stable_uuid(TAG, "stub", pad_ref, via_x, via_y)}")\n'
                 f'\t)'
             )
+        if (round(via_x, 4), round(via_y, 4), net) in drilled:
+            continue
+        drilled.add((round(via_x, 4), round(via_y, 4), net))
         objects.append(
             f'\t(via\n'
             f'\t\t(at {via_x:g} {via_y:g})\n'

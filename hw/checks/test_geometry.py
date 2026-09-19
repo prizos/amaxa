@@ -63,3 +63,29 @@ def test_the_board_is_actually_routed(pcb_text):
         "The ground pour has an outline but no copper in it. kicad-cli cannot "
         "fill zones; `make -C hw layout` runs tools/fill_zones.py, which can."
     )
+
+
+def test_no_two_vias_share_a_hole(pcb_text):
+    """
+    Every via is a hole a drill visits once.
+
+    Two vias at the same coordinate are one hole asked for twice. The board
+    file takes both, the plot looks right, and the drill file carries the same
+    coordinate twice - which a fab will either merge silently or query. The
+    generator produced twenty-seven of them on cpu1, all from routes that
+    branch at a layer change: each branch asked for the via it needed and
+    neither knew about the other.
+
+    Read off the finished board rather than off the generator's list, because
+    the generator is the thing being checked.
+    """
+    import re
+    from collections import Counter
+
+    places = Counter(
+        (round(float(x), 4), round(float(y), 4))
+        for block in re.findall(r"\n\t\(via\n(?:\t\t[^\n]*\n)+\t\)", pcb_text)
+        for x, y in re.findall(r"\(at ([-\d.]+) ([-\d.]+)\)", block)
+    )
+    doubled = [f"  ({x:g}, {y:g}): {n} vias" for (x, y), n in sorted(places.items()) if n > 1]
+    assert not doubled, "Vias sharing a hole:\n" + "\n".join(doubled)
