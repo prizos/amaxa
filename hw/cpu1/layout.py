@@ -264,7 +264,9 @@ def _crystals() -> None:
     ROUTES.append(("LSE_IN", 0.2, F, ["core.lse.crystal:1", "core.lse.c_in:1"]))
     ROUTES.append(("LSE_OUT", 0.2, F, ["core.lse.crystal:4", "core.lse.c_out:1"]))
     VIAS.append(("core.lse.c_in:2", (-16.25, -17.5), "GND", *VIA, SUPPLY))
-    VIAS.append(("core.lse.c_out:2", (-17.3, -7.1), "GND", *VIA, SUPPLY))
+    # North along the pad's own line, not west of it: west of it is the one
+    # column on this side of the board with room for a signal to pass.
+    VIAS.append(("core.lse.c_out:2", (-16.25, -6.6), "GND", *VIA, SUPPLY))
 
 
 def path(net: str, width: float, legs: list) -> None:
@@ -1226,11 +1228,13 @@ def _last_few() -> None:
     # supply track now runs close enough below to put it off.
     VIAS.append(("can.decoupling_vcc:2", (-3.02, -21.95), "GND", *VIA, SUPPLY))
     width = _width_for("5V", SIGNAL)
-    # The CAN transceiver's 5 V does not reach the island beside the regulator,
-    # so it goes north to the lane that feeds the comparators instead.
+    # The CAN transceiver's 5 V does not reach the island beside the
+    # regulator, so it goes north to the spine that carries 5 V out of the
+    # island along the top of the board - east of the comparators' own lane,
+    # which stops where the comparators do.
     ROUTES.append(("5V", _width_for("5V", SIGNAL), B,
                    [CAN_SUPPLY[1], (5.9, CAN_SUPPLY[1][1]),
-                    (5.9, TRIP_SUPPLY_LANE)]))
+                    (5.9, TRIP_SPINE_Y)]))
     out, down, west, up, pad = CAN_SUPPLY
     path("5V", width, [
         (F, ["can.transceiver:3", out]),
@@ -1315,6 +1319,58 @@ def _dac_i2c() -> None:
         for layer, points in legs[:-1]:
             VIAS.append((None, points[-1], net, *VIA))
         ROUTES.append((net, width, F, [legs[-1][1][-1], *I2C_PULLUPS[net]]))
+
+
+# The reference out to the analog connector. It leaves the connector's east
+# column like a sense line does - half a row out and half a row along - and
+# then runs east under the input networks on the back, which is empty at that
+# height, and south round the west end of the fan's own lanes.
+VREF_OUT = ((-40.4, 3.4), (-39.0, 4.67))
+VREF_LANE, VREF_COLUMN, VREF_ROW = 7.21, -39.0, 17.0
+VREF_TURN, VREF_RISE = -28.0, -16.02
+
+
+def _vref_out() -> None:
+    net = "VREF+"
+    width = _width_for(net, SIGNAL)
+    path(net, width, [
+        (F, ["header.analog:22", *VREF_OUT]),
+        (B, [VREF_OUT[-1], (VREF_COLUMN, VREF_LANE), (VREF_TURN, VREF_LANE),
+             (VREF_TURN, VREF_ROW), (VREF_RISE, VREF_ROW)]),
+        (F, [(VREF_RISE, VREF_ROW), "core.vref.c1u:1"]),
+    ])
+    VIAS.append((None, VREF_OUT[-1], net, *VIA))
+    VIAS.append((None, (VREF_RISE, VREF_ROW), net, *VIA))
+
+
+# The spare DAC output's test network. Its pin is on the south edge in the
+# middle of the analog fan's own escapes, so it goes inward and out again to
+# the west, where the network now sits.
+DAC_TEST_INWARD, GATE_ENABLE_INWARD = (-7.25, 10.0), (5.5, 7.7)
+DAC_TEST_PATH = (
+    (B, [(-10.0, 10.0)]),
+    (F, [(-11.2, 10.0)]),                           # over VDDA's own corner
+    (B, [(-14.5, 10.0), (-14.5, 9.6)]),
+    (F, ["adc.dac_test.series:1"]),
+)
+
+
+def _across_the_package() -> None:
+    for net, inward, legs in (("DAC_TEST", DAC_TEST_INWARD, DAC_TEST_PATH),):
+        width = _width_for(net, SIGNAL)
+        pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+        here: list = [f"{MCU}:{pin}", inward]
+        steps = []
+        if legs[0][0] is not F:
+            steps.append((F, here))
+            VIAS.append((None, inward, net, *VIA))
+            here = [inward]
+        for layer, points in legs:
+            steps.append((layer, here + list(points)))
+            here = [points[-1]]
+        path(net, width, steps)
+        for layer, points in legs[:-1]:
+            VIAS.append((None, points[-1], net, *VIA))
 
 
 # The lane field between each buffer and the slot column.
@@ -1691,8 +1747,12 @@ def _adc_inputs() -> None:
         LABELS[f"{cell}.shunt"] = (0.0, -1.3)
 
     # The spare DAC output's own network, beside the DAC it comes from.
-    PLACEMENT["adc.dac_test.series"] = (-14.0, -19.0, 0)
-    PLACEMENT["tp_dac_test"] = (-17.0, -19.0)
+    # Beside the pin that drives it, on the strip west of the package, rather
+    # than beside the DAC it has nothing to do with. Its pin is on the south
+    # edge in the middle of the analog fan's own escapes, and from there this
+    # is the only direction that is not through them.
+    PLACEMENT["adc.dac_test.series"] = (-13.0, 9.6, 0)
+    PLACEMENT["tp_dac_test"] = (-16.5, 10.5)
     LABELS["adc.dac_test.series"] = (0.0, -1.3)
     LABELS["tp_dac_test"] = (0.0, -2.0)
 
@@ -2142,7 +2202,7 @@ def _safety_signals() -> None:
 def _dac_test_points() -> None:
     width = _width_for("DAC_TEST_OUT", SIGNAL)
     ROUTES.append(("DAC_TEST_OUT", width, F, [
-        "adc.dac_test.series:2", (-13.49, -20.6), (-17.0, -20.6), "tp_dac_test:1",
+        "adc.dac_test.series:2", (-12.0, 10.6), (-15.3, 10.5), "tp_dac_test:1",
     ]))
     ROUTES.append(("DAC_SPARE", _width_for("DAC_SPARE", SIGNAL), F, [
         "tp_dac_spare:1", (-12.2, -19.6), (-12.2, -23.0),
@@ -3013,6 +3073,8 @@ _static_routes()
 _static_mcu()
 _last_few()
 _dac_i2c()
+_vref_out()
+_across_the_package()
 _field_buses()
 _field_bus_routes()
 _field_bus_mcu()
