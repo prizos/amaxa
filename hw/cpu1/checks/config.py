@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 155
+EXPECTED_CHECKS = 157
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -91,6 +91,15 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
 
 # Part libraries whose review note still says "Needs a human eye": things no
 # machine here can confirm against a manufacturer's drawing.
+# Claims read out of a manufacturer's own drawing, with the crop that settles
+# each one committed in <LIB>/evidence/ and its source recorded beside it.
+# `tools/datasheet.py evidence` writes both. Moving an entry here from
+# NEEDS_A_HUMAN_EYE is a claim that the figure was rendered and read, and
+# test_a_confirmed_review_left_its_evidence_behind makes that checkable.
+CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
+    "SOT223": ["pinout", "land_pattern"],
+}
+
 NEEDS_A_HUMAN_EYE: dict[str, str] = {
     "HDR2X26": (
         "the fifty-two-pin header's ordering code and its LCSC number. The "
@@ -106,10 +115,6 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
         "pad's dimensions - both are figures with no text layer, so the "
         "coupling capacitor and the land pattern came from TI's own reference "
         "design and LCSC's footprint instead"
-    ),
-    "SOT223": (
-        "the P-FET's pin-out drawing, which is an image. 1 = G, 2 = D, 3 = S "
-        "came from LCSC's symbol; getting it wrong puts the gate on the supply"
     ),
     "SMB": "pad 1 is the cathode, the banded end",
     "MSOP10": (

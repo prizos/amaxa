@@ -1,0 +1,24 @@
+{
+  "land_pattern": {
+    "assumes": "",
+    "crop": "250,1150,950,400",
+    "document": "Diodes Incorporated SOT223 Package Information, Rev. 2017-03-06",
+    "dpi": 150,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "c8d9447a1925136b5d045767c8f0177ea9144c3c8bac5acb23ea3f9343589d19",
+    "shows": "the manufacturer's suggested land pattern: pad 1.20 x 1.60, pitch 2.30, tab 3.30 x 1.60, span 8.00",
+    "url": "https://www.diodes.com/assets/Package-Files/SOT223.pdf"
+  },
+  "pinout": {
+    "assumes": "which lead is pin 1: the drawing carries no pin numbers, so 1=G 2=D 3=S rests on the JEDEC convention that numbering runs left to right with the tab away from the viewer",
+    "crop": "850,1030,900,520",
+    "document": "Diodes Incorporated DMP10H400SE, DS37841 Rev. 3-2 (November 2015)",
+    "dpi": 250,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "acd7aa2691f79892e35b095519740bbc1eaa5a455ca3fb66b4632eba54bdf495",
+    "shows": "SOT-223 Top View: the tab is D, and the three leads are S, D, G in order along one side",
+    "url": "https://www.diodes.com/assets/Datasheets/DMP10H400SE.pdf"
+  }
+}

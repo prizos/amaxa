@@ -5,9 +5,23 @@ Nothing checks by machine that a part number matches its footprint, or that
 pad 1 is the pin the datasheet calls pin 1. The review note is the record that
 someone looked, so these make sure the record exists and stays honest.
 
+Two lists divide the parts whose pinout came from a drawing. `NEEDS_A_HUMAN_EYE`
+is what nobody has looked at yet. `CONFIRMED_FROM_A_RENDER` is what somebody
+has, and it is only worth more than a memory because the looking left something
+behind: the figure itself, cropped out of the manufacturer's document and
+committed beside the note, with the document's URL and SHA-256 next to it. A
+reviewer re-checks the claim by opening a PNG, and re-checks the *source* by
+fetching the same bytes.
+
+`assumes` is the important field. A drawing often settles less than the claim
+needs - Diodes' SOT-223 drawings name the leads and never number them - and a
+review that cannot say which half it read and which half it inferred is worth
+no more than the guess it replaced.
+
 Pin numbering is checked separately, in test_symbols.py.
 """
 
+import json
 import re
 
 import pytest
@@ -105,6 +119,65 @@ def test_unresolved_human_review_is_tracked(part_dirs, board_config, board_dir):
         f"  tracked but no longer marked: {resolved}\n"
         f"Update NEEDS_A_HUMAN_EYE in {board_dir.name}/checks/config.py in the same commit."
     )
+
+
+def test_a_confirmed_review_left_its_evidence_behind(part_dirs, board_config, board_dir):
+    """
+    Every part moved off the waiting list has the figure it was cleared by.
+
+    `CONFIRMED_FROM_A_RENDER` names, per part library, the claims someone read
+    out of the manufacturer's own drawing. This requires that each one still
+    has its crop, and that the crop still says where it came from: the
+    document, its URL, and the SHA-256 of the bytes that were rendered.
+
+    Without this the two lists are the same thing - a statement that somebody
+    once looked - and the only difference between them is which one is shorter.
+    """
+    declared = getattr(board_config, "CONFIRMED_FROM_A_RENDER", {})
+    by_name = {d.name: d for d in part_dirs}
+
+    problems = []
+    for library, claims in sorted(declared.items()):
+        directory = by_name.get(library)
+        if directory is None:
+            problems.append(f"  {library}: no such part library")
+            continue
+        index = directory / "evidence" / "sources.json"
+        if not index.is_file():
+            problems.append(f"  {library}: no evidence/sources.json")
+            continue
+        records = json.loads(index.read_text())
+        for slug in claims:
+            record = records.get(slug)
+            if record is None:
+                problems.append(f"  {library}/{slug}: not in sources.json")
+                continue
+            figure = directory / "evidence" / f"{slug}.png"
+            if not figure.is_file():
+                problems.append(f"  {library}/{slug}: no {figure.name}")
+            for field in ("document", "url", "sha256", "page", "shows"):
+                if not record.get(field):
+                    problems.append(f"  {library}/{slug}: no {field}")
+            if len(str(record.get("sha256", ""))) != 64:
+                problems.append(f"  {library}/{slug}: sha256 is not a digest")
+
+    assert not problems, (
+        "Confirmed reviews without their evidence:\n" + "\n".join(problems)
+        + f"\nRegenerate with tools/datasheet.py evidence {board_dir.name} <LIB> <slug> ..."
+    )
+
+
+def test_a_part_is_not_on_both_review_lists(board_config):
+    """
+    Nothing is both waiting for a person and already confirmed.
+
+    The two lists are a claim about the same part's pinout, so an entry in both
+    means one of them was not updated - and the one left behind is always the
+    one that says the work is done.
+    """
+    both = sorted(set(board_config.NEEDS_A_HUMAN_EYE)
+                  & set(getattr(board_config, "CONFIRMED_FROM_A_RENDER", {})))
+    assert not both, f"On both review lists: {both}"
 
 
 def test_review_notes_name_a_real_part_constant(parts, part_dirs):

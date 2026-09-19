@@ -34,3 +34,9 @@ __pycache__/
 # SKiDL's cached copy of the symbols a board used. tools/skidl_design.py turns
 # off SKiDL's fallback to it, so nothing reads it; it is rewritten on every build.
 */*_sklib.py
+
+# Datasheets fetched by tools/datasheet.py so a figure can be rendered and read.
+# They are megabytes and the manufacturer's to distribute; what the repository
+# keeps is the cropped figure in <board>/parts/<LIB>/evidence/ and, beside it,
+# the URL and SHA-256 the crop came from.
+/.datasheets/
