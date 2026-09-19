@@ -86,19 +86,30 @@ PCBWay builds 1 to 14 layers on the same standard process, with the same
 0.15 mm drill and 0.1 mm track and spacing, so `fab/pcbway.kicad_dru` did not
 change and neither did any existing track.
 
-The order is **F.Cu / In1 ground / In2 signal / In3 ground / In4 supply
-islands / B.Cu**, and the middle two are placed deliberately:
+The order is **F.Cu / In1 ground / In2 supply islands / In3 signal / In4
+ground / B.Cu**, and that took two goes to get right.
 
-- The new signal layer goes **between the two grounds**, not beside the
-  supplies. It is the one layer with no way out — a track there cannot be
-  taken round the other side of an obstruction the way one on an outer layer
-  can — so it gets a solid reference above and below, and its return current
-  never has to find its way around an island's edge.
-- B.Cu keeps exactly the reference it had on four layers: the islands, one
-  prepreg away. So every track on it is unchanged, and the check that
-  polices island crossings still has something to police. Moving the islands
-  away from B.Cu would have made that check vacuous, which is not the same as
-  making the board better.
+The first arrangement put the islands under B.Cu, on the reasoning that it
+kept the four-layer build and left every existing track referenced to what it
+had been referenced to before. That reasoning was backwards. **B.Cu carries
+294 track segments and the inner signal layer carries 24** — so it handed the
+board's busiest signal layer a reference cut into islands, and gave its
+quietest one a ground plane on both faces.
+
+Swapping the two assignments costs nothing. The lamination is symmetric, no
+track moves, no fab file changes, and every impedance-controlled pair is on
+F.Cu over In1 either way. What it buys is measurable: with ground under both
+outer layers, every through-hole via is a ground-to-ground layer change and
+the return crosses on any of the board's 176 ground vias. **The worst return
+detour is 8.0 mm and the median 2.7 mm.** With the islands under B.Cu the
+return had to cross on a capacitor tying ground to a supply, and the worst
+detour was 14.2 mm — past the board's own 10 mm limit, which the check missed
+because nine of the thirteen candidate capacitors tie ground to a 5 V *track*
+rather than to the island.
+
+The inner signal layer keeps solid ground immediately under it, so its return
+stays continuous even where the islands above it are not — which is the
+distinction four layers could not offer B.Cu at all.
 - The outer prepreg is unchanged — PCBWay's published 7628 build, 0.1960
   pressed to 0.1855. Every impedance-controlled track on this board is on
   F.Cu over In1, so fixing that one dielectric keeps the USB and Ethernet

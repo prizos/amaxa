@@ -37,23 +37,23 @@ Zones on this layer: `GND`
 
 ### `In2.Cu`
 
-The inner signal layer, and the reason this board is six layers rather than four. It carries the eight motion-feedback signals from the package to the connector: on four layers every one of those crossings was a via, and there was nowhere left to put one.
+Power islands. 3V3 fills most of the layer; the 5 V island inside it is a higher-priority zone, so it wins the overlap. That is what lets the two share a layer without a hand-drawn boundary between them. It sits here, beside the quietest signal layer, rather than beside B.Cu, which carries twelve times as much.
+
+Zones on this layer: `3V3`, `5V`
 
 ![In2.Cu plot](In2_Cu.svg)
 
 ### `In3.Cu`
 
-The second ground plane. It is under the inner signal layer rather than under B.Cu on purpose: a track on In2.Cu cannot be moved to the other side of an obstruction the way one on an outer layer can, so it gets a solid reference above and below and never has to find its return around the edge of an island.
-
-Zones on this layer: `GND`
+The inner signal layer, and the reason this board is six layers rather than four. It carries the eight motion-feedback signals from the package to the connector: on four layers every one of those crossings was a via, and there was nowhere left to put one. Solid ground immediately below it keeps its return continuous under the islands above.
 
 ![In3.Cu plot](In3_Cu.svg)
 
 ### `In4.Cu`
 
-Power islands. 3V3 fills most of the layer; the 5 V island inside it is a higher-priority zone, so it wins the overlap. That is what lets the two share a layer without a hand-drawn boundary between them.
+The second ground plane, and what both outer layers return to. With ground under B.Cu as well as under F.Cu, every through-hole via is a ground-to-ground layer change and any of the board's 176 ground vias will carry the return across.
 
-Zones on this layer: `5V`, `3V3`
+Zones on this layer: `GND`
 
 ![In4.Cu plot](In4_Cu.svg)
 
@@ -154,7 +154,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `D4` | `power.d_gate_clamp` | 15V | BZT52C15 | C2104 | `D_SOD-123` |
-| `F1` | `power.fuse` | 1A | 0468001.NRHF | C45157 | `Fuse_1206_3216Metric` |
+| `F1` | `power.fuse` | 1.5A | 046801.5NRHF | C151143 | `Fuse_1206_3216Metric` |
 | `Q1` | `power.q_rpp` | DMP10H400SE | DMP10H400SE-13 | C156277 | `SOT-223-3_TabPin2` |
 | `R6` | `power.r_gate` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
 | `J2` | `power.terminal` | 9-36V | WJ500V-5.08-2P | C8465 | `TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal` |

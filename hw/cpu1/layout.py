@@ -62,13 +62,29 @@ BOARD = {
     # standard process, with the same 0.15 mm drill and 0.1 mm track and
     # spacing, so nothing in fab/pcbway.kicad_dru changes.
     #
-    # F.Cu / In1 ground / In2 signal / In3 ground / In4 supply islands / B.Cu.
-    # The new signal layer goes between the two grounds, not beside the
-    # supplies: it is the one layer with no way out, since a track there
-    # cannot be moved to the other side of anything, so it gets a solid
-    # reference above and below. B.Cu keeps the reference it already had -
-    # the islands, one prepreg away, exactly as on four layers - so every
-    # track on it and the rule that polices island crossings are unchanged.
+    # F.Cu / In1 ground / In2 supply islands / In3 signal / In4 ground / B.Cu.
+    #
+    # The supply plane goes next to the *least* used signal layer. B.Cu
+    # carries 294 track segments and In3 carries 24, so putting the islands
+    # under B - which is what this board did first, on the reasoning that it
+    # kept the four-layer arrangement - left the busiest signal layer with no
+    # ground to return to and gave the quietest one a plane on both sides.
+    # Swapping the two assignments costs nothing: the lamination is symmetric,
+    # no track moves, and no fab file changes.
+    #
+    # What it buys is measured rather than argued. Every through-hole via is a
+    # layer change from F to B; with ground under both, the return crosses on
+    # any ground via, and there are 176 of them. The worst return detour on
+    # this board is 8.0 mm and the median is 2.7 mm. With the islands under B
+    # the return had to cross on a GND-to-supply capacitor instead, and the
+    # worst detour was 14.2 mm - past the board's own 10 mm limit, which the
+    # check missed because nine of the thirteen candidate capacitors tie
+    # ground to a 5 V *track* rather than to the island.
+    #
+    # In3 keeps a solid ground immediately under it, so its return is
+    # continuous even where the islands above it are not. That is the
+    # distinction `test_every_signal_layer_has_a_ground_plane_beside_it` draws,
+    # and it is the one four layers could not satisfy for B.Cu at all.
     #
     # This is PCBWay's own published 6-layer build, from their standard
     # stackup table (`multi-layer-laminated-structure.html`), the 1.6 mm
@@ -112,7 +128,7 @@ BOARD = {
     "pour_inset": 0.5,
 }
 
-F, B, MID = "F.Cu", "B.Cu", "In2.Cu"
+F, B, MID = "F.Cu", "B.Cu", "In3.Cu"
 VIA = (0.5, 0.2)          # PCBWay: 0.15 mm drill, 0.15 mm annular ring, minimum
 STUB = 0.2                # between 0.5 mm-pitch pads
 SUPPLY = 0.25             # pin to its capacitor
@@ -532,7 +548,7 @@ POWER = 0.4                        # the input rail, before any regulator
 RAIL = 0.3                         # 5 V and the switch nodes
 # The island stops short of the bottom edge: the power-good pull-up sits below
 # it, and a 3V3 via inside the island would reach nothing but a gap.
-ISLAND = (-9.0, 24.5, 33.0, 36.5)  # the 5 V island on In4.Cu: x0, y0, x1, y1
+ISLAND = (-9.0, 24.5, 33.0, 36.5)  # the 5 V island on In2.Cu: x0, y0, x1, y1
 
 
 def _power() -> None:
@@ -828,7 +844,7 @@ PLANES = [
     },
     {
         "net": "3V3",
-        "layer": "In4.Cu",
+        "layer": "In2.Cu",
         "outline": _pour_outline(),
         "pad_clearance": 0.3,
         "min_thickness": 0.25,
@@ -837,7 +853,7 @@ PLANES = [
     },
     {
         "net": "5V",
-        "layer": "In4.Cu",
+        "layer": "In2.Cu",
         "outline": _island_outline(),
         "priority": 1,
         "pad_clearance": 0.3,
@@ -850,7 +866,7 @@ PLANES = [
     # current never has to find its way around an island's edge.
     {
         "net": "GND",
-        "layer": "In3.Cu",
+        "layer": "In4.Cu",
         "outline": _pour_outline(),
         "pad_clearance": 0.3,
         "min_thickness": 0.25,
@@ -2768,7 +2784,7 @@ GATE_ENABLE_PATH = (
 # come out: the two on the north edge, the five on the east edge from its top,
 # then the one on the south. `HEADER_FEEDBACK` says so and this depends on it.
 # The two on the north edge turn inward and drop inside the pin ring, where
-# In2.Cu is empty - the supply vias are a ring, and the middle of a ring is a
+# In3.Cu is empty - the supply vias are a ring, and the middle of a ring is a
 # hole. The one on the south edge drops just past its own pads. The five on the
 # east edge drop east of the debug and trip columns, each one further east than
 # the last so their columns do not meet.
@@ -2776,10 +2792,10 @@ GATE_ENABLE_PATH = (
 # Columns run west to east and rows run south to north, in the same order: a
 # row can only cross a column that has already turned, so the westernmost
 # column has to be the one that turns furthest south.
-# net: (front-layer escape points, the point it reaches In2.Cu, any corners on
-# In2.Cu before the column, the column it comes south on). The column is not
+# net: (front-layer escape points, the point it reaches In3.Cu, any corners on
+# In3.Cu before the column, the column it comes south on). The column is not
 # always below the drop: the two on the north edge are half a millimetre apart
-# and one has to get east of the other, which it does on In2.Cu where the
+# and one has to get east of the other, which it does on In3.Cu where the
 # other's escape is not.
 #
 # West of the package there is exactly one column clear of plane vias from the
@@ -2801,7 +2817,7 @@ FEEDBACK_OUT = {
 
 # The latch's decoupling sits where two of these diagonals pass, and the
 # stitching generator searches outward from a pad rather than guessing: a via
-# goes through In2.Cu like every other layer, so a track there is as much in
+# goes through In3.Cu like every other layer, so a track there is as much in
 # its way as one on the front.
 FEEDBACK_LATCH_VIAS = (("safety.latch.decoupling:1", (18.52, 8.3), "3V3"),
                        ("safety.latch.decoupling:2", (19.48, 8.3), "GND"),
@@ -2809,7 +2825,7 @@ FEEDBACK_LATCH_VIAS = (("safety.latch.decoupling:1", (18.52, 8.3), "3V3"),
 
 
 def _feedback() -> None:
-    """The eight motion-feedback signals, across In2.Cu to the connector."""
+    """The eight motion-feedback signals, across In3.Cu to the connector."""
     for pad, at, net in FEEDBACK_LATCH_VIAS:
         VIAS.append((pad, at, net, *VIA, SUPPLY))
 

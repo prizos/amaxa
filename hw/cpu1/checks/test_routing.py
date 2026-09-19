@@ -179,30 +179,60 @@ def test_no_via_reaches_for_a_plane_that_is_not_there(stitch_vias, plane_outline
 
 
 def test_every_layer_change_has_a_way_back_for_its_return_current(
-    spec, vias, stitchers
+    spec, vias, stitchers, plane_layers
 ):
     """
-    Each signal that changes layer, against the nearest tie between the planes.
+    Each signal that changes layer, against the nearest crossing its return has.
 
-    A track on the front is referenced to the ground plane below it; one on the
-    back is referenced to the supply islands. A via between them moves the
-    signal and leaves its return current to find its own way across, and the
-    only crossings are the decoupling capacitors. How far the return has to
-    detour is the loop it makes, and the loop is what radiates.
+    A track's return runs in the nearest ground plane to it. A via that moves
+    the signal from one layer to another moves its return too, and if the two
+    layers' nearest grounds are different planes the return has to get between
+    them somehow. How far it detours to do that is the loop it makes, and the
+    loop is what radiates.
+
+    **What counts as a crossing depends on the stackup, so it is derived.** If
+    the two planes are both ground, any via on the ground net joins them - all
+    vias here are through-holes. If one of them is a supply plane, the only
+    crossings are the capacitors that tie that supply to ground, and then a
+    capacitor only counts where its own pour actually exists: this board has
+    thirteen GND-to-5V capacitors and only four of them sit over the 5 V
+    island, the other nine tying ground to a 5 V *track*. Counting those nine
+    is how this check used to pass while ten layer changes sat past its limit.
 
     This is the check that is easiest to satisfy by accident and hardest to
     notice failing: nothing about a long detour is visible in the layout, in
     DRC, or on a working bench.
     """
     _, allowed = spec("routing", "reference_change_distance")
+    order, grounds = plane_layers["order"], plane_layers["grounds"]
+
+    def ground_under(layer):
+        """The nearest ground plane to a signal layer, by stackup position."""
+        at = order.index(layer)
+        return min(grounds, key=lambda g: abs(order.index(g) - at))
+
+    # Every via on this board is a through-hole, so a layer change is F to B.
+    outer = [l for l in plane_layers["signals"] if l in ("F.Cu", "B.Cu")]
+    references = {ground_under(l) for l in outer}
+    if len(references) <= 1:
+        crossings = None                  # one plane serves both: nothing to cross
+    elif all(r in grounds for r in references):
+        crossings = [(x, y) for x, y, net in vias if net == GROUND]
+        what = "ground via"
+    else:
+        crossings = stitchers
+        what = "tie between the planes"
+
     far = []
-    for x, y, net in vias:
-        if net in PLANES:
-            continue                      # a plane via is the return path
-        detour = min(math.dist((x, y), tie) for tie in stitchers)
-        if detour > allowed:
-            far.append(f"  {net} changes layer at ({x:g}, {y:g}), {detour:.1f} mm "
-                       "from the nearest tie between the planes")
+    if crossings is not None:
+        assert crossings, f"no {what} on this board"
+        for x, y, net in vias:
+            if net in PLANES:
+                continue                  # a plane via is the return path
+            detour = min(math.dist((x, y), c) for c in crossings)
+            if detour > allowed:
+                far.append(f"  {net} changes layer at ({x:g}, {y:g}), "
+                           f"{detour:.1f} mm from the nearest {what}")
     assert not far, (
         f"Layer changes further than {allowed:g} mm from a way back:\n" + "\n".join(far)
     )
@@ -218,8 +248,49 @@ def plane_layers(board_dir) -> dict:
     planes = getattr(description, "PLANES", None) or [description.PLANE]
     count = description.BOARD.get("copper_layers", 4)
     order = ["F.Cu"] + [f"In{n}.Cu" for n in range(1, count - 1)] + ["B.Cu"]
-    return {"order": order, "planes": {plane["layer"] for plane in planes},
+    return {"order": order,
+            "planes": {plane["layer"] for plane in planes},
+            "grounds": {p["layer"] for p in planes if p["net"] == GROUND},
+            "signals": [l for l in order
+                        if l not in {plane["layer"] for plane in planes}],
             "island": next(p["layer"] for p in planes if p["net"] == "5V")}
+
+
+def test_every_signal_layer_has_a_ground_plane_beside_it(plane_layers):
+    """
+    Every layer that carries a signal has solid ground immediately next to it.
+
+    This is the property that decides whether a return current has anywhere to
+    go. A signal layer whose only neighbouring plane is a supply layer has its
+    field terminating on copper that is cut into islands, and the return has
+    to find its way across an island's edge through whatever capacitor happens
+    to join the two - which is the four-layer problem this board had, and
+    which it still had on six until the inner assignments were swapped.
+
+    "Immediately next to" means no other plane in between. A ground two
+    dielectrics away with a supply plane between does not count: the field
+    stops at the first plane it meets.
+    """
+    order, planes = plane_layers["order"], plane_layers["planes"]
+    grounds = plane_layers["grounds"]
+    assert grounds, "this board is meant to have a ground plane"
+
+    stranded = []
+    for layer in plane_layers["signals"]:
+        at = order.index(layer)
+        beside = set()
+        for step in (-1, 1):
+            n = at + step
+            while 0 <= n < len(order) and order[n] not in planes:
+                n += step                      # skip other signal layers
+            if 0 <= n < len(order):
+                beside.add(order[n])
+        if not beside & grounds:
+            stranded.append(f"  {layer}: nearest planes {sorted(beside)}, none of them ground")
+    assert not stranded, (
+        "Signal layers with no ground plane beside them:\n" + "\n".join(stranded)
+        + "\nTheir return current has to cross a supply plane's island edges."
+    )
 
 
 def test_no_signal_beside_a_supply_island_crosses_its_edge(
@@ -249,16 +320,27 @@ def test_no_signal_beside_a_supply_island_crosses_its_edge(
     assert island, "this board is meant to have a 5 V island"
 
     order, planes = plane_layers["order"], plane_layers["planes"]
+    grounds = plane_layers["grounds"]
     at = order.index(plane_layers["island"])
-    facing = {
-        order[n] for n in (at - 1, at + 1)
-        if 0 <= n < len(order) and order[n] not in planes
-    }
-    assert facing, (
-        f"the islands are on {plane_layers['island']} with a plane on both "
-        "sides, so no signal references them - which makes this check vacuous "
-        "rather than passing"
-    )
+
+    # A signal layer next to the islands is only stranded by them if it has no
+    # ground plane on its other side. On four layers B.Cu had the islands above
+    # and nothing below, so the islands were its only reference and an island
+    # edge cut its return in half. A layer with solid ground hugging its other
+    # face keeps a continuous return whatever the supply plane does, which is
+    # what `test_every_signal_layer_has_a_ground_plane_beside_it` requires of
+    # every signal layer on this board - so on this stackup nothing is at risk
+    # and the loop below has nothing to walk. That is the stackup being right,
+    # not the check being asleep: it is the same derivation, and it starts
+    # finding tracks again the moment a signal layer loses its ground.
+    facing = set()
+    for n in (at - 1, at + 1):
+        if not (0 <= n < len(order)) or order[n] in planes:
+            continue
+        layer, other = order[n], n + (n - at)
+        has_ground = 0 <= other < len(order) and order[other] in grounds
+        if not has_ground:
+            facing.add(layer)
 
     crossing = []
     for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):

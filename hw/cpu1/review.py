@@ -91,22 +91,25 @@ LAYERS: dict[str, str] = {
         "impedance-controlled pairs on F.Cu are referenced to."
     ),
     "In2_Cu": (
+        "Power islands. 3V3 fills most of the layer; the 5 V island inside it "
+        "is a higher-priority zone, so it wins the overlap. That is what lets "
+        "the two share a layer without a hand-drawn boundary between them. It "
+        "sits here, beside the quietest signal layer, rather than beside "
+        "B.Cu, which carries twelve times as much."
+    ),
+    "In3_Cu": (
         "The inner signal layer, and the reason this board is six layers "
         "rather than four. It carries the eight motion-feedback signals from "
         "the package to the connector: on four layers every one of those "
-        "crossings was a via, and there was nowhere left to put one."
-    ),
-    "In3_Cu": (
-        "The second ground plane. It is under the inner signal layer rather "
-        "than under B.Cu on purpose: a track on In2.Cu cannot be moved to the "
-        "other side of an obstruction the way one on an outer layer can, so "
-        "it gets a solid reference above and below and never has to find its "
-        "return around the edge of an island."
+        "crossings was a via, and there was nowhere left to put one. Solid "
+        "ground immediately below it keeps its return continuous under the "
+        "islands above."
     ),
     "In4_Cu": (
-        "Power islands. 3V3 fills most of the layer; the 5 V island inside it "
-        "is a higher-priority zone, so it wins the overlap. That is what lets "
-        "the two share a layer without a hand-drawn boundary between them."
+        "The second ground plane, and what both outer layers return to. With "
+        "ground under B.Cu as well as under F.Cu, every through-hole via is a "
+        "ground-to-ground layer change and any of the board's 176 ground vias "
+        "will carry the return across."
     ),
     "B_Cu": (
         "The solder side. Placement is single-sided for this spin, so the "
