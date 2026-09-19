@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 160
+EXPECTED_CHECKS = 161
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -100,9 +100,13 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
 # test_a_confirmed_review_left_its_evidence_behind makes that checkable.
 CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOT223": ["pinout", "land_pattern"],
+    "LED0603": ["polarity"],
     "MSOP10": ["factory_default"],
     "QFN24": ["package_outline"],
+    "SMB": ["cathode"],
     "SO8EP": ["land_pattern"],
+    "SOD123": ["cathode"],
+    "SOT23": ["bat54a_common_anode"],
     "TC2030": ["pad_signals"],
 }
 
@@ -114,14 +118,6 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
     ),
     "LQFP144": "which supply pin each of datasheet Figure 13's decoupling values belongs to",
     "XTAL_MC306": "that the crystal is between pads 1 and 4, as KiCad's footprint has it",
-    "LED0603": "pad 1 is the cathode, from KiCad's convention not KENTO's drawing",
-    "SMB": "pad 1 is the cathode, the banded end",
-    "SOT23": (
-        "the BAT54A's common anode on pin 3, from its marking diagram rather "
-        "than a package drawing. A common-cathode part in its place would tie "
-        "both fault lines together"
-    ),
-    "SOD123": "pad 1 is the cathode, from the package drawing not the maker's",
     "XTAL5032_4P": (
         "the crystal's ESR and ppm figures, which come from LCSC's parametric "
         "data rather than a datasheet nobody here could fetch. They are the "

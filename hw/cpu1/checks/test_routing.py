@@ -389,3 +389,68 @@ def test_every_exposed_pad_has_its_thermal_vias(exposed_pads, vias):
         "Exposed pads without their thermal vias:\n" + "\n".join(thin)
         + "\nSee parts/SO8EP/evidence/land_pattern.png."
     )
+
+
+# KiCad's two-pad polarised symbols - Device:D, Device:D_Zener, Device:D_TVS,
+# Device:LED - all put the cathode on pin 1, and their footprints mark it with
+# a silkscreen bar reaching past that pad. The manufacturers do not have to
+# agree, and one of them does not: KENTO number the LED's terminals the other
+# way round (see parts/LED0603/evidence/polarity.png). That is only safe while
+# the board's own silkscreen says which end the cathode goes, because that mark
+# - not a pad number - is what an assembler orients a two-terminal part by.
+CATHODE_PAD = "1"
+POLARISED = ("Device:D", "Device:LED")
+
+
+def test_every_polarised_part_marks_its_cathode_on_the_silkscreen(pcb_text, design):
+    """
+    A diode's silkscreen bar is on the end its netlist calls the cathode.
+
+    Two-terminal parts are not placed by pad number. The machine orients them
+    by the polarity mark on the part against the polarity mark on the board,
+    so a footprint whose bar sits at the wrong end fits, passes DRC, builds,
+    and lights nothing - or clamps backwards.
+
+    KENTO's drawing for this board's LEDs numbers terminal 1 as the anode,
+    where KiCad's symbol and footprint both call pad 1 the cathode. The two
+    conventions disagree and the board is still right, but only because the
+    silkscreen is what decides. This is that silkscreen.
+    """
+    symbols = {address: part["symbol"] for address, part in design["parts"].items()}
+
+    problems = []
+    for block in pcb_text.split("\n\t(footprint ")[1:]:
+        address = re.search(r'\(property "address" "([^"]+)"', block)
+        if not address or not symbols.get(address.group(1), "").startswith(POLARISED):
+            continue
+        pads = {m.group(1): (float(m.group(2)), float(m.group(3)))
+                for m in re.finditer(r'\(pad "(\d)"[^\n]*\n\s*\(at ([-\d.]+) ([-\d.]+)', block)}
+        silk = [(float(x), float(y)) for x, y in re.findall(
+            r"\((?:start|end|xy) ([-\d.]+) ([-\d.]+)\)",
+            "".join(m.group(0) for m in re.finditer(r"\(fp_(?:line|poly)(?:.*?)\n\t\t\)", block, re.S)
+                    if '"F.SilkS"' in m.group(0)))]
+        if len(pads) != 2 or not silk:
+            problems.append(f"  {address.group(1)}: {len(pads)} pads, {len(silk)} silkscreen points")
+            continue
+
+        cathode = pads[CATHODE_PAD][0]
+        anode = pads["2" if CATHODE_PAD == "1" else "1"][0]
+        low, high = min(p[0] for p in silk), max(p[0] for p in silk)
+        # How far the silkscreen reaches out past each pad, along the part's
+        # axis. A polarity bar is the end that sticks out further.
+        if cathode < anode:
+            past_cathode, past_anode = cathode - low, high - anode
+        else:
+            past_cathode, past_anode = high - cathode, low - anode
+        if past_cathode <= past_anode:
+            problems.append(
+                f"  {address.group(1)}: the silkscreen reaches {past_anode:.2f} mm past "
+                f"the anode and {past_cathode:.2f} mm past the cathode on pad {CATHODE_PAD}")
+        elif past_cathode < 0.3:
+            problems.append(f"  {address.group(1)}: only {past_cathode:.2f} mm of "
+                            "silkscreen past the cathode - not a mark anyone can place by")
+
+    assert problems == [], (
+        "Polarised parts whose silkscreen does not mark the cathode:\n" + "\n".join(problems)
+        + "\nSee parts/LED0603/LED0603.md."
+    )

@@ -1,0 +1,13 @@
+{
+  "cathode": {
+    "assumes": "",
+    "crop": "630,185,490,380",
+    "document": "BORN Semiconductor SMBJ Series, Revision 2022-Jan-1-A, served by LCSC for C152095",
+    "dpi": 140,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "714b9a8b6a4ec5257a94d603233be230a584ae646bb4d603444f833000a60cf8",
+    "shows": "the SMB package photograph with the band at one end, and beside it the unidirectional symbol labelled Cathode on the banded end and Anode on the other",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/e4acf0486a70b499d9d23d8260a3186f.pdf"
+  }
+}

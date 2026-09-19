@@ -83,6 +83,11 @@ sentence as a check.
 Pins 1 and 2 are the cathodes and pin 3 the common anode, from the datasheet's
 own marking diagram ("3 ANODE, CATHODE 1, 2 CATHODE").
 
-**Needs a human eye** against the manufacturer's package drawing: a common-anode
-part fitted where a common-cathode one belongs would tie both fault lines
-together, and the board would look right until two faults arrived.
+![the SOT-23 package and the BAT54A internal circuit](evidence/bat54a_common_anode.png)
+
+Leshan Radio's LBAT54ALT1G datasheet, Rev. C: the numbered package on the left
+and the internal circuit on the right, which draws **pin 3 as the common ANODE
+and pins 1 and 2 as the two CATHODEs**. That is the datasheet's own schematic,
+not its marking table, and it settles the thing that matters — a common-cathode
+part fitted here would tie both fault lines together, and the board would look
+right until two faults arrived.

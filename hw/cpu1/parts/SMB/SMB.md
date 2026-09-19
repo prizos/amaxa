@@ -52,7 +52,14 @@ input rail lives under:
 ## Pin mapping
 
 Pad 1 cathode, pad 2 anode. The cathode is the banded end.
-**Needs a human eye** against the manufacturer's drawing before fabrication.
+
+![the SMB package and its unidirectional symbol](evidence/cathode.png)
+
+BORN's SMBJ series datasheet, Rev. 2022-Jan-1-A: the package photograph with
+the band at one end, and beside it the unidirectional symbol labelled
+**Cathode** on the banded end. The board's silkscreen marks that end, and
+`test_every_polarised_part_marks_its_cathode_on_the_silkscreen` keeps it
+there.
 
 **Footprint.** KiCad stock `Diode_SMD:D_SMB`, unmodified. The same library
 directory as led12's, which carries the 14 V part.

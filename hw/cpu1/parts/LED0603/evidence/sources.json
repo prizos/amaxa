@@ -1,0 +1,13 @@
+{
+  "polarity": {
+    "assumes": "",
+    "crop": "60,580,360,330",
+    "document": "Hubei KENTO Electronics specification for approval, 0603-0.6 red, Rev. A.0 (2018-12-06), served by LCSC for C2286",
+    "dpi": 140,
+    "page": 2,
+    "read": "2026-09-19",
+    "sha256": "a3bac1cc9c59cb306ad03512945cce12c87bb54252abc223b796e1d20d41d4a1",
+    "shows": "KENTO's package profile: the green corner mark sits at terminal 2, and the symbol beside it puts the cathode bar at terminal 2 with a + against terminal 1 - so on KENTO's own numbering terminal 1 is the ANODE",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/011ec3e8cb1e825f6961d29bc4db4c7a.pdf"
+  }
+}

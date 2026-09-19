@@ -1,0 +1,13 @@
+{
+  "cathode": {
+    "assumes": "",
+    "crop": "90,250,1000,540",
+    "document": "Jiangsu Changjing BZT52C2V4-BZT52C43 SOD-123 Zener diodes, Rev. 2.1, served by LCSC for C2104",
+    "dpi": 140,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "fd5a910fc58737806f1596a6318cecd1e1264061e3ca7c6c7f13e69667e36ab5",
+    "shows": "the SOD-123 package marked + at the banded end and - at the other, the diode symbol beneath it, and the marking note in words: the marking bar indicates the cathode",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/748504625e418aa84c5305d597e87d6d.pdf"
+  }
+}

@@ -30,6 +30,7 @@ write a review note that is true.
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import urllib.request
@@ -50,6 +51,26 @@ def _pdf(name: str) -> Path:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def lcsc(args) -> int:
+    """Find the datasheet LCSC serves for a part code, and fetch it.
+
+    LCSC's own /datasheet/<code>.pdf is a redirect page, not a PDF. The real
+    file is linked from the product page, under a content hash - so this
+    resolves the page, prints the URL it found, and records that URL rather
+    than the code, because the code is not what was read.
+    """
+    page = f"https://www.lcsc.com/product-detail/{args.code}.html"
+    request = urllib.request.Request(page, headers={"User-Agent": AGENT})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        html = response.read().decode("utf-8", "replace")
+    found = re.search(r"https://datasheet\.lcsc\.com/[^\"' ]*\.pdf", html)
+    if not found:
+        sys.exit(f"no datasheet link on {page}")
+    args.url = found.group(0)
+    print(args.url)
+    return fetch(args)
 
 
 def fetch(args) -> int:
@@ -126,6 +147,11 @@ def main() -> int:
     f.add_argument("name")
     f.add_argument("url")
     f.set_defaults(func=fetch)
+
+    l = sub.add_parser("lcsc", help="fetch the datasheet LCSC serves for a part code")
+    l.add_argument("name")
+    l.add_argument("code")
+    l.set_defaults(func=lcsc)
 
     p = sub.add_parser("page", help="render a page, to find the figure")
     p.add_argument("name")
