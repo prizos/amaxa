@@ -9,14 +9,10 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 130 × 110 mm |
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
-| **Footprints** | 240 |
+| **Footprints** | 249 |
 | **Nets** | 191, of which 8 pending |
-| **Routing** | 622 track segments, 292 vias, 3 zones |
-| **DRC** | 0 violations, 146 connections not yet routed (`ROUTING := incomplete`) |
-
-> [!IMPORTANT]
-> **Routing is deliberately incomplete.** Read the plots with that in
-> mind, and see *What these pictures are not*, at the end.
+| **Routing** | 1227 track segments, 552 vias, 3 zones |
+| **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
 
@@ -27,7 +23,7 @@ list is — a fixed `F.Cu,B.Cu` list silently leaves a 4-layer board's planes ou
 
 ### `F.Cu`
 
-The component side. Dense around the LQFP-144's escapes and the two regulators; sparse above them, where the safety chain, the comparators and the buses are placed but not yet joined up. The two pairs in the top-left corner are the Ethernet link, and the only tracks on this board drawn to an impedance rather than a width.
+The component side, and most of the board's copper. Dense around the LQFP-144's escapes, the two regulators and the PWM fan; the long parallel runs across the middle are the analog inputs on their way from the header to the comparators. The two pairs in the top-left corner are the Ethernet link, and the only tracks on this board drawn to an impedance rather than a width.
 
 ![F.Cu plot](F_Cu.svg)
 
@@ -49,7 +45,7 @@ Zones on this layer: `3V3`, `5V`
 
 ### `B.Cu`
 
-The solder side, nearly empty. Placement is single-sided for this spin, so the back carries only what had to change layer to escape the package.
+The solder side. Placement is single-sided for this spin, so the back carries only what had to change layer: the analog sense lines crossing the input bank, the static signals running under the package, and the six RMII lines taking the long way round it.
 
 ![B.Cu plot](B_Cu.svg)
 
@@ -88,11 +84,11 @@ schematic after the fact.
 | USB-C | 4 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
 | Ethernet | 16 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
-| Plane stitching | 12 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
+| Plane stitching | 21 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 240, by block</summary>
+<summary><strong>Every footprint</strong> — all 249, by block</summary>
 
 #### MCU core
 
@@ -389,7 +385,16 @@ schematic after the fact.
 | `C77` | `stitch.10` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C78` | `stitch.11` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C79` | `stitch.12` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C80` | `stitch.13` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C81` | `stitch.14` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C82` | `stitch.15` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C83` | `stitch.16` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C84` | `stitch.17` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C85` | `stitch.18` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C86` | `stitch.19` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C69` | `stitch.2` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C87` | `stitch.20` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C88` | `stitch.21` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C70` | `stitch.3` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C71` | `stitch.4` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C72` | `stitch.5` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -432,8 +437,8 @@ requires that to stay true, so when the block lands the waiver has to go.
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 206 |  |
-| `3V3` | 87 |  |
+| `GND` | 215 |  |
+| `3V3` | 96 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
@@ -628,16 +633,13 @@ requires that to stay true, so when the block lands the waiver has to go.
 
 ## What these pictures are not
 
-**The copper is unfinished on purpose.** `board.mk` says `ROUTING := incomplete`. The MCU core and the power block are
-routed; everything from the safety chain onward is placed only, and its
-connections are left for M8, when the whole board is in view. DRC runs in the
-mode that still refuses anything drawn wrongly but does not demand what has not
-been drawn at all - so a clean DRC here does not mean a finished board, and the
-unrouted count above is the honest number.
+**The copper is finished, the board is not.** `board.mk` says `ROUTING := complete`, and DRC now runs in the mode that
+demands every connection: it reports no unconnected items and no violations.
+Every net on this board is drawn.
 
-Every pad that belongs to a plane now reaches one: that part is generated, not
-drawn, and it is what the via count above is mostly made of. What is left is
-signal routing.
+That is a statement about copper and nothing else. The parts still waiting on a
+person are listed in `checks/config.py`, the silkscreen still overlaps in the
+dense passive fields, and nothing here has been built.
 
 **The renders confirm nothing electrical.** No 3D model library is installed in the environment these were generated in, so
 parts appear as their bare land patterns. More importantly, a footprint renders
