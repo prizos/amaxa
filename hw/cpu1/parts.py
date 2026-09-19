@@ -179,11 +179,16 @@ SCREW_TERM_2 = PartSpec(
 # Slow-blow, and rated 63 V against a rail the TVS holds below 64.5 V only while
 # it conducts - so the fuse, not the TVS, is what a sustained overvoltage has to
 # open. led12 uses the same part; see FUSE_1206.md there and here.
-FUSE_1A = PartSpec(
+# 1.5 A and not 1 A. The board draws 0.68 A at its terminal once the 3V3
+# rail's budget is reflected through the 5 V buck that feeds it - the sum
+# nothing used to compute - and a fuse wants half again on top of the load it
+# passes every day. The same Littelfuse 468 series, one step up; the FET
+# behind it still carries 2.3 A, which is more than this fuse will pass.
+FUSE_1A5 = PartSpec(
     symbol="Device:Fuse", footprint="FUSE_1206:Fuse_1206_3216Metric", prefix="F",
-    manufacturer="Littelfuse", mpn="0468001.NRHF", lcsc="C45157", value="1A",
+    manufacturer="Littelfuse", mpn="046801.5NRHF", lcsc="C151143", value="1.5A",
     params={
-        "trip_current": exact(1.0),
+        "trip_current": exact(1.5),
         "max_voltage": exact(63.0),
         "interrupt_rating": exact(50.0),
     },

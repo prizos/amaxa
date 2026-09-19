@@ -264,13 +264,35 @@ def test_the_fuse_carries_the_board_and_opens_at_the_rail_it_protects(design, sp
     )
 
 
+def _reflected_current(spec) -> float:
+    """What the 3V3 rail's budget costs the 5 V rail.
+
+    The 3V3 buck's input pin is on the 5 V net, so every milliamp the logic
+    rail delivers is drawn again through the 5 V rail, divided by that buck's
+    efficiency. Budgeting the two rails separately is how this board came to
+    ask a 1 A converter for 1.36 A and a 1 A fuse for 1.04 A, with every check
+    passing: the only place the two were ever added was the copper.
+    """
+    v3v3_high, _ = spec("rail.3v3", "voltage"), None
+    _, v3v3_high = spec("rail.3v3", "voltage")
+    _, i3v3_high = spec("rail.3v3", "current")
+    efficiency_low, _ = spec("buck3v3", "efficiency")
+    v5_low, _ = spec("rail.5v", "voltage")
+    return v3v3_high * i3v3_high / (efficiency_low * v5_low)
+
+
+def _five_volt_current(spec) -> float:
+    """Everything the 5 V converter delivers: its own rail, and the 3V3 buck."""
+    _, i5_high = spec("rail.5v", "current")
+    return i5_high + _reflected_current(spec)
+
+
 def _input_current(spec) -> float:
     """The most the board draws at its terminal, from the rails' own budgets."""
     _, v5_high = spec("rail.5v", "voltage")
-    _, i5_high = spec("rail.5v", "current")
     efficiency_low, _ = spec("power", "efficiency")
     input_low, _ = spec("input", "voltage")
-    return v5_high * i5_high / (efficiency_low * input_low)
+    return v5_high * _five_volt_current(spec) / (efficiency_low * input_low)
 
 
 def test_the_fet_carries_what_the_fuse_allows(spec):
@@ -473,12 +495,22 @@ def test_the_lockout_starts_the_board_at_the_lowest_input_it_claims(design, two_
 
 
 def test_the_load_each_rail_carries_is_inside_its_regulator(spec):
-    """Each converter's rated output covers the budget declared for its rail."""
-    _, i5 = spec("rail.5v", "current")
+    """
+    Each converter's rated output covers the budget declared for its rail.
+
+    The 5 V converter's share is its own rail *plus* the 3V3 buck it feeds -
+    see `_reflected_current`. The 3V3 buck's is its rail alone, because
+    nothing runs from 3V3 to make another rail.
+    """
+    i5 = _five_volt_current(spec)
     _, i3v3 = spec("rail.3v3", "current")
     rating_5v, _ = spec(BUCK_5V, "load_current_max")
     limit_3v3, _ = spec(BUCK_3V3, "current_limit_min")
-    assert rating_5v >= i5, f"the 5 V rail is budgeted {i5:g} A from a {rating_5v:g} A part"
+    assert rating_5v >= i5, (
+        f"the 5 V converter carries {i5:.3f} A - its own rail's budget plus "
+        f"{_reflected_current(spec):.3f} A for the 3V3 buck it feeds - from a "
+        f"{rating_5v:g} A part"
+    )
     assert limit_3v3 >= i3v3, (
         f"the 3V3 rail is budgeted {i3v3:g} A against a current limit as low as "
         f"{limit_3v3:g} A"

@@ -61,16 +61,43 @@ INTENT: dict[str, tuple[float, float]] = {
     "input.lockout": (7.0, 8.9),
     # The logic rail, 3.3 V ±5 %. The MCU's own limits are checked against it.
     "rail.3v3.voltage": (3.135, 3.465),
-    # What each rail is designed to deliver. Nothing on the board measures this;
-    # it is the budget the magnetics, the regulators and the fuse are sized to,
-    # and the checks hold them to it.
+    # What each rail is designed to deliver, to its *own* loads. The 3V3 buck
+    # runs from the 5 V rail, so everything the 3V3 rail carries appears again
+    # on the 5 V one; `_reflected_current` in test_power.py adds it, and the
+    # regulator, the fuse and the FET are sized against the sum. Budgeting
+    # them separately is how a 1 A converter came to be asked for 1.36 A.
+    #
+    # 3V3, adding up the parts that draw it:
+    #   MCU          500 mA  datasheet Table 29, 400 MHz VOS1, all peripherals
+    #                        enabled, T_J 105 degC, production tested
+    #   PHY          102 mA  LAN8742A Table 5.5, REF_CLK Out with the regulator
+    #                        enabled, 100BASE-TX with traffic, with magnetics
+    #   RS-485        45 mA  THVD1450 driving 54 ohm
+    #   buffers        6 mA  sixteen outputs into their 10 k pull-downs
+    #   LEDs, latch,
+    #   DAC, CAN VIO  17 mA
+    #   header        100 mA what the connector may take at 3V3
+    #   ------------------
+    #   total        770 mA, and the budget is 800.
     "rail.3v3.current": (0.0, 0.8),
     "rail.5v.voltage": (4.75, 5.25),
-    "rail.5v.current": (0.0, 0.7),
+    # 5 V, its own loads only:
+    #   comparators   35 mA  seven TLV3501 at their 5 mA maximum
+    #   CAN           80 mA  TCAN1044V dominant into 50 ohm, maximum
+    #   reference     25 mA  the REF3030's whole output capability
+    #   5VA          100 mA  what the ferrite to the analog header allows
+    #   ------------------
+    #   total        240 mA, and the budget is 250.
+    "rail.5v.current": (0.0, 0.25),
     # What each conversion is assumed to manage, end to end. Nothing on the
     # board measures it either; it is what the fuse, the FET and the inductors
     # are sized against, and it is the first thing to measure at bring-up.
     "power.efficiency": (0.80, 0.95),
+    # The 3V3 buck's own efficiency, which decides how much of the 3V3 budget
+    # lands back on the 5 V rail. A synchronous buck at 5 V in, 3.3 V out and
+    # a few hundred milliamps sits near 90 %; the low end is the one that
+    # matters here and it is deliberately pessimistic.
+    "buck3v3.efficiency": (0.85, 0.93),
     # The 100 V buck's switching frequency, set by one resistor. High enough for
     # a small inductor, low enough that switching losses at 36 V stay modest.
     "buck5.switching_frequency": (350e3, 450e3),
@@ -462,7 +489,7 @@ def power_block(v3v3, gnd, nets) -> None:
     # nothing at all happens. The cost is that the FET sees the full reverse
     # voltage, which is why it is a 100 V part.
     terminal = part(parts.SCREW_TERM_2, "power.terminal", "J2")
-    fuse = part(parts.FUSE_1A, "power.fuse", "F1")
+    fuse = part(parts.FUSE_1A5, "power.fuse", "F1")
     q_rpp = part(parts.PFET_RPP, "power.q_rpp", "Q1")
     r_gate = part(parts.RES_100K_0402, "power.r_gate", "R6")
     d_clamp = part(parts.ZENER_GATE_CLAMP, "power.d_gate_clamp", "D4")

@@ -32,8 +32,9 @@
 	(severity error))
 
 # The input rail, from the terminal to the 100 V buck. It carries the whole
-# board's current at the lowest input voltage - half an amp - and it is the one
-# rail a surge reaches, so it is the widest thing on the board.
+# board's current at the lowest input voltage - 0.68 A, which is the 5 V rail's
+# own budget plus the 3V3 rail reflected through the buck that feeds it - and
+# it is the one rail a surge reaches, so it is the widest thing on the board.
 (rule "input rail"
 	(condition "A.NetName == 'VIN' || A.NetName == 'VIN_RAW' || A.NetName == 'VIN_FUSED'")
 	(constraint track_width (min 0.4mm))
