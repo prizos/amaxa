@@ -346,7 +346,7 @@ schematic after the fact.
 | `JP1` | `can.termination_jumper` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
 | `R77` | `can.termination_lower` | 60R4 | 0402WGF604JTCE | C60310 | `R_0402_1005Metric` |
 | `C57` | `can.termination_split` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
-| `R76_1` | `can.termination_upper` | 60R4 | 0402WGF604JTCE | C60310 | `R_0402_1005Metric` |
+| `R97` | `can.termination_upper` | 60R4 | 0402WGF604JTCE | C60310 | `R_0402_1005Metric` |
 | `U16` | `can.transceiver` | TCAN1044V | TCAN1044VDRQ1 | C1852061 | `SOIC-8_3.9x4.9mm_P1.27mm` |
 
 #### RS-485
@@ -375,7 +375,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `R81` | `eth.bias` | 12K1 | 0402WGF1212TCE | C25852 | `R_0402_1005Metric` |
-| `C81` | `eth.c_reset` | 4.7uF | CL10A475KO8NNNC | C19666 | `C_0603_1608Metric` |
+| `C89` | `eth.c_reset` | 4.7uF | CL10A475KO8NNNC | C19666 | `C_0603_1608Metric` |
 | `C59` | `eth.core_bulk` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
 | `C60` | `eth.core_hf` | 470pF | 0402CG471J500NT | C75274 | `C_0402_1005Metric` |
 | `C62` | `eth.dec_vdd1a` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -413,7 +413,7 @@ schematic after the fact.
 | `C78` | `stitch.11` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C79` | `stitch.12` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C80` | `stitch.13` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `C81_1` | `stitch.14` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C81` | `stitch.14` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C82` | `stitch.15` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C83` | `stitch.16` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C84` | `stitch.17` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |

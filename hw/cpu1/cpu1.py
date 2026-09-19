@@ -1130,7 +1130,11 @@ def field_buses(v3v3, gnd, nets) -> None:
     # is what gives a CAN bus a defined common mode as well as a defined
     # differential impedance. In series with a jumper, so it can be left open.
     jumper = part(parts.SOLDER_JUMPER, "can.termination_jumper", "JP1")
-    upper = part(parts.RES_60R4_0402, "can.termination_upper", "R76")
+    # R97, not R76: the ADC block hands out references from a running counter
+    # and that counter reached 76. Two parts asking for one designator is a
+    # designator SKiDL renames, silently, and a board that then carries a
+    # reference no assembly house will accept.
+    upper = part(parts.RES_60R4_0402, "can.termination_upper", "R97")
     lower = part(parts.RES_60R4_0402, "can.termination_lower", "R77")
     split = part(parts.CAP_4N7_0402, "can.termination_split", "C57")
     canh += jumper[1]
@@ -1348,7 +1352,9 @@ def ethernet(v3v3, gnd, nets) -> None:
     # microseconds, against a pin rated 20. Through 1 k it is 3.3 mA, and the
     # release is still (10 k + 1 k) x 4.7 uF.
     reset_series = part(parts.RES_1K_0402, "eth.r_reset_delay", "R96")
-    reset_delay = part(parts.CAP_4U7_0603, "eth.c_reset", "C81")
+    # C89, not C81: C68 to C88 are the plane-stitching capacitors, allocated as
+    # a contiguous block, and C81 is one of them.
+    reset_delay = part(parts.CAP_4U7_0603, "eth.c_reset", "C89")
     nets["ETH_PHY_RESET"] += reset_series[1]
     Net("ETH_RESET_RC").connect(reset_series[2], reset_delay[1])
     gnd += reset_delay[2]

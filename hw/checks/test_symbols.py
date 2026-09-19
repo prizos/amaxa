@@ -133,3 +133,37 @@ def test_mounting_holes_are_not_pads():
         if expected is not None and pads != expected:
             wrong.append(f"  {relative}: pads {sorted(pads)}, expected {sorted(expected)}")
     assert not wrong, "Mounting holes counted as pads:\n" + "\n".join(wrong)
+
+
+def test_every_designator_is_one_the_design_chose(design):
+    """
+    No reference carries SKiDL's collision suffix.
+
+    Two parts asking for the same designator is not an error to SKiDL: it keeps
+    one and renames the other by appending `_1`. Nothing says so, the build is
+    clean, and the board comes out carrying a reference like `R76_1`.
+
+    Three things then go wrong at once. The reference is not of the form an
+    assembly house's position file expects, so the part is a question at the
+    factory rather than a placement. The part that kept the name is not the one
+    the source asked for, so a comment saying "R76 is the CAN termination" is
+    now about a different resistor. And the collision itself is invisible: the
+    only trace of it is the suffix.
+
+    cpu1 had two - `R76_1` and `C81_1`. Both came from the same cause, a block
+    that hands out references from a running counter meeting a block that
+    writes them by hand. A designator is a letter or two and a number, which is
+    what this asks for, so it names the whole class rather than those two.
+    """
+    import re
+
+    wrong = sorted(
+        f"  {address}: {part['ref']!r}"
+        for address, part in design["parts"].items()
+        if not re.fullmatch(r"[A-Z]{1,3}[0-9]+", part["ref"] or "")
+    )
+    assert not wrong, (
+        "References that are not a plain prefix and number - SKiDL renames a "
+        "part whose designator was already taken, and this is what that looks "
+        "like:\n" + "\n".join(wrong)
+    )
