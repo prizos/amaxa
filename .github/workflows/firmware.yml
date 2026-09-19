@@ -20,9 +20,18 @@ concurrency:
 
 jobs:
   build:
-    name: Build hello_hw
+    name: Build hello_hw (${{ matrix.board }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both board support packages are built. cpu1 is not fabricated, so
+        # what this proves is that its pin map compiles and its clock tree is
+        # written down - which is what would otherwise rot first.
+        board: [nucleo_h743zi2, amaxa_cpu1]
+    env:
+      BOARD: ${{ matrix.board }}
     defaults:
       run:
         working-directory: firmware
@@ -61,7 +70,7 @@ jobs:
       - name: Size report
         run: |
           {
-            echo '### hello_hw (release)'
+            echo "### hello_hw (release, ${BOARD})"
             echo '```'
             cat out/hello_hw.size.txt
             echo '```'
@@ -70,7 +79,7 @@ jobs:
       - name: Upload firmware images
         uses: actions/upload-artifact@v7
         with:
-          name: hello_hw-${{ github.sha }}
+          name: hello_hw-${{ matrix.board }}-${{ github.sha }}
           path: |
             firmware/out/hello_hw.elf
             firmware/out/hello_hw.bin

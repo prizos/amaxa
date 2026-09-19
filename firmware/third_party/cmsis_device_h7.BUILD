@@ -11,7 +11,7 @@ cc_library(
     hdrs = glob(["Include/*.h"]),
     includes = ["Include"],
     deps = [
-        "@@//bsp/nucleo_h743zi2:mcu_config",
+        "@@//bsp:mcu_config",
         "@cmsis_core//:core",
     ],
 )

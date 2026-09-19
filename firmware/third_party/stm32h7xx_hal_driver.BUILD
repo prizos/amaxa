@@ -14,7 +14,7 @@ cc_library(
         "Inc/Legacy",
     ],
     deps = [
-        "@@//bsp/nucleo_h743zi2:hal_conf",
+        "@@//bsp:hal_conf",
         "@cmsis_device_h7//:headers",
     ],
 )

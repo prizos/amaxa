@@ -1,6 +1,7 @@
 # amaxa firmware: Makefile front end for the Bazel build.
 #
 #   make                 build the default app (hello_hw) into out/
+#   make BOARD=amaxa_cpu1  build it for the cpu1 board instead
 #   make toolchain       fetch Bazel and the arm-none-eabi toolchain, print versions
 #   make flash           program the board (STM32CubeProgrammer, OpenOCD or st-flash)
 #   make monitor         open the ST-LINK virtual COM port
@@ -14,6 +15,7 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := build
 
 APP     ?= hello_hw
+BOARD   ?= nucleo_h743zi2  # which bsp/ to build against: see bsp/BUILD.bazel
 MODE    ?= opt             # Bazel compilation mode: opt | dbg | fastbuild
 PORT    ?= /dev/ttyACM0    # ST-LINK virtual COM port
 BAUD    ?= 115200
@@ -51,7 +53,8 @@ else
 endif
 RENODE ?= $(TOOLS_DIR)/renode_$(RENODE_VERSION)-portable/renode
 
-BAZEL_FLAGS := --config=stm32 --compilation_mode=$(strip $(MODE))
+BAZEL_FLAGS := --config=stm32 --compilation_mode=$(strip $(MODE)) \
+               --define board=$(strip $(BOARD))
 IMAGE       := //apps/$(APP):$(APP)
 
 .PHONY: help build toolchain size flash monitor sim clean distclean

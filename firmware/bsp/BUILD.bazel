@@ -1,0 +1,46 @@
+"""Which board the firmware is built for.
+
+An app names `//bsp:current`, and the vendored sources name `//bsp:mcu_config`
+and `//bsp:hal_conf`; none of them names a board. `--define board=<name>`
+chooses one and the aliases below follow.
+
+Before this the board was written into four files, and one of them was inside a
+vendored third-party BUILD - which is the one file a vendored dependency should
+never need edited to add a second board.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "amaxa_cpu1",
+    define_values = {"board": "amaxa_cpu1"},
+)
+
+# The NUCLEO is the default because it is the board that exists: cpu1 is not
+# fabricated yet, and an unqualified `make build` should produce something that
+# can be flashed.
+[
+    alias(
+        name = name,
+        actual = select({
+            ":amaxa_cpu1": "//bsp/amaxa_cpu1:" + name,
+            "//conditions:default": "//bsp/nucleo_h743zi2:" + name,
+        }),
+    )
+    for name in ("current", "board", "hal_conf", "mcu_config")
+]
+
+# The memory map is the die's, not the board's: both boards carry the same
+# STM32H743ZIT6 and there is nothing in here a board could differ about.
+filegroup(
+    name = "linker_script",
+    srcs = ["STM32H743ZITx_FLASH.ld"],
+)
+
+cc_library(
+    name = "clock_api",
+    hdrs = ["clock.h"],
+    includes = ["."],
+)

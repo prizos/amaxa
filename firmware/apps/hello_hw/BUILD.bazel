@@ -16,18 +16,18 @@ cc_binary(
         "pwm.h",
         "syscalls.c",
     ],
-    additional_linker_inputs = ["//bsp/nucleo_h743zi2:linker_script"],
+    additional_linker_inputs = ["//bsp:linker_script"],
     copts = [
         "-Wextra",
         "-Wshadow",
         "-Werror",
     ],
     linkopts = [
-        "-T$(location //bsp/nucleo_h743zi2:linker_script)",
+        "-T$(location //bsp:linker_script)",
         "-lm",
     ],
     target_compatible_with = ["@platforms//os:none"],
-    deps = ["//bsp/nucleo_h743zi2:bsp"],
+    deps = ["//bsp:current"],
 )
 
 # out: hello_hw.elf / .bin / .hex / .lst / .size.txt

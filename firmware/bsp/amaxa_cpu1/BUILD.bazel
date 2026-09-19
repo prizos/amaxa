@@ -1,8 +1,23 @@
-"""Board support for amaxa cpu1 (STM32H743ZIT6, LQFP144). In progress."""
+"""Board support for amaxa cpu1 (STM32H743ZIT6, LQFP144)."""
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
+
+# Selects the MCU for the ST CMSIS device headers.
+cc_library(
+    name = "mcu_config",
+    defines = ["STM32H743xx"],
+)
+
+# HAL module selection and oscillator values.
+cc_library(
+    name = "hal_conf",
+    hdrs = ["stm32h7xx_hal_conf.h"],
+    defines = ["USE_HAL_DRIVER"],
+    includes = ["."],
+    deps = [":mcu_config"],
+)
 
 # Every MCU pin the board uses, with its alternate-function number and ADC
 # channel. GENERATED from hw/cpu1/pinmap.py - edit that, then run
@@ -11,4 +26,35 @@ cc_library(
     name = "board_pins",
     hdrs = ["board_pins.h"],
     includes = ["."],
+)
+
+# The same names the apps use on the NUCLEO, each one an alias for an entry in
+# the generated header rather than a pin number of its own.
+cc_library(
+    name = "board",
+    hdrs = ["board.h"],
+    includes = ["."],
+    deps = [":board_pins"],
+)
+
+# An 8 MHz crystal on PH0/PH1, which is the one thing this board's clock tree
+# does differently from the NUCLEO's.
+cc_library(
+    name = "clock",
+    srcs = ["clock.c"],
+    deps = [
+        "//bsp:clock_api",
+        "@stm32h7xx_hal_driver//:hal",
+    ],
+)
+
+# Everything a bare-metal app on this board links against.
+cc_library(
+    name = "current",
+    deps = [
+        ":board",
+        ":clock",
+        "@cmsis_device_h7//:startup_stm32h743",
+        "@stm32h7xx_hal_driver//:hal",
+    ],
 )
