@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 157
+EXPECTED_CHECKS = 159
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -80,12 +80,14 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "a figure either datasheet gives"
     ),
     ("buck5.c_couple", "capacitance"): (
-        "the coupling capacitor into the feedback node. Its value comes from "
-        "the LM5164 datasheet's Equation 26, which is a figure with no text "
-        "layer; 56 pF is the value TI's own reference design uses with the "
-        "same 3.3 nF ramp capacitor. It sets how long a light-load sleep "
-        "interval can get before the feedback divider discharges it, which is "
-        "not a rating anything here can bound. See SO8EP.md"
+        "the coupling capacitor into the feedback node. Equation 26 of the "
+        "LM5164 datasheet has now been read - CB >= t / (3 x RFB1) - and it "
+        "turns a *desired* load-transient settling time into a value rather "
+        "than giving one. With this board's 158 k top resistor the fitted "
+        "56 pF satisfies it up to 26.5 us. Nothing on this board states a "
+        "settling requirement, so there is nothing to compare that against; "
+        "note that TI's reference design gets 75 us from the same 56 pF only "
+        "because its divider is 446 k. See SO8EP.md"
     ),
 }
 
@@ -98,6 +100,8 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
 # test_a_confirmed_review_left_its_evidence_behind makes that checkable.
 CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOT223": ["pinout", "land_pattern"],
+    "SO8EP": ["land_pattern"],
+    "TC2030": ["pad_signals"],
 }
 
 NEEDS_A_HUMAN_EYE: dict[str, str] = {
@@ -109,13 +113,6 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
     "LQFP144": "which supply pin each of datasheet Figure 13's decoupling values belongs to",
     "XTAL_MC306": "that the crystal is between pads 1 and 4, as KiCad's footprint has it",
     "LED0603": "pad 1 is the cathode, from KiCad's convention not KENTO's drawing",
-    "TC2030": "the pad-to-signal table against Tag-Connect's own SWD pinout",
-    "SO8EP": (
-        "the LM5164's ripple-injection equations 24 to 26, and its exposed "
-        "pad's dimensions - both are figures with no text layer, so the "
-        "coupling capacitor and the land pattern came from TI's own reference "
-        "design and LCSC's footprint instead"
-    ),
     "SMB": "pad 1 is the cathode, the banded end",
     "MSOP10": (
         "the threshold DAC's factory-default EEPROM value, which is what makes "

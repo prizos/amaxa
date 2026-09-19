@@ -316,3 +316,76 @@ def test_every_stub_is_short_enough_to_be_a_stub(
     assert not long_ones, (
         f"Stubs longer than {allowed:g} mm:\n" + "\n".join(long_ones)
     )
+
+
+# TI's land pattern for the LM5164's DDA0008B package draws four 0.2 mm vias on
+# a 1.3 mm grid inside the exposed pad; parts/SO8EP/evidence/land_pattern.png is
+# that drawing. Microchip's LAN8742A pad is the PHY's only ground connection and
+# its only path for heat, and their outline gives the pad's size but no via
+# pattern - see parts/QFN24/evidence/. Four is the number the one manufacturer
+# who publishes it publishes.
+THERMAL_VIAS = 4
+# The footprint says so itself: KiCad names a land pattern with a thermal pad
+# "...-1EP...". Picking these out by pad area instead caught an inductor's
+# terminals and a push button, which are large pads and not thermal ones.
+EXPOSED_PAD = re.compile(r"-\d+EP")
+
+
+@pytest.fixture(scope="module")
+def exposed_pads(pcb_text) -> dict[str, tuple[float, float, float, float]]:
+    """Every pad big enough to be a thermal pad, as (x0, y0, x1, y1)."""
+    out = {}
+    for block in pcb_text.split("\n\t(footprint ")[1:]:
+        address = re.search(r'\(property "address" "([^"]+)"', block)
+        at = re.search(r"\n\t\t\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
+        if not (address and at and EXPOSED_PAD.search(block.split("\n", 1)[0])):
+            continue
+        ox, oy = float(at.group(1)), float(at.group(2))
+        angle = math.radians(float(at.group(3) or 0.0))
+        biggest = max(
+            (float(s.group(1)) * float(s.group(2))
+             for s in re.finditer(r"\(size ([\d.]+) ([\d.]+)\)", block)), default=0.0)
+        for pad in block.split("(pad ")[1:]:
+            number = re.match(r'"([^"]*)"', pad)
+            here = re.search(r"\(at ([-\d.]+) ([-\d.]+)", pad)
+            size = re.search(r"\(size ([\d.]+) ([\d.]+)\)", pad)
+            if not (number and here and size):
+                continue
+            w, h = float(size.group(1)), float(size.group(2))
+            if w * h < biggest:
+                continue
+            px, py = float(here.group(1)), float(here.group(2))
+            x = ox + px * math.cos(angle) + py * math.sin(angle)
+            y = oy - px * math.sin(angle) + py * math.cos(angle)
+            if round(math.degrees(angle)) % 180:
+                w, h = h, w
+            out[f"{address.group(1)}:{number.group(1)}"] = (
+                x - w / 2, y - h / 2, x + w / 2, y + h / 2)
+    return out
+
+
+def test_every_exposed_pad_has_its_thermal_vias(exposed_pads, vias):
+    """
+    A part's thermal pad reaches the ground plane, and not through one via.
+
+    An exposed pad is the only path a PowerPAD or QFN has for heat, and on both
+    of the parts here it is a ground connection as well. A pad soldered to
+    copper that goes nowhere is a part that runs hot and a ground that is only
+    as good as the pad's own island.
+
+    The number comes from the one manufacturer who draws it: TI's land pattern
+    for the LM5164 shows four. Microchip's LAN8742A outline gives the pad's
+    size and no via pattern at all, which is why that part is still on the
+    board's review list - but a pad with fewer vias than TI asks for is worth
+    catching whoever made it.
+    """
+    thin = []
+    for pad, (x0, y0, x1, y1) in sorted(exposed_pads.items()):
+        inside = [v for v in vias if x0 <= v[0] <= x1 and y0 <= v[1] <= y1]
+        if len(inside) < THERMAL_VIAS:
+            thin.append(f"  {pad}: {len(inside)} vias inside "
+                        f"{x1 - x0:.2f} x {y1 - y0:.2f} mm, wanted {THERMAL_VIAS}")
+    assert not thin, (
+        "Exposed pads without their thermal vias:\n" + "\n".join(thin)
+        + "\nSee parts/SO8EP/evidence/land_pattern.png."
+    )

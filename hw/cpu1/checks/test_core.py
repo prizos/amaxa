@@ -377,3 +377,40 @@ def _match(candidates: dict[str, list[str]]) -> dict[str, str]:
     for pin in candidates:
         claim(pin, set())
     return {pin: cap for cap, pin in owner.items()}
+
+
+# Tag-Connect's own TC2030-CTX datasheet, "Connections", for the 6-pin TC2030
+# footprint. Not a convention and not KiCad's opinion: the manufacturer's table,
+# in text, from the document `parts/TC2030/evidence/sources.json` identifies.
+TAG_CONNECT_PADS = {
+    "1": "3V3",      # VCC, which on this board is the 3V3 rail
+    "2": "SWDIO",    # SWDIO / TMS
+    "3": "NRST",     # nRESET
+    "4": "SWCLK",    # SWCLK / TCK
+    "5": "GND",      # GND, also the cable's GNDDetect
+    "6": "SWO",      # SWO / TDO
+}
+
+
+def test_the_debug_pads_are_wired_the_way_the_cable_is(pad_net):
+    """
+    Every Tag-Connect pad carries the signal Tag-Connect's cable puts on it.
+
+    The pad-to-signal table used to come from KiCad's symbol alone, and the
+    review note said so: a pinout nobody had checked against the cable it has
+    to mate with. Tag-Connect publish the mapping as text in the TC2030-CTX
+    datasheet, so it can be asserted rather than believed.
+
+    Getting this wrong is not subtle - SWDIO and SWCLK swapped is a board no
+    debugger will enumerate - but it is invisible until the first bring-up, at
+    which point the board is already made.
+    """
+    wrong = []
+    for pad, expected in sorted(TAG_CONNECT_PADS.items()):
+        found = pad_net.get(("core.swd", pad))
+        if found != expected:
+            wrong.append(f"  pad {pad}: on {found!r}, Tag-Connect's table says {expected!r}")
+    assert not wrong, (
+        "Tag-Connect debug pads:\n" + "\n".join(wrong)
+        + "\nSee parts/TC2030/evidence/pad_signals.png."
+    )

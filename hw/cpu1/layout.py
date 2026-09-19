@@ -586,6 +586,7 @@ def _buck_5v() -> None:
     # Its ground pin sits between the package and the on-time resistor, with
     # no room on its own line; the via goes west of it.
     VIAS.append(("buck5.ic:1", (-8.9, 28.1), "GND", *VIA, SUPPLY))
+
     PLACEMENT["buck5.r_uvlo_top"] = (-10.5, 32.0, 270)
     PLACEMENT["buck5.r_uvlo_bottom"] = (-10.5, 34.5, 270)
     PLACEMENT["buck5.r_on"] = (-7.64, 36.0, 270)
@@ -2696,6 +2697,15 @@ def _ethernet_local() -> None:
     # between the pad and the first RMII line, and the generator will not find
     # it by searching: it is narrower than the step the search takes.
     VIAS.append(("eth.phy:9", (-54.25, -14.25), "3V3", *VIA, SUPPLY))
+    # The PHY's exposed pad is its only ground connection and its only path for
+    # heat, and the stitching generator gives any pad exactly one via. Four,
+    # spread across the 2.5 mm pad, are what TI draw on the comparable
+    # PowerPAD - Microchip publish a pad size and no via pattern at all, which
+    # is why that part is still on the board's review list. Naming all four
+    # here also takes the generator's own via off its search, which is why the
+    # last of them sits where it used to put it.
+    for at in ((-54.85, -17.0), (-54.0, -17.85), (-54.0, -16.15), (-53.15, -17.0)):
+        VIAS.append((None, at, "GND", *VIA, SUPPLY))
 
     # XTAL1 goes to the terminal on the far corner, which means past the can
     # pad sitting between it and the package. Under the crystal rather than

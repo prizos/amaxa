@@ -1,0 +1,13 @@
+{
+  "pad_signals": {
+    "assumes": "",
+    "crop": "90,1000,1000,400",
+    "document": "Tag-Connect TC2030-CTX Plug-of-Nails Cable datasheet",
+    "dpi": 150,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "9f0570d0aa8a0747fe6227588046f7986505f9f998f5285ccb98fdfab5c7d281",
+    "shows": "Tag-Connect's own Connections table: the 6-pin TC2030 footprint is 1 VCC, 2 SWDIO/TMS, 3 nRESET, 4 SWCLK/TCK, 5 GND, 6 SWO/TDO",
+    "url": "https://www.tag-connect.com/wp-content/uploads/bsk-pdf-manager/TC2030-CTX_1.pdf"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "land_pattern": {
+    "assumes": "",
+    "crop": "190,270,740,500",
+    "document": "Texas Instruments LM5164, SNVSAU4D (September 2018, revised February 2026)",
+    "dpi": 130,
+    "page": 29,
+    "read": "2026-09-19",
+    "sha256": "cce03619fbe13951eea47458cd45e140361637d8fef32ae143b82b16d597e32d",
+    "shows": "DDA0008B land pattern example: eight 1.55 x 0.6 pads on 1.27 pitch, thermal pad solder-mask opening 2.71 x 3.4 with metal 2.95 x 4.9, and four 0.2 mm vias on a 1.3 mm grid under it",
+    "url": "https://www.ti.com/lit/ds/symlink/lm5164.pdf"
+  }
+}

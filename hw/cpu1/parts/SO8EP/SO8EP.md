@@ -79,20 +79,39 @@ figures. **Equation 26, which sets the coupling capacitor C17, is not
 reconstructed**: 56 pF is the value TI's reference design uses with the same
 3.3 nF ramp capacitor, and `checks/config.py` records that nothing bounds it.
 
-**Needs a human eye.** Read Equations 24 to 26 against the values fitted before
-ordering, and confirm C17 against Equation 26 and the load-transient settling
-time it is chosen for.
+**Equation 26, read.** TI state it as
+`CB >= t_TR-settling / (3 x RFB1)`, where *t* is the *desired* load-transient
+settling time — so it does not give a value, it converts a requirement into
+one. With this board's 158 kΩ top resistor, the fitted 56 pF satisfies it for
+any settling time up to **26.5 µs**.
+
+That is worth knowing, because 56 pF was taken from TI's reference design and
+TI's divider is 446 kΩ, where the same 56 pF buys 75 µs. The value did not
+scale with the divider. Nothing on this board states a transient requirement,
+so there is no defect to point at — but if one is ever stated above 26.5 µs,
+C17 is the part that has to grow, and `checks/config.py` now records that
+rather than recording that nothing bounds it at all.
 
 ## Footprint and the exposed pad
 
 KiCad stock `Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.514x3.2mm`, unmodified.
 
-TI's mechanical drawing for the DDA package is an image, so the exposed pad's
-size was taken from LCSC's own footprint for C477928, which gives 2.50 × 3.20 mm
-against KiCad's 2.514 × 3.20 mm. The lead pitch, lead span and body size in that
-footprint match the datasheet's stated 4.89 × 3.90 mm body.
+**Confirmed against TI's own land pattern.**
 
-**Needs a human eye** against TI's land-pattern drawing before fabrication.
+![DDA0008B land pattern](evidence/land_pattern.png)
+
+SNVSAU4D, page 29. Eight 1.55 × 0.6 pads on a 1.27 mm pitch; the thermal pad's
+solder-mask opening 2.71 × 3.4 with metal 2.95 × 4.9; and **four 0.2 mm vias on
+a 1.3 mm grid inside it**.
+
+KiCad's 2.514 × 3.20 exposed pad is smaller than TI's 2.71 × 3.4 opening, as is
+LCSC's 2.50 × 3.20 — less thermal area than TI asks for, which is the direction
+that costs temperature rise rather than shorts. The lead pitch, lead span and
+body size all match.
+
+The four vias are the part of that drawing this board now enforces:
+`test_every_exposed_pad_has_its_thermal_vias` counts vias inside every
+`-1EP` footprint's largest pad. It found the Ethernet PHY with one.
 
 ## Pin mapping
 
