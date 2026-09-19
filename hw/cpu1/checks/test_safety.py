@@ -305,9 +305,14 @@ def test_both_timers_see_the_trip_on_one_piece_of_copper(design, pad_net, pin_ma
     """
     The latch's other output goes to both break inputs, with nothing in between.
 
-    Two nets, or a resistor in either, would mean a break in one path that the
-    other would not show. `pinmap.py` says these two pins share a node, and this
-    is what makes sure the board agrees.
+    Two nets, or a resistor *in series*, would mean a break in one path that
+    the other would not show. `pinmap.py` says these two pins share a node, and
+    this is what makes sure the board agrees.
+
+    A part with its other pad on a rail is a different thing: a shunt cannot
+    interrupt the path, and the pull-down that makes an open latch output read
+    as "break asserted" is one. So what this forbids is anything whose far pad
+    is on another *signal*, which is what a series element looks like.
     """
     not_tripped = pad_net.get((LATCH, "3"))
     assert not_tripped == "TRIP_N", f"the latch's inverted output is on {not_tripped!r}"
@@ -315,9 +320,19 @@ def test_both_timers_see_the_trip_on_one_piece_of_copper(design, pad_net, pin_ma
     assert breaks == {"TRIP1_N", "TRIP2_N"}, (
         f"the trip reaches {sorted(breaks)}, and it has to reach both timers"
     )
+    rails = {"GND", "3V3", "5V"}
+    in_series = []
+    for address, far in _through_resistor(design, pad_net, not_tripped):
+        if far not in rails:
+            in_series.append(f"{address} to {far}")
+    assert not in_series, (
+        f"something is in series in the trip path: {sorted(in_series)}"
+    )
     members = {address for address, _ in {tuple(n) for n in design["nets"][not_tripped]}}
-    assert members == {LATCH, "mcu"}, (
-        f"something else is on the trip net: {sorted(members)}"
+    shunts = {address for address, far in _through_resistor(design, pad_net, not_tripped)
+              if far in rails}
+    assert members - shunts == {LATCH, "mcu"}, (
+        f"something else is on the trip net: {sorted(members - shunts)}"
     )
 
 
@@ -546,3 +561,52 @@ def test_the_trip_diodes_and_the_latch_are_inside_their_ratings(design, pad_net,
             f"{output} drives {draw * 1e3:.1f} mA of resistive load against a "
             f"{rating * 1e3:g} mA rating"
         )
+
+
+# Which pad of the comparator is which input, from KiCad's
+# `Comparator:TLV3501AIDBV` - the same symbol `test_symbols.py` holds to the
+# part's own pin names. The output falls when + is below -, so a threshold on
+# + trips as it falls and one on - trips as it rises.
+COMPARATOR_INPUTS = {"3": "+", "1": "-"}
+TRIPPED_BY = {"+": "GND", "-": "3V3"}
+
+
+def test_every_trip_decision_fails_to_tripped(design, pad_net):
+    """
+    Every net that decides a trip is pulled to the side that means "tripped".
+
+    Three of these nets used to run from one pin to another and nothing else -
+    the latch's two outputs and the three threshold buses - so an open circuit
+    anywhere on them left a CMOS input or a comparator reference floating, and
+    a floating node is not a safe state, it is an undefined one.
+
+    The direction is derived, not listed. A threshold on the `+` input trips
+    when it falls, so it is pulled to ground; one on `-` trips when it rises,
+    so it is pulled to the rail. The latch's Q disables the buffers when high
+    and its Q-bar asserts both break inputs when low, so they pull opposite
+    ways for the same reason.
+
+    This is the check that says the board still fails safe when a part is
+    missing, rather than only when every part is present and working.
+    """
+    wanted = {"TRIPPED": "3V3", "TRIP_N": "GND"}
+    for address, part in design["parts"].items():
+        if not part["symbol"].startswith("Comparator:"):
+            continue
+        for pad, side in COMPARATOR_INPUTS.items():
+            net = pad_net.get((address, pad))
+            if net and net.startswith("TRIP_LEVEL"):
+                wanted[net] = TRIPPED_BY[side]
+
+    wrong = []
+    for net, rail in sorted(wanted.items()):
+        pulls = {far for _, far in _through_resistor(design, pad_net, net)
+                 if far in ("GND", "3V3", "5V")}
+        if not pulls:
+            wrong.append(f"  {net}: nothing holds it if its driver goes open")
+        elif rail not in pulls:
+            wrong.append(f"  {net}: pulled to {sorted(pulls)}, and {rail} is "
+                         "the side that means tripped")
+    assert not wrong, (
+        "Trip decisions that do not fail safe:\n" + "\n".join(wrong)
+    )

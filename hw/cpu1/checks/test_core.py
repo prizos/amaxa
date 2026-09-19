@@ -185,15 +185,43 @@ def test_each_vcap_pin_has_its_regulator_capacitor(design, silicon, pad_net, two
     assert not wrong, "Core regulator capacitors:\n" + "\n".join(wrong)
 
 
-def test_every_capacitor_is_rated_for_the_rail(design, spec):
-    """No capacitor on the board is rated below the highest the logic rail reaches."""
-    _, rail_high = spec("rail.3v3", "voltage")
-    weak = [
-        f"  {a}: {spec(a, 'max_voltage')[0]:g} V"
-        for a, part in design["parts"].items()
-        if part["symbol"] == "Device:C" and spec(a, "max_voltage")[0] < rail_high
-    ]
-    assert not weak, f"Capacitors rated below {rail_high:.3f} V:\n" + "\n".join(weak)
+def test_every_capacitor_is_rated_for_the_node_it_sits_on(design, two_pad_parts, spec):
+    """
+    Each capacitor against the highest voltage **its own nets** reach.
+
+    This used to hold every capacitor to the logic rail's 3.465 V, which is
+    the right number for most of them and far too low for the rest: thirteen
+    capacitors on this board sit on the 5 V rail, including the 5 V buck's own
+    output bulk, and a part rated 4 V would have passed. Nothing else covered
+    them - the input-side check is restricted to the three nets in front of
+    the fuse.
+
+    The voltage comes from the nets the capacitor is actually between. A net
+    that is not a declared rail is a signal net, and on this board a signal
+    net is driven from the logic rail.
+    """
+    _, input_high = spec("input", "voltage")
+    _, v5 = spec("rail.5v", "voltage")
+    _, v3v3 = spec("rail.3v3", "voltage")
+    rails = {
+        "GND": 0.0,
+        "VIN": input_high, "VIN_RAW": input_high, "VIN_FUSED": input_high,
+        "RPP_GATE": input_high, "SW_5V": input_high, "UVLO": input_high,
+        "5V": v5, "SW_3V3": v5, "5VA": v5,
+        "3V3": v3v3,
+    }
+
+    weak = []
+    for address, part in sorted(design["parts"].items()):
+        if part["symbol"] != "Device:C":
+            continue
+        nets = two_pad_parts.get(address, (None, None))
+        across = max(rails.get(net, v3v3) for net in nets)
+        rated, _ = spec(address, "max_voltage")
+        if rated < across:
+            weak.append(f"  {address}: rated {rated:g} V, sits across {across:.3f} V "
+                        f"between {nets[0]} and {nets[1]}")
+    assert not weak, "Capacitors rated below the node they sit on:\n" + "\n".join(weak)
 
 
 # --- clocks ------------------------------------------------------------------------------

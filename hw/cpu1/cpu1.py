@@ -706,6 +706,29 @@ def safety_chain(v3v3, gnd, nets) -> None:
     tripped += latch["Q"]
     nets["TRIP_N"] += latch["~{Q}"]
 
+    # Both latch outputs get a pull, and they pull opposite ways because the
+    # outputs are complementary and both have to fail to "tripped".
+    #
+    # Without them these two nets are silicon to silicon: Q reaches nothing
+    # but the two buffers' second enable, Q-bar nothing but the two timers'
+    # break inputs. One unwetted pin on a VSSOP-8 - or U7 not placed at all -
+    # and the buffers see a floating enable, which a CMOS input will read as
+    # whatever it likes and most often reads as low. That is both buffers
+    # enabled by PWM_ENABLE_N alone, with the hardware trip silently absent,
+    # on a board that passes bring-up and looks right until the over-current
+    # it was supposed to stop. The same open takes both BKIN pins with it.
+    #
+    # 100 k rather than 10 k: it only has to beat a CMOS input's microamp of
+    # leakage, and the latch is a low-power AUP part that should not spend a
+    # third of a milliamp holding its own output against a resistor.
+    tripped_pull_up = part(parts.RES_100K_0402, "safety.r_tripped_pullup", "R85")
+    v3v3 += tripped_pull_up[1]
+    tripped += tripped_pull_up[2]
+
+    trip_n_pull_down = part(parts.RES_100K_0402, "safety.r_trip_n_pulldown", "R86")
+    nets["TRIP_N"] += trip_n_pull_down[1]
+    gnd += trip_n_pull_down[2]
+
     # The enable the MCU holds. Pulled up, so a pin that is not being driven -
     # during reset, or with no firmware at all - is a pin that says "off".
     enable_pull_up = part(parts.RES_10K_0402, "safety.r_enable_pullup", "R19")
@@ -892,6 +915,35 @@ def trip_comparators(v3v3, gnd, nets) -> None:
         cap = part(spec, address, ref)
         v3v3 += cap[1]
         gnd += cap[2]
+
+    # Each threshold gets a pull, and which way depends on which input it is
+    # on. An "above" comparator has the threshold on + and the signal on -, so
+    # a threshold that drifts to zero trips; a "below" one is the other way
+    # round and wants its threshold pulled up. Both directions are "tripped".
+    #
+    # Without them these nets run from one DAC pin to between one and three
+    # comparator inputs and nothing else. A TLV3501's input bias is picoamps,
+    # so an open DAC output - a part not placed, one pin unwetted - leaves the
+    # threshold to leakage and to whatever couples into it, and it can sit
+    # anywhere. If it sits high, the three phase over-current trips and the
+    # DC-link over-voltage trip never assert: protection that is gone, on a
+    # board that boots safe and looks right, until firmware clears the latch.
+    #
+    # 100 k is a microamp against a buffered DAC output, which moves the
+    # threshold by less than the comparator's own offset.
+    THRESHOLD_PULLS = (
+        ("trip.r_level_high_pulldown", "TRIP_LEVEL_HIGH", "down", "R87"),
+        ("trip.r_level_low_pullup", "TRIP_LEVEL_LOW", "up", "R88"),
+        ("trip.r_level_fast4_pulldown", "TRIP_LEVEL_FAST4", "down", "R89"),
+    )
+
+    for address, net, direction, ref in THRESHOLD_PULLS:
+        pull = part(parts.RES_100K_0402, address, ref)
+        thresholds[net] += pull[1]
+        if direction == "down":
+            gnd += pull[2]
+        else:
+            v3v3 += pull[2]
 
     outputs = {}
     # Each comparator, and which way round its inputs go. "above" means the

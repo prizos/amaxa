@@ -9,9 +9,9 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 130 × 110 mm |
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
-| **Footprints** | 249 |
+| **Footprints** | 254 |
 | **Nets** | 191 |
-| **Routing** | 1262 track segments, 537 vias, 4 zones |
+| **Routing** | 1272 track segments, 545 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -90,8 +90,8 @@ schematic after the fact.
 | 3V3 buck | 9 | TPS562200 down to the logic rail. |
 | Analog supply | 3 | 5VA and its ferrite, for the sensors on the power board. |
 | Reference | 2 | 3.0 V series reference into VREF+, buffered out to the analog header. |
-| Safety chain | 51 | Two octal buffers and the hardware latch. Nothing reaches a gate driver unless firmware has deliberately allowed it, and a reset takes the permission away. |
-| Trip comparators | 23 | Seven TLV3501s and the threshold DAC, which powers up at zero - so an unprogrammed board trips as it powers up rather than switching. |
+| Safety chain | 53 | Two octal buffers and the hardware latch. Nothing reaches a gate driver unless firmware has deliberately allowed it, and a reset takes the permission away. |
+| Trip comparators | 26 | Seven TLV3501s and the threshold DAC, which powers up at zero - so an unprogrammed board trips as it powers up rather than switching. |
 | ADC networks | 31 | One RC per channel, sized from both ends: low enough to stop the switching node aliasing into the measurement, high enough to recharge inside the sampling window. |
 | CAN FD | 8 | TCAN1044V with split termination on a solder jumper. |
 | RS-485 | 5 | THVD1450, fail-safe biased on-chip, 120 ohm on a jumper. |
@@ -102,7 +102,7 @@ schematic after the fact.
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 249, by block</summary>
+<summary><strong>Every footprint</strong> — all 254, by block</summary>
 
 #### MCU core
 
@@ -250,7 +250,9 @@ schematic after the fact.
 | `R19` | `safety.r_enable_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R17` | `safety.r_fault1_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R18` | `safety.r_fault2_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R86` | `safety.r_trip_n_pulldown` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
 | `R16` | `safety.r_trip_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R85` | `safety.r_tripped_pullup` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
 | `R28` | `safety.series.gate_enable` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R26` | `safety.series.pwm1_a_high` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R27` | `safety.series.pwm1_a_low` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
@@ -292,6 +294,9 @@ schematic after the fact.
 | `C36` | `trip.fast3_low.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `U14` | `trip.fast4_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
 | `C37` | `trip.fast4_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `R89` | `trip.r_level_fast4_pulldown` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
+| `R87` | `trip.r_level_high_pulldown` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
+| `R88` | `trip.r_level_low_pullup` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
 | `R59` | `trip.r_scl_pullup` | 4.7k | 0402WGF4701TCE | C25900 | `R_0402_1005Metric` |
 | `R60` | `trip.r_sda_pullup` | 4.7k | 0402WGF4701TCE | C25900 | `R_0402_1005Metric` |
 
@@ -443,14 +448,16 @@ schematic after the fact.
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 219 |  |
-| `3V3` | 96 |  |
+| `GND` | 222 |  |
+| `3V3` | 98 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
 | `USB_VBUS` | 6 |  |
 | `VREF+` | 6 |  |
 | `5VA` | 5 |  |
+| `TRIP_LEVEL_HIGH` | 5 |  |
+| `TRIP_LEVEL_LOW` | 5 |  |
 | `FAST1_SENSE` | 4 |  |
 | `FAST2_SENSE` | 4 |  |
 | `FAST3_SENSE` | 4 |  |
@@ -461,8 +468,8 @@ schematic after the fact.
 | `NRST` | 4 |  |
 | `PWM_ENABLE_N` | 4 |  |
 | `SW_5V` | 4 |  |
-| `TRIP_LEVEL_HIGH` | 4 |  |
-| `TRIP_LEVEL_LOW` | 4 |  |
+| `TRIPPED` | 4 |  |
+| `TRIP_N` | 4 |  |
 | `VDDA` | 4 |  |
 | `BOARD_ID1` | 3 |  |
 | `BOARD_ID2` | 3 |  |
@@ -525,9 +532,8 @@ schematic after the fact.
 | `STO1_FEEDBACK` | 3 |  |
 | `STO2_FEEDBACK` | 3 |  |
 | `SW_3V3` | 3 |  |
-| `TRIPPED` | 3 |  |
 | `TRIP_CLEAR_N` | 3 |  |
-| `TRIP_N` | 3 |  |
+| `TRIP_LEVEL_FAST4` | 3 |  |
 | `USB_DM_CABLE` | 3 |  |
 | `USB_DP_CABLE` | 3 |  |
 | `UVLO` | 3 |  |
@@ -625,7 +631,6 @@ schematic after the fact.
 | `TRIP_FAST3_HIGH` | 2 |  |
 | `TRIP_FAST3_LOW` | 2 |  |
 | `TRIP_FAST4_HIGH` | 2 |  |
-| `TRIP_LEVEL_FAST4` | 2 |  |
 | `USB_CC1` | 2 |  |
 | `USB_CC2` | 2 |  |
 | `USB_DM` | 2 |  |

@@ -476,3 +476,41 @@ def test_the_threshold_dac_is_wired_the_way_its_pin_table_says(design, pad_net):
         "Threshold DAC pins:\n" + "\n".join(wrong)
         + "\nSee parts/MSOP10/MSOP10.md."
     )
+
+
+def test_the_thresholds_can_reach_the_top_of_the_signal_range(spec, pad_net):
+    """
+    The DAC's full scale covers everything the comparators are asked to trip on.
+
+    A threshold that cannot be placed in the top of the measurement range is
+    not a protection limit, it is a nuisance trip. Everything the sense chain
+    delivers is ratiometric to VREF+, so that is the range a threshold has to
+    span.
+
+    **This is a firmware requirement, and it is the reason this check exists.**
+    The MCP4728 ships with the internal 2.048 V reference selected - datasheet
+    Table 4-2, committed at `parts/MSOP10/evidence/factory_default.png` - and
+    2.048 V is 68 % of VREF+. A board that never writes the reference bit
+    cannot set the DC-link over-voltage trip above two thirds of the sensor's
+    range, and for the bipolar phase currents, which idle at mid-scale, it
+    cannot set one above 37 % of the positive half.
+
+    So the check compares the range against the reference the board *uses*,
+    the supply, and the assertion below fails if that stops being enough. The
+    power-up state is still the safe one - every channel ships at code zero,
+    so an unprogrammed board sits tripped - which is why this is a limitation
+    to program around rather than a hazard.
+    """
+    reference, _ = spec("vref.ic", "output_voltage")
+    internal, _ = spec(DAC, "internal_reference")
+    rail, (rail_low, _) = _supply_of(pad_net, DAC, "1", spec)
+
+    assert rail_low >= reference, (
+        f"the DAC runs from {rail} at {rail_low:g} V and has to place a "
+        f"threshold anywhere in a {reference:g} V signal range"
+    )
+    assert internal < reference, (
+        "the factory-default internal reference reaches "
+        f"{internal:g} V of a {reference:g} V range, so nothing would have to "
+        "select the supply - and this check would be pointless"
+    )

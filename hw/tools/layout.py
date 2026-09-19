@@ -194,7 +194,7 @@ def _clear(box, obstacles, margin: float) -> bool:
 # four corners, each at a growing distance. Above first because that is where a
 # reader looks, and because a board read in one direction is easier than one
 # whose labels are scattered by the search that placed them.
-LABEL_STEPS = (0.0, 0.5, 1.1, 1.8, 2.6, 3.5)
+LABEL_STEPS = (0.0, 0.5, 1.1, 1.8, 2.6, 3.5, 4.5, 5.6, 6.8)
 LABEL_SIDES = ((0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (1, -1), (-1, 1), (1, 1))
 
 
@@ -256,10 +256,13 @@ def label(text: str, footprints: dict, placement: dict, labels: dict, font: dict
             for sx, sy in LABEL_SIDES
         ]
         chosen[address] = candidates[0]
-        # Two passes: the second drops the neighbours' outlines. A designator
-        # over an outline is untidy and still legible, so a part with nowhere
-        # tidy left takes an untidy place rather than landing back on a pad.
-        for obstacles in (everything + others, everything):
+        # Three passes, each dropping a constraint the one before it kept. A
+        # designator over an outline is untidy and still legible; one over a
+        # pad gets clipped by the fab; one over *another designator* leaves two
+        # parts unlabelled at once, which is the worst of the three. So the
+        # last pass keeps only the other labels: a part with nowhere good left
+        # lands somewhere untidy rather than on top of a neighbour's name.
+        for obstacles in (everything + others, everything, []):
             for dx, dy in candidates:
                 box = (x + dx - half_w, y + dy - half_h, x + dx + half_w, y + dy + half_h)
                 if _clear(box, obstacles, 0.15) and _clear(box, taken, 0.15):

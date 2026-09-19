@@ -26,7 +26,7 @@ will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)); the review lists them.
 | Stackup | 6 layers, 1 oz throughout, **PCBWay's own published 1.6 mm build**: 7628 outer prepreg at 0.1855, 0.43 cores, 7628 middle prepreg at 0.175. Picked out of their table because that outer prepreg is identical to the 4-layer spin's, so the controlled-impedance pairs are unchanged — their default 6-layer build uses 2116 at 0.1195 and would have moved every pair |
 | Layers | F.Cu signal, In1.Cu ground, In2.Cu supply islands, In3.Cu signal, In4.Cu ground, B.Cu signal — the supplies sit next to the quietest signal layer, not the busiest |
 | Size | 130 × 110 mm — grown from 100 × 80 to hold the Ethernet jack |
-| MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at JLCPCB** on 2026-09-17; see [its review note](parts/LQFP144/LQFP144.md) |
+| MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at both JLCPCB and LCSC** on 2026-09-19; see [its review note](parts/LQFP144/LQFP144.md) |
 
 ## The pin map
 
@@ -50,7 +50,7 @@ sampled simultaneously is not on ADC1 and ADC2, ST's data and KiCad's symbol
 disagree about the part, or the committed header is not what the table
 generates.
 
-88 of the package's 114 I/O pins are used. Three conflicts shaped the layout,
+87 of the package's 114 I/O pins are used — the count `make pins-write` prints, not one written here. Three conflicts shaped the layout,
 and the table's docstring records them: Ethernet's CRS_DV and TIM8_CH1N want the
 same pin, no 32-bit timer is free for the encoder, and keeping TIM1 where the
 NUCLEO has it costs COMP2's external inputs.

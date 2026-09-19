@@ -44,6 +44,28 @@ DS22187E, Table 4-2: every channel ships with `D11..D0 = 0`, `VREF = 1`
 all four outputs is exactly the power-up state the safety argument wants, and
 it is now a picture rather than a hope.
 
+**`VREF = 1` is the half that was missed.** `parts.py` stated for months that
+the part's "output range is its supply", and that is only true after firmware
+says so. Out of the box the reference is the internal **2.048 V**, which is
+68 % of the 3.0 V that everything the sense chain delivers is ratiometric to.
+Until the bit is written:
+
+- the DC-link over-voltage trip cannot be placed above two thirds of the
+  sensor's range;
+- a phase over-current trip, which idles at mid-scale, cannot be placed above
+  37 % of the positive half.
+
+**So firmware must select the supply as the reference before clearing the trip
+latch.** It is a Multi-Write to the *input* registers — not an EEPROM write,
+which this part must never receive, because that is what would change the
+power-up state. The power-up state itself stays safe either way: code zero is
+zero volts on any reference, so an unprogrammed board still sits tripped.
+
+`test_the_thresholds_can_reach_the_top_of_the_signal_range` holds the design to
+the supply being enough, and asserts that the internal reference is *not* —
+so the check stops being true the day someone decides the firmware write is
+optional.
+
 The earlier note said this datasheet was "a scanned-font PDF that no text
 extraction here could read". It is not: `pdftotext` reads the whole document,
 including this table and the pin table below. What was missing was a tool, not

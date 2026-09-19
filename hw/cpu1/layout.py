@@ -959,8 +959,18 @@ def _safety() -> None:
     # four signals from the package have of getting here.
     PLACEMENT["safety.r_clear_pullup"] = (21.0, 13.6, 0)
     PLACEMENT["safety.r_enable_pullup"] = (18.0, 11.3, 0)
+    # The two that make an open latch output read as tripped. Each sits on the
+    # net it holds, with its other pad on a plane via - which is cheap now
+    # that both a ground plane and the supply pour are an ordinary via away.
+    PLACEMENT["safety.r_tripped_pullup"] = (30.6, 11.5, 90)
+    ROUTES.append(("TRIPPED", _width_for("TRIPPED", SIGNAL), F,
+                   ["safety.r_tripped_pullup:2", (29.8, 10.6)]))
+    ROUTES.append(("TRIP_N", _width_for("TRIP_N", SIGNAL), F,
+                   ["safety.r_trip_n_pulldown:1", (13.5, 13.7)]))
+    PLACEMENT["safety.r_trip_n_pulldown"] = (15.0, 13.2, 0)
     for address in ("safety.d_faults", "safety.d_reset", "safety.r_trip_pullup",
-                    "safety.r_clear_pullup", "safety.r_enable_pullup"):
+                    "safety.r_clear_pullup", "safety.r_enable_pullup",
+                    "safety.r_tripped_pullup", "safety.r_trip_n_pulldown"):
         LABELS[address] = (2.6, 0.0)
 
     _output_slots()
@@ -1715,6 +1725,16 @@ def _trip() -> None:
     # The threshold DAC, turned so the three outputs face the lanes they drop
     # into and the bus and supply pins face the package they come from.
     PLACEMENT["trip.dac"] = (*TRIP_DAC, 180)
+    # The three that make an open threshold read as "tripped". They sit in the
+    # clear strip south of the sense rows, each dropping onto its own bus.
+    # Each sits with its first pad exactly on the back-layer bus it holds, so
+    # a via at that pad is the whole connection.
+    for address, x, bus, net in (("trip.r_level_high_pulldown", -21.5, -31.0, "TRIP_LEVEL_HIGH"),
+                                 ("trip.r_level_low_pullup", -23.0, -31.8, "TRIP_LEVEL_LOW"),
+                                 ("trip.r_level_fast4_pulldown", -9.05, -29.99, "TRIP_LEVEL_FAST4")):
+        PLACEMENT[address] = (x, bus - 0.51, 90)
+        LABELS[address] = (2.6, 0.0)
+        VIAS.append((f"{address}:1", (x, bus), net, *VIA, _width_for(net, SIGNAL)))
     LABELS["trip.dac"] = (0.0, 3.0)
     PLACEMENT["trip.dac.decoupling"] = (-14.0, -21.5, 0)
     PLACEMENT["trip.dac.bulk"] = (-11.0, -21.5, 0)

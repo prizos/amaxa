@@ -539,11 +539,16 @@ COMPARATOR = PartSpec(
     },
 )
 
-# Quad 12-bit, I2C, and its output range is its supply - which is why the trip
-# thresholds are ratiometric to the logic rail rather than to VREF, and why
-# test_power.py's rail band turns into a tolerance on every trip point. See
-# MSOP10.md, and the review note's warning about where its power-up value comes
-# from.
+# Quad 12-bit, I2C. Its output range is its supply **once firmware has said
+# so**: the part ships with V_REF = 1 in EEPROM, which selects the internal
+# 2.048 V reference, and Table 4-2 of the datasheet is committed beside the
+# part note as the evidence. This file used to state the supply case as though
+# it were unconditional, and it is not - see MSOP10.md, which records what
+# firmware has to write and why the power-up state is still the safe one.
+#
+# With the supply as the reference the thresholds are ratiometric to the logic
+# rail while everything the ADCs measure is ratiometric to VREF+, which is the
+# mismatch test_trip.py turns into a tolerance on every trip point.
 THRESHOLD_DAC = PartSpec(
     symbol="Analog_DAC:MCP4728", footprint="MSOP10:MSOP-10_3x3mm_P0.5mm", prefix="U",
     manufacturer="Microchip Tech", mpn="MCP4728T-E/UN", lcsc="C478093",
@@ -552,6 +557,10 @@ THRESHOLD_DAC = PartSpec(
         "supply_voltage": between(2.7, 5.5),
         "resolution_bits": exact(12),
         "channels": exact(4),
+        # The reference the part ships selecting, from datasheet Table 4-2.
+        # Not the one this board uses - firmware selects the supply instead -
+        # but it is what the thresholds are worth until it does.
+        "internal_reference": exact(2.048),
     },
 )
 
