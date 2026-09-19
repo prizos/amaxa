@@ -72,9 +72,14 @@ a check to ask about two pads with no net.
 `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12`, unmodified, which is drawn
 for this manufacturer's part by name.
 
-## Needs a human eye
+## Waiting on a decision
 
 The receptacle's **mounting-shell pads against the board edge**. The footprint
 places the connector's mouth at the edge of the outline, and whether the shell
 overhangs, sits flush, or needs a notch in the edge cut is a mechanical
 question about the enclosure this board goes in, which does not exist yet.
+
+This is not a review that has not been done. No document settles it, because
+the thing it depends on has not been designed — so it is tracked separately
+from the parts whose datasheets nobody had read, and it clears when there is
+an enclosure, not when someone opens a PDF.

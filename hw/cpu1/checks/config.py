@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 162
+EXPECTED_CHECKS = 164
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -104,34 +104,31 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "LQFP144": ["power_supply_scheme"],
     "MSOP10": ["factory_default"],
     "QFN24": ["package_outline"],
+    "RJ45HR": ["schematic"],
     "SMB": ["cathode"],
     "SO8EP": ["land_pattern"],
     "SOD123": ["cathode"],
     "SOT23": ["bat54a_common_anode"],
     "TC2030": ["pad_signals"],
+    "XTAL5032_4P": ["parameters"],
     "XTAL_MC306": ["internal_connection"],
 }
 
-NEEDS_A_HUMAN_EYE: dict[str, str] = {
-    "HDR2X26": (
-        "the fifty-two-pin header's ordering code and its LCSC number. The "
-        "stock figure on file is the forty-pin part's; the number here "
-        "follows the series pattern and has not been looked up"
-    ),
-    "XTAL5032_4P": (
-        "the crystal's ESR and ppm figures, which come from LCSC's parametric "
-        "data rather than a datasheet nobody here could fetch. They are the "
-        "whole reason this part was chosen over two cheaper ones"
-    ),
-    "RJ45HR": (
-        "what pin 8 is, the 1500 V isolation figure, and the 0 to +70 degC "
-        "rating on a board where every other part is the industrial grade. "
-        "Hanrun's datasheet could not be fetched from any mirror reachable "
-        "here, so all three come from LCSC's parametric data"
-    ),
+# Part libraries whose review note says "Waiting on a decision": questions no
+# document can answer, because the thing they depend on has not been designed
+# yet. These are not unread datasheets and must not be filed as if they were.
+# The difference is whether reading something would settle it.
+WAITING_ON_A_DECISION: dict[str, str] = {
     "USBC16": (
         "whether the receptacle's shell overhangs the board edge, sits flush, "
-        "or wants a notch in the outline. That is a question about an enclosure "
-        "that does not exist yet, and no drawing here can settle it"
+        "or wants a notch in the outline. That is a question about an "
+        "enclosure that does not exist yet, and no drawing can settle it"
     ),
 }
+
+# Part libraries whose review note still says "Needs a human eye": a figure in
+# a manufacturer's document that nobody has read. Everything that was on this
+# list has been fetched, rendered and read - CONFIRMED_FROM_A_RENDER is where
+# each one went, with the crop that settles it. It stays here, empty, because
+# the next part added to this board will land on it.
+NEEDS_A_HUMAN_EYE: dict[str, str] = {}

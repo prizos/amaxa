@@ -551,3 +551,45 @@ def pin_map(board_dir):
     from mcu_pins import load_source
 
     return load_source(board_dir / "pinmap.py", "cpu1_pinmap_eth")
+
+
+# HanRun's HR911105A datasheet, REV. A/2, page 1: the schematic inside the
+# jack, and the note beneath it. parts/RJ45HR/evidence/ holds the figure.
+JACK_PINS = {
+    "1": "ETH_TD_P",   # TD+
+    "2": "ETH_TD_N",   # TD-
+    "3": "ETH_RD_P",   # RD+
+    "6": "ETH_RD_N",   # RD-
+    "8": "GND",        # CHS GND - "Connect CHS GND to PCB Ground"
+}
+
+
+def test_the_ethernet_jack_is_wired_the_way_hanrun_draws_it(design, pad_net):
+    """
+    Every pin of the RJ45 carries what HanRun's internal schematic says it does.
+
+    This part's review note used to list three things nobody could check,
+    because the datasheet could not be fetched. It can, and pin 8 is CHS GND
+    with an instruction under the drawing to tie it to PCB ground - which is
+    what the board had already assumed, on the reasoning that tying an unknown
+    jack pin to ground is safe. That reasoning is not a check.
+
+    Pins 4 and 5 are the centre taps and are held only to being the same net as
+    each other: what that net should be is the PHY's business, not the jack's.
+    Pin 7 is NC, and is checked by staying that way.
+    """
+    wrong = [f"  pin {pin}: on {pad_net.get(('eth.jack', pin))!r}, "
+             f"HanRun's schematic says {expected!r}"
+             for pin, expected in sorted(JACK_PINS.items())
+             if pad_net.get(("eth.jack", pin)) != expected]
+
+    taps = {pad_net.get(("eth.jack", pin)) for pin in ("4", "5")}
+    if len(taps) != 1 or None in taps:
+        wrong.append(f"  pins 4 and 5 are the centre taps and are on {taps}")
+    if pad_net.get(("eth.jack", "7")) is not None:
+        wrong.append("  pin 7 is NC in HanRun's schematic, and is connected here")
+
+    assert not wrong, (
+        "Ethernet jack pins:\n" + "\n".join(wrong)
+        + "\nSee parts/RJ45HR/evidence/schematic.png."
+    )

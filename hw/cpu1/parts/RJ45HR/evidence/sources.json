@@ -1,0 +1,13 @@
+{
+  "schematic": {
+    "assumes": "",
+    "crop": "120,270,1060,1180",
+    "document": "HanRun HR911105A single port RJ45 with integrated magnetics, REV. A/2, served by LCSC for C12074",
+    "dpi": 150,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "7298dc56f8734d6e4c4fd6e479cf41c05b2bf5f13f08aae8bca40312fc707ef4",
+    "shows": "HanRun's electrical specification and internal schematic: operating range 0 to +70 degC, isolation 1500 Vrms 0.5 mA 60 s UTP side to chip side, P1 TD+, P2 TD-, P3 RD+, P6 RD-, P4 and P5 the centre taps, P7 NC, P8 CHS GND with the note 'Connect CHS GND to PCB Ground', and the 4 x 75 ohm plus 1000 pF 2 kV termination inside the jack",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/0ad5e0c00dfc47fb8e582f15f877f290.pdf"
+  }
+}

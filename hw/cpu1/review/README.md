@@ -11,7 +11,7 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
 | **Footprints** | 249 |
 | **Nets** | 191 |
-| **Routing** | 1262 track segments, 534 vias, 4 zones |
+| **Routing** | 1262 track segments, 537 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -389,7 +389,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `J4` | `header.analog` | analog | PZ254-2-15-Z-8.5 | C3012255 | `PinHeader_2x15_P2.54mm_Vertical` |
-| `J3` | `header.digital` | digital | PZ254-2-26-Z-8.5 | C2894981 | `PinHeader_2x26_P2.54mm_Vertical` |
+| `J3` | `header.digital` | digital | PZ254-2-40-Z-8.5 | C2906029 | `PinHeader_2x26_P2.54mm_Vertical` |
 
 #### Plane stitching
 

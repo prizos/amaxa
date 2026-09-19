@@ -121,6 +121,32 @@ def test_unresolved_human_review_is_tracked(part_dirs, board_config, board_dir):
     )
 
 
+def test_questions_waiting_on_a_decision_are_tracked_separately(part_dirs, board_config, board_dir):
+    """
+    A question no document can answer is not an unread datasheet.
+
+    Both are things a person has to do, and filing them together is how the one
+    that needs five minutes with a PDF hides behind the one that needs an
+    enclosure to exist. `WAITING_ON_A_DECISION` is the second kind, and the
+    marker in the note is "Waiting on a decision".
+    """
+    found = {
+        d.name
+        for d in part_dirs
+        if (d / f"{d.name}.md").is_file()
+        and "Waiting on a decision" in (d / f"{d.name}.md").read_text()
+    }
+    declared = set(getattr(board_config, "WAITING_ON_A_DECISION", {}))
+    appeared = sorted(found - declared)
+    gone = sorted(declared - found)
+    assert not appeared and not gone, (
+        "The waiting-on-a-decision list does not match the notes.\n"
+        f"  marked but not tracked: {appeared}\n"
+        f"  tracked but no longer marked: {gone}\n"
+        f"Update WAITING_ON_A_DECISION in {board_dir.name}/checks/config.py."
+    )
+
+
 def test_a_confirmed_review_left_its_evidence_behind(part_dirs, board_config, board_dir):
     """
     Every part moved off the waiting list has the figure it was cleared by.

@@ -1,0 +1,13 @@
+{
+  "parameters": {
+    "assumes": "",
+    "crop": "130,90,990,1280",
+    "document": "Yajingxin TXM25M0004503LDCDO00T, served by LCSC for C362363",
+    "dpi": 150,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "cb67aa1d977881aeb419e5f972b6276d52c1ae67d87cefd8cf01cbe84b492518",
+    "shows": "the electrical parameter table - 25.000000 MHz, CL 20 pF, drive level 100 uW, equivalent resistance 30 ohm max, shunt capacitance C0 0 to 7 pF, tolerance and stability +/-20 ppm, -40 to +85 degC, aging +/-5 ppm/year - and the outline with its connection diagram, which puts the crystal between pads 1 and 3 and GND on 2 and 4",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/f181bb83db5e7acbcea3da2d3bbd4749.pdf"
+  }
+}

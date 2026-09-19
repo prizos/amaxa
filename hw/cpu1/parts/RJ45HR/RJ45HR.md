@@ -77,26 +77,29 @@ poor trade on a board that already has three LEDs and a debug port.
 
 ## Figures used
 
+![HanRun's specification and internal schematic](evidence/schematic.png)
+
+HanRun's own datasheet, REV. A/2. All three of the things this note used to
+list as unreadable are on that one page.
+
 | Figure | Value | Where |
 |---|---|---|
-| Isolation | 1500 V rms | LCSC's parametric data for C12074 |
-| Rate | 10/100 Base-T, filtered, non-PoE | same |
+| Isolation | 1500 V rms, 0.5 mA, 60 s, UTP side to chip side | HanRun, Electrical Specification |
 | Operating temperature | 0 to +70 °C | same |
+| Rate | 10/100 Base-T, filtered, non-PoE | same |
+| Termination | 4 × 75 Ω to a 1000 pF 2 kV capacitor, inside the jack | HanRun, Schematics |
 
-## Needs a human eye
+**Pin 8 is CHS GND**, and the note under the schematic is an instruction:
+*"Connect CHS GND to PCB Ground."* That is what the board does. Pin 7 is NC and
+is left unconnected; P1/P2 are TD±, P3/P6 are RD±, and P4/P5 are the centre
+taps, all as wired. `test_the_ethernet_jack_is_wired_the_way_hanrun_draws_it`
+asserts the whole of that against the netlist.
 
-Three things, all from the same cause — **Hanrun's datasheet could not be
-fetched from any mirror reachable here**:
-
-- **What pin 8 is.** KiCad's symbol marks it a power input with no name, and it
-  is tied to ground here on the assumption that it is the common of the
-  internal termination network. If it is something else, it is tied to ground
-  anyway, which is the failure this note exists to prevent.
-- **The 1500 V isolation figure**, which is the only barrier between the cable
-  and the rest of the machine.
-- **The 0 to +70 °C rating.** Every other part on this board is the industrial
-  grade; this one, as listed, is not, and on a board destined for a motor drive
-  that is a substitution to make deliberately rather than by accident.
+**The 0 to +70 °C rating is confirmed, not resolved.** Every other part on this
+board is the industrial grade and this one is not. Reading the datasheet turns
+that from a thing nobody had checked into a thing that is true — a substitution
+to make deliberately, on a board destined for a motor drive, rather than by
+accident. It is not a question a document can settle.
 
 **Footprint.** KiCad stock `Connector_RJ:RJ45_Hanrun_HR911105A_Horizontal`,
 unmodified, drawn for this manufacturer's part by name.

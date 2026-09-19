@@ -483,10 +483,17 @@ RES_33R_0402 = PartSpec(
 
 # Pin headers for now, by the user's decision: the connector to the power board
 # gets chosen when there is a power board to connect to.
+#
+# The part ordered is the 2x40 of the same series, cut to 26 positions. There
+# is no 2x26 male header in stock anywhere: HCTL do not list one, and the two
+# that exist at LCSC - kinghelm's KH-2.54PH180-2X26P-L11.5 and its SMT sibling
+# - are both at zero. A 2x40 strip is the normal way to get an odd length and
+# this one is the same family, pitch and 8.5 mm pin as the 2x20 this connector
+# grew from. See HDR2X26.md.
 HEADER_2X26 = PartSpec(
     symbol="Connector_Generic:Conn_02x26_Odd_Even",
     footprint="HDR2X26:PinHeader_2x26_P2.54mm_Vertical", prefix="J",
-    manufacturer="HCTL", mpn="PZ254-2-26-Z-8.5", lcsc="C2894981", value="digital",
+    manufacturer="HCTL", mpn="PZ254-2-40-Z-8.5", lcsc="C2906029", value="digital",
     params={"current_rating": exact(3.0)},
 )
 

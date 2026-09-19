@@ -91,14 +91,23 @@ The gain-margin check chose the crystals. Every in-stock 8 MHz part in 3225 or
 HC-49S, and the common 12.5 pF 32 kHz parts, fail it — the latter at a margin of
 1.8. Each would start on the bench and might not start cold.
 
-**Four things need a person** before ordering, tracked by `make check`: which
-supply pin each of the datasheet's decoupling values belongs to (the figure is a
-drawing), the 32 kHz crystal's pad roles, the LEDs' cathode pad, and the
-Tag-Connect pinout against Tag-Connect's own drawing. ST's AN4938 hardware guide
-could not be fetched and has not been read.
+**Nothing is now waiting on an unread datasheet.** Fourteen part libraries
+carried a "needs a human eye" marker — a pin-out, a cathode, an exposed pad,
+all drawn rather than written. Each document has been fetched, the figure that
+settles it rendered, and the crop committed beside the note with the source's
+URL and SHA-256: `CONFIRMED_FROM_A_RENDER` in
+[`checks/config.py`](checks/config.py), and `tools/datasheet.py` is how.
+`NEEDS_A_HUMAN_EYE` is empty and still checked, because the next part added
+will land on it.
+
+One question is left and it is not a reading: whether the USB-C shell overhangs
+the board edge depends on an enclosure that does not exist. It is tracked apart,
+in `WAITING_ON_A_DECISION`, so that a five-minute PDF cannot hide behind it.
+
+ST's AN4938 hardware guide has still not been read; the decoupling above comes
+from the datasheet.
 
 ## Still to come
 
-- The ordering codes still marked **unverified**, and the pinouts in
-  `checks/config.py` that need a person with a datasheet open.
+- The USB-C shell against an enclosure, once there is one.
 - Confirming the inner stackup with PCBWay.
