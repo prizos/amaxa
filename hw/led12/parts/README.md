@@ -28,17 +28,18 @@ that were simply wrong for the job — a 6.3 V capacitor on a 12 V rail, a FET
 whose gate rating was exceeded in normal operation, and a fast-acting fuse
 chosen to be slow-blow.
 
-**It is not a substitute for a human reading the datasheets.** Several pin
-mappings could only be taken from footprint geometry or distributor symbol
-data, because the relevant datasheet pages are images. Those are marked
-**Needs a human eye** in the notes, and they are the ones that turn a board
-into scrap if wrong:
+**It is not a substitute for reading the datasheets** — so they have been read.
+Each pin mapping that used to come from footprint geometry or distributor
+symbol data now has the manufacturer's own figure rendered and committed beside
+its note, in `<LIB>/evidence/`, with the document's URL and SHA-256.
+`tools/datasheet.py` is how; `CONFIRMED_FROM_A_RENDER` in `checks/config.py`
+is the list.
+
+One is left, and it is a distributor problem rather than an unread document:
 
 | Part | What needs confirming |
 |---|---|
-| `LED0805` | Pad 1 is the cathode |
-| `SMB` | Pad 1 is the cathode (banded end) |
-| `SOT23` | AO3407A pinout is 1 = G, 2 = S, 3 = D |
+| `LED0805` | Pad 1 is the cathode. LCSC serve a **NATIONSTAR** datasheet for an **EVERLIGHT** part number, and Everlight's own is not reachable from here |
 
 The 2N7002 pinout, the AMS1117 pinout and the tactile switch's pole
 arrangement were each confirmed from two independent sources and need no

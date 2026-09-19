@@ -46,8 +46,18 @@ Both parts: **pin 1 = gate, pin 2 = source, pin 3 = drain**.
 For the 2N7002 this is confirmed verbatim from the onsemi package drawing
 ("STYLE 21: PIN 1. GATE 2. SOURCE 3. DRAIN"). For the AO3407A it comes from the
 LCSC/EasyEDA symbol, because the AOS datasheet's pin diagram is an image — its
-*electrical* figures were read from the datasheet text. **Needs a human eye**
-on the AO3407A pinout before fabrication.
+*electrical* figures were read from the datasheet text. **Confirmed against Alpha & Omega's own drawing.**
+
+![AO3407A TO-236 top view](evidence/pinout.png)
+
+The TO-236 (SOT-23) *Top View* puts **G upper-left, S lower-left and D on the
+right**. It carries no pin numbers — but it does not need to, because KiCad's
+`SOT-23` footprint is drawn in the same orientation: pad 1 at (-0.94, -0.95)
+upper-left, pad 2 at (-0.94, +0.95) lower-left, pad 3 at (+0.94, 0) on the
+right. Laying the two top views over each other gives **1 = G, 2 = S, 3 = D**
+with no numbering convention appealed to, which is what
+`Transistor_FET:Q_PMOS_GSD` says and what
+`test_reverse_polarity_fets_face_the_supply` reads the drain off.
 
 ## Gate ratings
 

@@ -377,9 +377,17 @@ CAP_2N2_0402 = PartSpec(
 )
 # C0G, because this one couples the ripple ramp into the feedback node and an
 # X7R's capacitance falls with bias. The datasheet asks for C0G by name.
-CAP_56P_0402 = PartSpec(
-    **_C0402, manufacturer="FH", mpn="0402CG560J500NT", lcsc="C1572", value="56pF",
-    params={"capacitance": pm(56e-12, 0.05), "max_voltage": exact(50.0)},
+#
+# 220 pF and not the 56 pF of TI's reference design. Equation 26 is
+# CB >= t / (3 x RFB1), where t is the load-transient settling time the design
+# wants: TI get 56 pF from 75 us because their feedback divider's top resistor
+# is 446 k. This board's is 158 k, chosen to land 5.0 V on standard values, so
+# the same 56 pF satisfies the equation only to 26.5 us. 220 pF gives 98 us at
+# the tolerance corner - 150 pF misses 75 us there by eight - and it is the
+# value of this series with the stock. See SO8EP.md.
+CAP_220P_0402 = PartSpec(
+    **_C0402, manufacturer="FH", mpn="0402CG221J500NT", lcsc="C39122", value="220pF",
+    params={"capacitance": pm(220e-12, 0.05), "max_voltage": exact(50.0)},
 )
 
 RES_226K_0402 = PartSpec(

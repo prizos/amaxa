@@ -105,12 +105,14 @@ islands / B.Cu**, and the middle two are placed deliberately:
   pair geometry exactly as it was, and `pair_geometry` solves it from these
   numbers rather than from a width someone remembered.
 
-**Still to confirm:** the two 0.36 mm cores and the middle prepreg are a
-standard construction on the same materials, not PCBWay's published 6-layer
-table — that table is behind a page this environment could not fetch. They set
-the finished thickness and nothing else, since no inner track is
-impedance-controlled, so getting them wrong costs a tenth of a millimetre of
-board rather than a transmission line.
+**Confirmed since:** the build above is PCBWay's own, from their standard
+stackup table — the 1.6 mm 1 oz-inner entry, with 0.43 mm cores and a 7628
+middle prepreg at 0.175. That entry was picked out of the table precisely
+because its outer prepreg is the same 7628 at the same 0.1855 as the 4-layer
+spin, which is what makes the "impedance pairs unchanged" claim above true
+rather than hoped for. PCBWay's *default* 6-layer 1.6 mm build uses 2116 at
+0.1195 for the outer prepreg, and choosing that one would have moved every
+controlled-impedance pair on the board.
 
 ## How the eight actually run
 

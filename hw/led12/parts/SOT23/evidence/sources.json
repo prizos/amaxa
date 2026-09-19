@@ -1,0 +1,13 @@
+{
+  "pinout": {
+    "assumes": "",
+    "crop": "250,640,750,360",
+    "document": "Alpha & Omega Semiconductor AO3407A P-Channel Enhancement Mode FET, served by LCSC for C15155",
+    "dpi": 150,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "83d342f8253caa9e576a21b8232cdbac1cab86139be1a6a8e8a95111bd0065bb",
+    "shows": "the TO-236 (SOT-23) Top View with G upper-left, S lower-left and D on the right, beside the device symbol",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/00106c16a79644489ed5b07cc4cea5d3.pdf"
+  }
+}

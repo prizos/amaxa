@@ -66,7 +66,14 @@ mis-parameterised or the stock is the wrong part. The same caution applies at
 ## Pin mapping
 
 Pad 1 cathode, pad 2 anode. The cathode is the banded end.
-**Needs a human eye** against the manufacturer drawing before fabrication.
+**Confirmed against the manufacturer's own drawing.**
+
+![the SMB package and its unidirectional symbol](evidence/cathode.png)
+
+BORN's SMBJ series, Rev. 2022-Jan-1-A: the package photograph with the band at
+one end, and beside it the unidirectional symbol labelled **Cathode** on the
+banded end. `test_every_polarised_part_marks_its_cathode_on_the_silkscreen`
+holds the board's silkscreen to it.
 
 ## Design note
 

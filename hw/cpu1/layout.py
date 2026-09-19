@@ -70,32 +70,43 @@ BOARD = {
     # the islands, one prepreg away, exactly as on four layers - so every
     # track on it and the rule that polices island crossings are unchanged.
     #
-    # The outer prepreg is unchanged - PCBWay's published 7628 build, 0.1960
-    # pressed to 0.1855 - and that is deliberate. Every impedance-controlled
-    # track on this board is on F.Cu over In1, so keeping that one dielectric
-    # fixed keeps the USB and Ethernet pair geometry exactly as it was, and
-    # `pair_geometry` solves it from these numbers rather than from a width
-    # someone remembered.
+    # This is PCBWay's own published 6-layer build, from their standard
+    # stackup table (`multi-layer-laminated-structure.html`), the 1.6 mm
+    # 1 oz-inner entry:
     #
-    # NEEDS CONFIRMING: the two 0.36 mm cores and the middle prepreg are a
-    # standard construction on the same materials, not PCBWay's published
-    # 6-layer table - that table is behind a page this environment could not
-    # fetch. They set the finished thickness and nothing else: no track on an
-    # inner layer is impedance-controlled, so getting them wrong costs a
-    # tenth of a millimetre of board, not a transmission line. Confirm the
-    # build with PCBWay before ordering.
-    "thickness": 1.49,
+    #     L1-CU  outer base copper 0.5 oz, plated to 1 oz
+    #     PP     7628 RC46%  DK 4.74   0.1960 pressed to 0.1855
+    #     L2-CU  inner copper 1 oz
+    #     CORE   DK 4.6      0.4300
+    #     L3-CU  inner copper 1 oz
+    #     PP     7628 RC46%  DK 4.74   0.1960 pressed to 0.1750
+    #     L4-CU  inner copper 1 oz
+    #     CORE   DK 4.6      0.4300
+    #     L5-CU  inner copper 1 oz
+    #     PP     7628 RC46%  DK 4.74   0.1960 pressed to 0.1855
+    #     L6-CU  outer base copper 0.5 oz, plated to 1 oz
+    #
+    # The outer prepreg is the same 7628 at the same 0.1855 as the 4-layer
+    # board, which is the whole reason this build was picked out of their
+    # table rather than the first 6-layer entry in it. Every
+    # impedance-controlled track on this board is on F.Cu over In1, so that
+    # one dielectric being identical keeps the USB and Ethernet pair geometry
+    # exactly as it was, and `pair_geometry` solves it from these numbers
+    # rather than from a width someone remembered. PCBWay's own default
+    # 6-layer 1.6 mm build uses 2116 at 0.1195 for the outer prepreg, which
+    # would have moved every pair on the board.
+    "thickness": 1.6,
     "copper_layers": 6,
     "copper_thickness": 0.035,
     "inner_copper_thickness": 0.035,
     "stack": [
         {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},   # F  - In1
-        {"type": "core", "thickness": 0.36, "epsilon_r": 4.6},         # In1 - In2
-        {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},   # In2 - In3
-        {"type": "core", "thickness": 0.36, "epsilon_r": 4.6},         # In3 - In4
+        {"type": "core", "thickness": 0.43, "epsilon_r": 4.6},         # In1 - In2
+        {"type": "prepreg", "thickness": 0.175, "epsilon_r": 4.74},    # In2 - In3
+        {"type": "core", "thickness": 0.43, "epsilon_r": 4.6},         # In3 - In4
         {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},   # In4 - B
     ],
-    "core_thickness": 0.36,
+    "core_thickness": 0.43,
     "finish": "ENIG",
     "mask_colour": "Black",
     "pour_inset": 0.5,

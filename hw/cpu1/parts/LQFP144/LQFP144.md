@@ -67,8 +67,10 @@ The board also carries a 1 µF on 3V3, which the figure does not ask for. It
 stays, and `test_supplies_have_their_bulk_capacitance` now says so rather than
 implying ST require it.
 
-ST's AN4938 has still not been read; this is the datasheet, not the hardware
-guide.
+ST's AN4938 has still not been read, and cannot be from this environment:
+`www.st.com` resolves but refuses every connection, which is why the datasheet
+here is LCSC's copy of it. Nothing above depends on the application note —
+Figure 13 and Table 24 are the datasheet's own.
 
 ## Why this part
 

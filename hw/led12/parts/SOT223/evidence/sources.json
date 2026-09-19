@@ -1,0 +1,24 @@
+{
+  "package_outline": {
+    "assumes": "",
+    "crop": "100,150,1050,620",
+    "document": "GAINSIL GS2401C 40V micropower LDO, Package Outline (SOT223), served by LCSC for C6283798",
+    "dpi": 150,
+    "page": 9,
+    "read": "2026-09-19",
+    "sha256": "f27ec36a8201105fd5e1071dd1a3cfe02d8a2b3d978905cee2b2bffba3b568aa",
+    "shows": "the SOT-223 outline: three leads and a tab, with the tab (b1) and the centre lead on the same centre line and drawn as one piece of leadframe",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/9d5c3f00504fbd129c23a4d079f7aab2.pdf"
+  },
+  "pin_description": {
+    "assumes": "",
+    "crop": "890,400,350,300",
+    "document": "GAINSIL GS2401C 40V micropower LDO, served by LCSC for C6283798",
+    "dpi": 150,
+    "page": 3,
+    "read": "2026-09-19",
+    "sha256": "f27ec36a8201105fd5e1071dd1a3cfe02d8a2b3d978905cee2b2bffba3b568aa",
+    "shows": "the SOT223 pin description, numbered by the manufacturer: 1 GND, 2 VOUT, 3 VIN, with the tab drawn above the middle lead",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/9d5c3f00504fbd129c23a4d079f7aab2.pdf"
+  }
+}

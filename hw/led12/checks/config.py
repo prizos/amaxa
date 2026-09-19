@@ -12,7 +12,7 @@ COMPLETE = True
 # Checks that must actually run for this board, common and board-specific
 # together. Removing one, skipping one, or losing a whole file fails the suite
 # until this is updated in the same commit.
-EXPECTED_CHECKS = 52
+EXPECTED_CHECKS = 53
 
 # Parameters recorded in parts.py that no check and no deck consumes, each with
 # the reason it is not a hole. Everything not named here must be read by
@@ -54,10 +54,23 @@ UNREAD_PARAMETERS = {
 # no machine here can confirm against a manufacturer drawing. Every one is a way
 # to turn a board into scrap, and one says the board may short 3V3 to GND if its
 # assumption is wrong. Clearing this list is a precondition for ordering.
+# Claims read out of a manufacturer's own drawing, with the crop that settles
+# each one committed in <LIB>/evidence/ and its source recorded beside it.
+# `tools/datasheet.py evidence` writes both.
+CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
+    "SMB": ["cathode"],
+    "SOD123": ["cathode"],
+    "SOT223": ["pin_description", "package_outline"],
+    "SOT23": ["pinout"],
+}
+
+# Questions no document can answer. None on this board.
+WAITING_ON_A_DECISION: dict[str, str] = {}
+
 NEEDS_A_HUMAN_EYE = {
-    "LED0805": "pad 1 is the cathode, taken from the footprint rather than the drawing",
-    "SMB": "pad 1 is the cathode (banded end)",
-    "SOD123": "pad 1 is the cathode (banded end)",
-    "SOT223": "the tab is bonded to pin 2 (VOUT) and not to ground",
-    "SOT23": "the AO3407A pinout, taken from a distributor symbol",
+    "LED0805": (
+        "pad 1 is the cathode. The datasheet LCSC serves for C2943978 is a "
+        "NATIONSTAR document for an EVERLIGHT part number, so it cannot "
+        "settle this, and Everlight's own is not reachable from here"
+    ),
 }

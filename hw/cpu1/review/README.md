@@ -165,7 +165,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `C15` | `buck5.c_bst` | 2.2nF | CC0402KRX7R9BB222 | C106861 | `C_0402_1005Metric` |
-| `C17` | `buck5.c_couple` | 56pF | 0402CG560J500NT | C1572 | `C_0402_1005Metric` |
+| `C17` | `buck5.c_couple` | 220pF | 0402CG221J500NT | C39122 | `C_0402_1005Metric` |
 | `C12` | `buck5.c_in1` | 2.2uF | CL32B225KCJSNNE | C55151 | `C_1210_3225Metric` |
 | `C13` | `buck5.c_in2` | 2.2uF | CL32B225KCJSNNE | C55151 | `C_1210_3225Metric` |
 | `C14` | `buck5.c_in_hf` | 100nF | CC0603KRX7R0BB104 | C113803 | `C_0603_1608Metric` |

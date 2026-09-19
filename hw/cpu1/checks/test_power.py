@@ -755,3 +755,44 @@ def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
                 f"{rated * 1e3:g} mW"
             )
     assert not hot, "Resistors past half their rating:\n" + "\n".join(hot)
+
+
+# The LM5164 datasheet's Equation 26 and the settling time its own worked
+# example uses. Both are text in SNVSAU4D section 7.2.2.6:
+#
+#     CB >= t_TR-settling / (3 x RFB1)
+#     "CB calculates to 56pF based on a 75us settling time"
+#
+# Equation 26 turns a wanted settling time into a value, so it cannot say what
+# CB should be on its own. TI's 75 us is the only figure either source states,
+# and it is what this board is held to.
+SETTLING_TIME = 75e-6
+
+
+def test_the_ripple_coupling_capacitor_holds_through_a_transient(design, two_pad_parts, spec):
+    """
+    C_B is big enough that the feedback divider does not discharge it first.
+
+    Equation 26. It is about light load: when the converter sleeps between
+    pulses, the coupling capacitor sits there being discharged by the feedback
+    divider, and once it has gone the injected ramp goes with it.
+
+    The value came across from TI's reference design without its resistor.
+    Their feedback divider is 446 k, which is what makes their 56 pF worth
+    75 us; this board's top resistor is 158 k, chosen to land 5.0 V on
+    standard values, and 56 pF against that is 26.5 us. This is the check that
+    would have caught it, and it is written against the divider on the board so
+    that changing either part moves it.
+    """
+    top = _parts_on(design, two_pad_parts, "Device:R", "5V", "FB_5V")
+    assert len(top) == 1, f"expected one resistor from the rail to feedback, found {top}"
+    r_fb1, _ = spec(top[0], "resistance")
+    c_b, _ = _capacitance_on(design, two_pad_parts, spec, "FB_5V", "RAMP")
+
+    supported = 3 * r_fb1 * c_b
+    assert supported >= SETTLING_TIME, (
+        f"{c_b * 1e12:.0f} pF against a {r_fb1 / 1e3:g} kOhm top resistor satisfies "
+        f"Equation 26 only to {supported * 1e6:.1f} us, short of the "
+        f"{SETTLING_TIME * 1e6:g} us the datasheet's own example is sized for. "
+        f"It wants at least {SETTLING_TIME / (3 * r_fb1) * 1e12:.0f} pF."
+    )

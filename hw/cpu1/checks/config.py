@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 164
+EXPECTED_CHECKS = 165
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -79,16 +79,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "different questions. What the pin's own structures then absorb is not "
         "a figure either datasheet gives"
     ),
-    ("buck5.c_couple", "capacitance"): (
-        "the coupling capacitor into the feedback node. Equation 26 of the "
-        "LM5164 datasheet has now been read - CB >= t / (3 x RFB1) - and it "
-        "turns a *desired* load-transient settling time into a value rather "
-        "than giving one. With this board's 158 k top resistor the fitted "
-        "56 pF satisfies it up to 26.5 us. Nothing on this board states a "
-        "settling requirement, so there is nothing to compare that against; "
-        "note that TI's reference design gets 75 us from the same 56 pF only "
-        "because its divider is 446 k. See SO8EP.md"
-    ),
 }
 
 # Part libraries whose review note still says "Needs a human eye": things no
@@ -118,13 +108,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
 # document can answer, because the thing they depend on has not been designed
 # yet. These are not unread datasheets and must not be filed as if they were.
 # The difference is whether reading something would settle it.
-WAITING_ON_A_DECISION: dict[str, str] = {
-    "USBC16": (
-        "whether the receptacle's shell overhangs the board edge, sits flush, "
-        "or wants a notch in the outline. That is a question about an "
-        "enclosure that does not exist yet, and no drawing can settle it"
-    ),
-}
+WAITING_ON_A_DECISION: dict[str, str] = {}
 
 # Part libraries whose review note still says "Needs a human eye": a figure in
 # a manufacturer's document that nobody has read. Everything that was on this

@@ -79,18 +79,33 @@ figures. **Equation 26, which sets the coupling capacitor C17, is not
 reconstructed**: 56 pF is the value TI's reference design uses with the same
 3.3 nF ramp capacitor, and `checks/config.py` records that nothing bounds it.
 
-**Equation 26, read.** TI state it as
+**Equation 26, read — and it changed a part.** TI state it as
 `CB >= t_TR-settling / (3 x RFB1)`, where *t* is the *desired* load-transient
-settling time — so it does not give a value, it converts a requirement into
-one. With this board's 158 kΩ top resistor, the fitted 56 pF satisfies it for
-any settling time up to **26.5 µs**.
+settling time, so it converts a requirement into a value rather than giving
+one. The only figure either source states is TI's own worked example: *"CB
+calculates to 56pF based on a 75µs settling time."*
 
-That is worth knowing, because 56 pF was taken from TI's reference design and
-TI's divider is 446 kΩ, where the same 56 pF buys 75 µs. The value did not
-scale with the divider. Nothing on this board states a transient requirement,
-so there is no defect to point at — but if one is ever stated above 26.5 µs,
-C17 is the part that has to grow, and `checks/config.py` now records that
-rather than recording that nothing bounds it at all.
+That 56 pF is 75 µs **because their feedback divider's top resistor is 446 kΩ**
+— which follows from their own numbers, 75 µs / (3 × 56 pF). This board's top
+resistor is 158 kΩ, picked to land 5.0 V on standard values, and the 56 pF had
+been carried across from the reference design without it. Against 158 kΩ it
+satisfies Equation 26 only to **26.5 µs**.
+
+C17 is now **220 pF**, which gives 98 µs at the tolerance corner. 150 pF gives
+67 µs there and misses TI's figure; 220 pF is also the value of that series
+with the stock. The coupling itself is unaffected either way — at the 388 kHz
+this converter runs at, even 56 pF already couples 98 % of the ramp, so this
+is about the capacitor holding its charge through a light-load sleep interval
+and nothing else.
+
+`test_the_ripple_coupling_capacitor_holds_through_a_transient` is that
+equation, written against the divider on the board so that changing either
+part moves it.
+
+**Equations 24 and 25** are satisfied with room: Equation 24 wants at least
+680 pF of ramp capacitance at this frequency and divider, and 3.3 nF is
+fitted; Equation 25 is what `_ripple_at_feedback` reconstructs and checks
+against TI's own worked example, which it reproduces to three figures.
 
 ## Footprint and the exposed pad
 

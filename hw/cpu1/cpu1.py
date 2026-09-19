@@ -544,7 +544,7 @@ def power_block(v3v3, gnd, nets) -> None:
 
     r_ramp = part(parts.RES_121K_0402, "buck5.r_ramp", "R12")
     c_ramp = part(parts.CAP_3N3_0402, "buck5.c_ramp", "C16")
-    c_couple = part(parts.CAP_56P_0402, "buck5.c_couple", "C17")
+    c_couple = part(parts.CAP_220P_0402, "buck5.c_couple", "C17")
     sw5 += r_ramp[1]
     Net("RAMP").connect(r_ramp[2], c_ramp[1], c_couple[2])
     v5 += c_ramp[2]

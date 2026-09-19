@@ -23,7 +23,7 @@ will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)); the review lists them.
 
 | | |
 |---|---|
-| Stackup | 6 layers, 1 oz copper throughout. The outer prepreg is PCBWay's published 7628 build, 0.1855 mm — unchanged from the 4-layer spin, so the controlled-impedance pairs are unchanged. The inner cores and middle prepreg are **provisional**: see `layout.py` |
+| Stackup | 6 layers, 1 oz throughout, **PCBWay's own published 1.6 mm build**: 7628 outer prepreg at 0.1855, 0.43 cores, 7628 middle prepreg at 0.175. Picked out of their table because that outer prepreg is identical to the 4-layer spin's, so the controlled-impedance pairs are unchanged — their default 6-layer build uses 2116 at 0.1195 and would have moved every pair |
 | Layers | F.Cu signal, In1.Cu ground, In2.Cu signal, In3.Cu ground, In4.Cu supply islands, B.Cu signal |
 | Size | 130 × 110 mm — grown from 100 × 80 to hold the Ethernet jack |
 | MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at JLCPCB** on 2026-09-17; see [its review note](parts/LQFP144/LQFP144.md) |
@@ -104,10 +104,16 @@ One question is left and it is not a reading: whether the USB-C shell overhangs
 the board edge depends on an enclosure that does not exist. It is tracked apart,
 in `WAITING_ON_A_DECISION`, so that a five-minute PDF cannot hide behind it.
 
-ST's AN4938 hardware guide has still not been read; the decoupling above comes
-from the datasheet.
+ST's AN4938 hardware guide has still not been read, and cannot be from here:
+`www.st.com` resolves but every connection to it returns nothing, so the
+datasheet above came from LCSC's copy instead. **Nothing on this board depends
+on AN4938** — the decoupling is Figure 13 of the datasheet and the VCAP values
+are its Table 24, both read and committed as evidence. It is worth a person's
+eye before a second spin, not before this one.
 
 ## Still to come
 
-- The USB-C shell against an enclosure, once there is one.
-- Confirming the inner stackup with PCBWay.
+Nothing blocking. ST's AN4938 is unread and unreachable from here, and nothing
+depends on it; the USB-C shell question is closed because that port is not
+exposed.
+

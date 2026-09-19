@@ -72,14 +72,18 @@ a check to ask about two pads with no net.
 `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12`, unmodified, which is drawn
 for this manufacturer's part by name.
 
-## Waiting on a decision
+## The shell against the board edge — settled
 
-The receptacle's **mounting-shell pads against the board edge**. The footprint
-places the connector's mouth at the edge of the outline, and whether the shell
-overhangs, sits flush, or needs a notch in the edge cut is a mechanical
-question about the enclosure this board goes in, which does not exist yet.
+The footprint places the receptacle's mouth at the edge of the outline, and
+whether the shell overhangs, sits flush or wants a notch was left open against
+an enclosure that does not exist.
 
-This is not a review that has not been done. No document settles it, because
-the thing it depends on has not been designed — so it is tracked separately
-from the parts whose datasheets nobody had read, and it clears when there is
-an enclosure, not when someone opens a PDF.
+**It is settled by not mattering: this port is not exposed.** The USB
+connection is a bench and bring-up interface inside the machine, not a socket
+anyone plugs a cable into from outside, so no panel cut-out has to line up with
+it and no overhang has to clear one. The footprint's own courtyard and the
+board outline are the whole of the mechanical requirement, and DRC already
+holds the board to those.
+
+If this board is ever given a panel port, that is a new question about a new
+enclosure, and it belongs to that design rather than to this note.
