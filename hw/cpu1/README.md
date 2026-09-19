@@ -113,14 +113,13 @@ eye before a second spin, not before this one.
 
 ## Still to come
 
-**One substantial change, and it is written up rather than done.** The Ethernet
-front end is not Microchip's: their Figure 3.23 hangs four 49.9 Ω resistors off
-the line pins from a ferrite-fed bias node and bypasses the magnetics' centre
-taps to ground, and this board has neither. The consequence is roughly double
-the permitted transmit amplitude and no chip-side receive termination.
-[`parts/QFN24/QFN24.md`](parts/QFN24/QFN24.md) has the figure, the arithmetic
-and the parts the correction needs. The check that would have rejected the fix
-has been corrected so it no longer does.
+The Ethernet line terminations are now fitted — four 49.9 Ω, which is what
+gives the current-mode driver its specified 50 Ω load and the receive pair a
+chip-side termination it had none of. Two smaller deviations from Microchip's
+Figure 3.23 remain by choice, both written up in
+[`parts/QFN24/QFN24.md`](parts/QFN24/QFN24.md): there is no ferrite on the
+analog supply, and the magnetics' centre taps sit on the rail rather than on a
+bypass to ground.
 
 ST's AN4938 is unread and unreachable from here, and nothing depends on it; the
 USB-C shell question is closed because that port is not exposed.

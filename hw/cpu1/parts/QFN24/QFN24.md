@@ -120,7 +120,7 @@ decisions, recorded here as decisions:
 What remains unconfirmed is only whether Microchip would ask for something
 different, which no document reachable from here says.
 
-## The front end is not Microchip's, and that is a defect
+## The front end, and how far it now follows Microchip's
 
 ![Figure 3.23, twisted-pair interface, single power supply](evidence/front_end.png)
 
@@ -129,32 +129,40 @@ ferrite from 3.3 V feeding **VDD1A, VDD2A and four 49.9 Ω resistors**, one to
 each of TXP, TXN, RXP and RXN, with the magnetics' chip-side centre taps going
 to a bypass capacitor to **ground**.
 
-This board has none of the three. There is no 49.9 Ω part in `parts.py` at all,
-both centre taps are tied straight to the 3V3 plane, and VDD1A/VDD2A sit on it
-with no ferrite.
+**The four resistors are now fitted.** They were the defect. The 100BASE-TX
+driver is current-mode, and two of them in series across a pair are ~100 Ω; in
+parallel with the 100 Ω the 1:1 transformer reflects from the cable, that is
+the 50 Ω Table 5.8 specifies the output amplitude into. Without them the
+driver worked into 100 Ω, so the amplitude was about double what the table
+allows, and the receive pair had **no chip-side termination at all** — the
+incoming signal reflected at the PHY, which closes the eye as the cable gets
+longer. A board like that usually links on a short bench cable and fails
+conformance and long runs.
 
-**Why it matters.** The 100BASE-TX driver is current-mode — `cpu1.py` says so
-itself where it sets the bias resistor. In the reference circuit the two
-49.9 Ω appear as ~100 Ω across each pair in parallel with the 100 Ω the 1:1
-transformer reflects from the cable, so the driver works into ≈50 Ω. Remove
-them and the load is 100 Ω, so the output amplitude is about double what Table
-5.8 permits. Separately, the receive pair then has **no chip-side termination
-at all**, so the incoming signal reflects at the PHY: return loss and eye
-closure that get worse with cable length. A board like this usually links on a
-short bench cable and fails conformance and long runs.
+Each sits in a channel between two of the four lines, in the band between
+where the pairs stop running parallel and the jack's own outline, and stubs
+sideways onto its own line so none crosses another.
+`test_the_line_terminations_stay_inside_their_rating` holds them to Table
+5.8's 1050 mV swing rather than to the rail — the generic resistor rule would
+put 3.465 V across them and call 243 mW on a 62.5 mW part a failure, when what
+appears across a termination whose line is biased *to* that rail is the
+transmit swing.
 
-**What the fix needs**, so it is ready rather than vague:
+**Two smaller deviations remain, and they are deliberate.**
 
-| | |
-|---|---|
-| 4 × 49.9 Ω 0402 | `0402WGF499JTCE`, LCSC C25120, 1,640,780 in stock |
-| 1 × ferrite, ≥ 150 mA | `GZ1608D601TF`, LCSC C1002, 0603, 600 Ω @ 100 MHz, 200 mA, 450 mΩ — the 0402 already on this board is rated 100 mA and Table 5.5 puts the PHY at 102 mA with magnetics |
-| new nets | `ETH_VDDA` from the ferrite, and `ETH_TAP` for the two centre taps, bypassed to ground |
-| footprint | `FB0603` has to be added; only `FB0402` exists |
+- **No ferrite.** The figure feeds VDD1A, VDD2A and the termination node from
+  one bead; here all three sit on the 3V3 plane. This decides how much
+  transmit common-mode current ends up in the plane, not whether the line is
+  terminated. Adding it means a part rated above the 0402's 100 mA — the PHY
+  is 102 mA with magnetics by Table 5.5 — so `GZ1608D601TF` (LCSC C1002,
+  0603, 600 Ω at 100 MHz, 200 mA, 450 mΩ) and an `FB0603` library that does
+  not exist yet.
+- **The centre taps stay on the rail** rather than floating on a bypass to
+  ground. That is where the transmitter's bias comes from either way; the
+  bypass capacitors would have to sit against the jack's own outline, and the
+  termination above is what fixes the amplitude.
 
-It is not done here because it is four shunts hung on the board's two
-controlled-impedance pairs in its densest corner, and doing that badly is
-worse than leaving it documented. `test_each_pair_runs_from_the_package_to_the_jack_without_meeting_anything`
-used to assert those nets reached *exactly* the PHY and the jack, which would
-have failed the build the moment anyone added the resistors; it now forbids
-only series parts, so the correction is no longer locked out.
+`test_each_pair_runs_from_the_package_to_the_jack_without_meeting_anything`
+used to assert those four nets reached *exactly* the PHY and the jack, which
+would have failed the build the moment anyone added these resistors. It now
+forbids only what it means to — anything in *series*.

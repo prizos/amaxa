@@ -1298,15 +1298,37 @@ def ethernet(v3v3, gnd, nets) -> None:
 
     # --- the jack -----------------------------------------------------------
     jack = part(parts.ETH_JACK, "eth.jack", "J8")
-    Net("ETH_TD_P").connect(phy["TXP"], jack["TD+"])
-    Net("ETH_TD_N").connect(phy["TXN"], jack["TD-"])
-    Net("ETH_RD_P").connect(phy["RXP"], jack["RD+"])
-    Net("ETH_RD_N").connect(phy["RXN"], jack["RD-"])
+    lines = {}
+    for name, phy_pin, jack_pin in (("ETH_TD_P", "TXP", "TD+"), ("ETH_TD_N", "TXN", "TD-"),
+                                    ("ETH_RD_P", "RXP", "RD+"), ("ETH_RD_N", "RXN", "RD-")):
+        lines[name] = Net(name)
+        lines[name].connect(phy[phy_pin], jack[jack_pin])
 
-    # The transmitter is current-mode: the transformer's centre taps are where
-    # its current comes from, so they sit on the supply rather than on ground,
-    # and each gets its own bypass because the two windings switch at different
-    # moments and would otherwise share the return path through the rail.
+    # Each line gets its 49.9 ohm to the rail, which is what Microchip's
+    # Figure 3.23 asks for and what this board was missing. Two of them in
+    # series across a pair are ~100 ohm; in parallel with the 100 ohm the 1:1
+    # transformer reflects from the cable that gives the current-mode driver
+    # the 50 ohm its output amplitude is specified into, and it gives the
+    # receive pair a chip-side termination it had none of.
+    #
+    # They go to 3V3 rather than to a ferrite-fed node of their own. The
+    # figure feeds VDD1A, VDD2A and these four from one bead; this board's
+    # analog supplies are on the plane, which is a separate and much smaller
+    # deviation - it decides how much transmit common-mode current ends up in
+    # the plane, not whether the line is terminated. parts/QFN24/QFN24.md
+    # keeps the score.
+    for address, net, ref in (("eth.term_td_p", "ETH_TD_P", "R90"),
+                              ("eth.term_td_n", "ETH_TD_N", "R91"),
+                              ("eth.term_rd_p", "ETH_RD_P", "R92"),
+                              ("eth.term_rd_n", "ETH_RD_N", "R93")):
+        resistor = part(parts.RES_49R9_0402, address, ref)
+        lines[net] += resistor[1]
+        v3v3 += resistor[2]
+
+    # The transformer's centre taps are where the transmitter's current comes
+    # from, so they sit on the supply rather than on ground, and each gets its
+    # own bypass because the two windings switch at different moments and
+    # would otherwise share the return path through the rail.
     v3v3 += jack["TCT"], jack["RCT"]
     for address, ref in (("eth.tap_bypass1", "C66"), ("eth.tap_bypass2", "C67")):
         cap = part(parts.CAP_100N_0402, address, ref)

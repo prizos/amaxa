@@ -2696,6 +2696,32 @@ def _ethernet() -> None:
     for address, x in (("eth.tap_bypass1", -47.0), ("eth.tap_bypass2", -44.5)):
         PLACEMENT[address] = (x, -31.0, 0)
 
+    # The four line terminations, in the band between where the pairs stop
+    # running parallel and the jack's own outline at y -32.66. Each sits in a
+    # channel between two of the four lines and stubs sideways onto its own,
+    # so none of them crosses another line: the two outer ones reach outward,
+    # the two inner ones into the widest gap the fan leaves.
+    for address, at, land in (
+        # The turn puts pad 1 on the side its own line is: pad 1 is the first
+        # pad in the footprint's own frame, so a resistor reaching east is
+        # turned and one reaching west is not.
+        ("eth.term_rd_p", (-58.4, -31.6, 180), (-57.054, -31.6)),
+        ("eth.term_rd_n", (-53.9, -31.6, 0), (-55.550, -31.6)),
+        ("eth.term_td_n", (-51.0, -31.6, 270), (-51.918, -32.11)),
+        ("eth.term_td_p", (-48.9, -31.8, 0), (-50.000, -31.8)),
+    ):
+        PLACEMENT[address] = at
+        LABELS[address] = (0.0, -1.3)
+        TERMINATION_LANDS[address] = land
+    # Their plane vias are named rather than searched for: the generator looks
+    # outward from the pad and every direction here is either a line it must
+    # not touch or the jack's own outline.
+    for address, at in (("eth.term_rd_p:2", (-59.9, -31.6)),
+                        ("eth.term_rd_n:2", (-52.9, -30.9)),
+                        ("eth.term_td_n:2", (-51.0, -29.6)),
+                        ("eth.term_td_p:2", (-47.9, -32.2))):
+        VIAS.append((address, at, "3V3", *VIA, SUPPLY))
+
     for address in ("eth.dec_vdd2a", "eth.dec_vdd1a", "eth.dec_vddio",
                     "eth.r_refclk_strap", "eth.xtal.c_in", "eth.xtal.c_out",
                     "eth.core_bulk", "eth.core_hf", "eth.bias",
@@ -2705,11 +2731,25 @@ def _ethernet() -> None:
     LABELS["eth.xtal.crystal"] = (0.0, -3.0)
 
     _ethernet_pairs()
+    _ethernet_terminations()
     _ethernet_local()
     _ethernet_north()
     _ethernet_west()
     _gate_enable()
     _feedback()
+
+
+# Where each termination resistor's first pad meets the line it terminates.
+# Filled in beside the placement, because the point is on the line's own
+# diagonal and has to be solved from it rather than guessed.
+TERMINATION_LANDS: dict[str, tuple[float, float]] = {}
+
+
+def _ethernet_terminations() -> None:
+    """Each 49.9 ohm onto its line, and onto the plane on its other pad."""
+    for address, land in TERMINATION_LANDS.items():
+        net = NET_AT[(address, "1")]
+        ROUTES.append((net, ETH_WIDTH, F, [f"{address}:1", land]))
 
 
 def _ethernet_local() -> None:

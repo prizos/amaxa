@@ -750,6 +750,23 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, spe
 # here: it lasts microseconds and heats nothing, and the parts it does threaten
 # are checked against the clamp by name above. A net not listed contributes
 # nothing, which leaves every divider leg bounded by the resistor above it.
+def _phy_lines(design) -> set:
+    """The four nets between the Ethernet PHY and the jack's line pins.
+
+    A termination on one of these sits between the rail and a line the PHY
+    biases *to* that rail, so the voltage across it is the transmit swing and
+    not the rail - which is what the generic rule would assume, and would be
+    wrong by a factor of twelve in power.
+    """
+    jack = next((a for a, p in design["parts"].items()
+                 if p["symbol"].startswith("Connector:RJ45")), None)
+    if jack is None:
+        return set()
+    return {net for net, nodes in design["nets"].items()
+            for address, pad in nodes
+            if address == jack and pad in ("1", "2", "3", "6")}
+
+
 def _net_voltages(spec) -> dict[str, float]:
     """The highest each named net reaches, and what to assume for the rest.
 
@@ -812,6 +829,8 @@ def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
             continue
         if net_a not in voltages and net_b not in voltages:
             continue                      # a signal in series with a signal
+        if {net_a, net_b} & _phy_lines(design):
+            continue                      # biased to the rail; see test_ethernet.py
         across = max(voltages.get(net_a, 0.0), voltages.get(net_b, 0.0))
         resistance, _ = spec(address, "resistance")
         rated, _ = spec(address, "max_power")

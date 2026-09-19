@@ -407,6 +407,18 @@ RES_121K_0402 = PartSpec(
     **_R0402, mpn="0402WGF1213TCE", lcsc="C11693", value="121k",
     params={"resistance": pm(121_000, 0.01), "max_power": exact(0.0625)},
 )
+# The Ethernet line terminations. Microchip's Figure 3.23 hangs one of these
+# from each of TXP, TXN, RXP and RXN: in series across a pair they are ~100
+# ohm, which in parallel with the 100 ohm the 1:1 transformer reflects from
+# the cable gives the current-mode driver the 50 ohm it is specified into.
+# Without them the driver works into 100 ohm and the amplitude is about double
+# what Table 5.8 allows, and the receive pair has no chip-side termination at
+# all. See parts/QFN24/QFN24.md.
+RES_49R9_0402 = PartSpec(
+    **_R0402, mpn="0402WGF499JTCE", lcsc="C25120", value="49R9",
+    params={"resistance": pm(49.9, 0.01), "max_power": exact(0.0625)},
+)
+
 RES_100K_0402 = PartSpec(
     **_R0402, mpn="0402WGF1003TCE", lcsc="C25741", value="100k",
     params={"resistance": pm(100_000, 0.01), "max_power": exact(0.0625)},
@@ -711,6 +723,12 @@ ETH_PHY = PartSpec(
         "core_supply_voltage": between(1.14, 1.26),   # VDDCR, from the internal regulator
         "magnetics_supply_voltage": between(2.25, 3.6),
         "bias_resistance": pm(12.1e3, 0.01),          # RBIAS to ground, 1%
+        # Table 5.8: 950 to 1050 mV peak, measured at the line side of the
+        # transformer with the line replaced by 100 ohm. It is what decides
+        # what the line terminations dissipate, and it is the whole reason
+        # they exist: that figure is specified into 50 ohm, which is the 100
+        # the cable reflects in parallel with the 100 they make.
+        "transmit_amplitude_max": exact(1.05),
         "crystal_frequency": exact(25e6),
         "crystal_esr_max": exact(30.0),
         "crystal_load_capacitance": exact(20e-12),

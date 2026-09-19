@@ -611,3 +611,38 @@ def test_the_ethernet_jack_is_wired_the_way_hanrun_draws_it(design, pad_net):
         "Ethernet jack pins:\n" + "\n".join(wrong)
         + "\nSee parts/RJ45HR/evidence/schematic.png."
     )
+
+
+def test_the_line_terminations_stay_inside_their_rating(design, pad_net, spec):
+    """
+    Each 49.9 ohm against the swing the PHY's own datasheet specifies.
+
+    The generic resistor rule puts the whole rail across anything with one pad
+    on it, which for these would be 3.465 V and 243 mW on a 62.5 mW part. That
+    is not what happens: the PHY biases each line *to* that rail through the
+    transformer winding, so what appears across the termination is the
+    transmit swing - Table 5.8's 1050 mV peak - and not the rail.
+
+    So the check is the same arithmetic against the right voltage, and the
+    voltage is the one the part states rather than one chosen to make the
+    answer come out.
+    """
+    swing, _ = spec(PHY, "transmit_amplitude_max")
+    lines = {net for net, nodes in design["nets"].items()
+             for address, pad in nodes
+             if address == PHY and pad in ("20", "21", "22", "23")}
+
+    hot = []
+    for address, part in sorted(design["parts"].items()):
+        if part["symbol"] != "Device:R":
+            continue
+        nets = {pad_net.get((address, pad)) for pad in ("1", "2")}
+        if not nets & lines:
+            continue
+        resistance, _ = spec(address, "resistance")
+        rated, _ = spec(address, "max_power")
+        power = swing**2 / resistance
+        if power > rated * 0.5:
+            hot.append(f"  {address}: {power * 1e3:.0f} mW at a {swing:g} V swing, "
+                       f"rated {rated * 1e3:g} mW")
+    assert hot == [], "Line terminations past half their rating:\n" + "\n".join(hot)

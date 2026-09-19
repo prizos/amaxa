@@ -9,9 +9,9 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 130 × 110 mm |
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
-| **Footprints** | 254 |
+| **Footprints** | 258 |
 | **Nets** | 191 |
-| **Routing** | 1272 track segments, 545 vias, 4 zones |
+| **Routing** | 1280 track segments, 548 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -96,13 +96,13 @@ schematic after the fact.
 | CAN FD | 8 | TCAN1044V with split termination on a solder jumper. |
 | RS-485 | 5 | THVD1450, fail-safe biased on-chip, 120 ohm on a jumper. |
 | USB-C | 4 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
-| Ethernet | 16 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
+| Ethernet | 20 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
 | Plane stitching | 21 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 254, by block</summary>
+<summary><strong>Every footprint</strong> — all 258, by block</summary>
 
 #### MCU core
 
@@ -385,6 +385,10 @@ schematic after the fact.
 | `R83` | `eth.r_reset_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `C66` | `eth.tap_bypass1` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C67` | `eth.tap_bypass2` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `R93` | `eth.term_rd_n` | 49R9 | 0402WGF499JTCE | C25120 | `R_0402_1005Metric` |
+| `R92` | `eth.term_rd_p` | 49R9 | 0402WGF499JTCE | C25120 | `R_0402_1005Metric` |
+| `R91` | `eth.term_td_n` | 49R9 | 0402WGF499JTCE | C25120 | `R_0402_1005Metric` |
+| `R90` | `eth.term_td_p` | 49R9 | 0402WGF499JTCE | C25120 | `R_0402_1005Metric` |
 | `C64` | `eth.xtal.c_in` | 33pF | 0402CG330J500NT | C1562 | `C_0402_1005Metric` |
 | `C65` | `eth.xtal.c_out` | 33pF | 0402CG330J500NT | C1562 | `C_0402_1005Metric` |
 | `Y3` | `eth.xtal.crystal` | 25MHz | TXM25M0004503LDCDO00T | C362363 | `Crystal_SMD_5032-4Pin_5.0x3.2mm` |
@@ -449,7 +453,7 @@ schematic after the fact.
 | Net | Nodes | Status |
 |---|--:|---|
 | `GND` | 222 |  |
-| `3V3` | 98 |  |
+| `3V3` | 102 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
@@ -483,6 +487,10 @@ schematic after the fact.
 | `DAC_SDA` | 3 |  |
 | `ETH_MDIO` | 3 |  |
 | `ETH_PHY_RESET` | 3 |  |
+| `ETH_RD_N` | 3 |  |
+| `ETH_RD_P` | 3 |  |
+| `ETH_TD_N` | 3 |  |
+| `ETH_TD_P` | 3 |  |
 | `ETH_VDDCR` | 3 |  |
 | `ETH_XTAL1` | 3 |  |
 | `ETH_XTAL2` | 3 |  |
@@ -559,13 +567,9 @@ schematic after the fact.
 | `ETH_MDC` | 2 |  |
 | `ETH_NINTSEL` | 2 |  |
 | `ETH_RBIAS` | 2 |  |
-| `ETH_RD_N` | 2 |  |
-| `ETH_RD_P` | 2 |  |
 | `ETH_REF_CLK` | 2 |  |
 | `ETH_RXD0` | 2 |  |
 | `ETH_RXD1` | 2 |  |
-| `ETH_TD_N` | 2 |  |
-| `ETH_TD_P` | 2 |  |
 | `ETH_TXD0` | 2 |  |
 | `ETH_TXD1` | 2 |  |
 | `ETH_TX_EN` | 2 |  |
