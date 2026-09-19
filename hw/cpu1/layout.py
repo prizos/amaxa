@@ -1771,18 +1771,23 @@ SENSE_EAST = (-40.4, -39.6)             # step out, and rise into the gap
 # rose before it. The only other thing on the back here is the three threshold
 # buses, and those are north of where these surface.
 #
-# Each entry is the net, the lane it surfaces on, and the back-layer way there
-# from its connector pin. The lanes go south as their taps go east, and each
-# one ends before the next one's first tap, so no lane crosses another's riser.
+# Each entry is the net, the lane it surfaces on, the back-layer way there from
+# its connector pin, and - where the column it would otherwise pick is taken -
+# the x it rises on. The lanes go south as their taps go east, and each one
+# ends before the next one's first tap, so no lane crosses another's riser.
 SENSE_LANES = (
-    ("IA_SENSE", -30.0, ((-44.0, -24.5),)),
-    ("IB_SENSE", -29.2, ((-41.46, -23.7),)),
-    ("IC_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9))),
+    ("IA_SENSE", -30.0, ((-44.0, -24.5),), None),
+    ("IB_SENSE", -29.2, ((-41.46, -23.7),), None),
+    ("IC_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9)), None),
     # The DC link's line arrives from the east instead. Its tap is the last on
     # the row and its own threshold bus surfaces where it would have risen, so
     # it runs along the empty back layer under the input networks and comes up
-    # beyond it.
-    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-5.2, -15.65))),
+    # beyond it - but only just beyond: it used to carry on to x -5.2, a
+    # detour east that it then walked back on the front, and that back-layer
+    # line was a wall across the whole north-west. It now rises as soon as it
+    # is clear of the threshold buses, which is what leaves the Ethernet a
+    # channel down the west side of the package.
+    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-20.3, -15.65)), -20.3),
 )
 
 
@@ -1829,12 +1834,13 @@ def _sense_routes() -> None:
             ROUTES.append((net, width, F,
                            [f"{cells[0]}.series:1", f"{extra}.series:1"]))
 
-    for net, lane, waypoints in SENSE_LANES:
+    for net, lane, waypoints, chosen in SENSE_LANES:
         width = _width_for(net, SIGNAL)
         pads = _sense_route(net)
         taps = [_point(ref)[0] for ref in pads]
         entry = waypoints[-1]
-        riser = entry[0] if entry[0] > taps[-1] else taps[0]
+        riser = chosen if chosen is not None else (
+            entry[0] if entry[0] > taps[-1] else taps[0])
         pin = next(pad for address, pad in DESIGN["nets"][net]
                    if address == "header.analog")
         back = [f"header.analog:{pin}", *waypoints,
