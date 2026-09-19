@@ -130,6 +130,12 @@ INTENT: dict[str, tuple[float, float]] = {
     # chosen here manage, and saying so is what makes the DAC's reference
     # choice a decision rather than an oversight.
     "trip.threshold_tolerance": (0.0, 0.10),
+    # How long a trip may take, from the current leaving its sensor to the
+    # buffer letting go. It is set by how long a half bridge survives a
+    # shoot-through and by nothing on this board, which is why it is stated
+    # here rather than worked out from the parts: the parts are chosen to fit
+    # inside it. Two check files used to carry their own copy of the number.
+    "trip.budget": (0.0, 50e-9),
     # Where each kind of channel rolls off. The fast ones carry what the control
     # loop reads every PWM cycle: low enough to stop the switching node aliasing
     # into the measurement, high enough that the measurement is of now.

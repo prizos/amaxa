@@ -21,12 +21,6 @@ def _pin_count(pad_net) -> int:
     """How many pins the connector has, counted on the board rather than said."""
     return len([pad for reference, pad in pad_net if reference == HEADER])
 
-# What a trip may take, from the comparator's output to the buffer letting go.
-# The comparators are a later block; this is the budget the rest has to fit in,
-# and it is set by how long a bridge survives a shoot-through, not by anything
-# on this board.
-TRIP_BUDGET = 50e-9
-
 
 @pytest.fixture(scope="module")
 def pad_net(design):
@@ -345,16 +339,17 @@ def test_a_trip_stops_the_outputs_inside_the_budget(spec):
     fit into, and saying so here is the point: the budget is spent in order,
     and this is how much of it the parts already chosen have taken.
     """
+    _, trip_budget = spec("trip", "budget")
     latch, _ = spec(LATCH, "preset_to_output_max")
     buffer_off, _ = spec(BUFFERS[0], "disable_time_max")
     spent = latch + buffer_off
-    assert spent < TRIP_BUDGET, (
+    assert spent < trip_budget, (
         f"the latch and the buffer take {spent * 1e9:.1f} ns of a "
-        f"{TRIP_BUDGET * 1e9:g} ns budget"
+        f"{trip_budget * 1e9:g} ns budget"
     )
-    assert spent < TRIP_BUDGET / 2, (
+    assert spent < trip_budget / 2, (
         f"{spent * 1e9:.1f} ns leaves the comparators only "
-        f"{(TRIP_BUDGET - spent) * 1e9:.1f} ns, which no comparator this board "
+        f"{(trip_budget - spent) * 1e9:.1f} ns, which no comparator this board "
         "can afford will meet"
     )
 
@@ -422,7 +417,13 @@ def test_the_buffers_drive_less_than_they_are_rated_for(design, pad_net, spec):
     total_rating, _ = spec(BUFFERS[0], "total_output_current_max")
     for address in BUFFERS:
         total = 0.0
-        for _, _, source, drain in _buffer_channels(design, pad_net):
+        for owner, _, source, drain in _buffer_channels(design, pad_net):
+            # Every channel of every buffer, so the one being totalled has to
+            # be picked out. Without this the loop added both packages' outputs
+            # into each package's total and reported twice the real current
+            # under the wrong designator.
+            if owner != address:
+                continue
             if drain is None or source == "GND":
                 continue
             series = _through_resistor(design, pad_net, drain)

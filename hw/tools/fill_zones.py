@@ -16,6 +16,7 @@ This runs after tools/layout.py, which writes the pour's outline, and before
 DRC, which needs it filled.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -28,6 +29,46 @@ except ImportError:
     )
 
 
+def _nets_in(text: str) -> dict:
+    """
+    Every via and track in a board file, keyed by where it is, with its net.
+
+    Read out of the file's own text rather than through pcbnew, because the
+    rewrite this guards against happens in `LoadBoard`: pcbnew re-resolves
+    connectivity as it reads, so a board already loaded has already been
+    changed and cannot be compared with itself.
+    """
+    names = dict(re.findall(r'\(net (\d+) "([^"]*)"\)', text))
+    out = {}
+    for kind in ("via", "segment"):
+        for block in re.findall(rf"\n\t\({kind}\n(?:\t\t[^\n]*\n)+\t\)", text):
+            at = re.search(r"\(at ([-\d.]+) ([-\d.]+)\)", block)
+            start = re.search(r"\(start ([-\d.]+) ([-\d.]+)\)", block)
+            end = re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", block)
+            layer = re.search(r'\(layers? "([^"]+)"', block)
+            number = re.search(r"\(net (\d+)\)", block)
+            if not number:
+                continue
+            where = at or start
+            if not where:
+                continue
+            key = (kind, layer.group(1) if layer else "",
+                   where.group(1), where.group(2),
+                   end.group(1) if end else "", end.group(2) if end else "")
+            out[key] = names.get(number.group(1), "")
+    return out
+
+
+def _moved(before: dict, after: dict) -> list[str]:
+    """Copper whose net changed as the board was loaded and filled."""
+    return [
+        f"  {kind} at ({x}, {y}) mm on {layer}: {was!r} became {after[key]!r}"
+        for key, was in sorted(before.items())
+        if key in after and after[key] != was
+        for kind, layer, x, y, *_ in [key]
+    ]
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         sys.exit(f"usage: {Path(sys.argv[0]).name} <board.kicad_pcb>")
@@ -36,6 +77,7 @@ def main() -> int:
     if not path.is_file():
         sys.exit(f"no board at {path}")
 
+    before = _nets_in(path.read_text())
     board = pcbnew.LoadBoard(str(path))
     zones = list(board.Zones())
     if not zones:
@@ -47,6 +89,16 @@ def main() -> int:
         sys.exit("zone fill failed")
 
     pcbnew.SaveBoard(str(path), board)
+
+    moved = _moved(before, _nets_in(path.read_text()))
+    if moved:
+        sys.exit(
+            "the zone fill changed what net some copper is on, which it must "
+            "never do:\n" + "\n".join(moved) + "\n"
+            "Every check in this repository reads the board *after* this step, "
+            "so a net pcbnew rewrites here is a net nothing downstream can "
+            "disagree with. Fix the layout instead."
+        )
 
     for zone in zones:
         print(

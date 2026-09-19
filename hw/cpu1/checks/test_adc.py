@@ -197,21 +197,28 @@ def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_ne
     )
 
 
-def test_the_source_impedance_is_far_below_what_the_part_allows(spec, networks):
+def test_the_source_impedance_is_below_what_the_part_allows(spec, networks):
     """
-    The series resistor against the converter's own sampling resistance.
+    The series resistor against the ceiling ST's Table 84 puts on it.
 
-    Not a settling check - that is the one above - but the sanity check that
-    goes with it: a series resistor much larger than the 50 Ohm inside the part
-    means the switch's own resistance has stopped mattering and every error
-    budget shifts outside the chip.
+    **This used to compare it with forty times the converter's own 50 Ohm**,
+    and forty was not from anywhere. The table states the limit directly -
+    R_AIN, external input impedance, 50 kOhm max - so that is what it reads
+    now, and the number stopped being this file's opinion.
+
+    It is a loose bound and it is meant to be. The tight one is the settling
+    check above, which the design is sized by; this is the part's own ceiling,
+    and what it catches is a resistor off by orders of magnitude rather than by
+    a factor - the settling check would catch the second anyway.
     """
+    allowed, _ = spec(MCU, "adc_external_impedance_max")
     r_adc, _ = spec(MCU, "adc_sample_resistance")
     for channel, (series, _) in sorted(networks.items()):
         _, resistance = spec(series, "resistance")
-        assert resistance <= 40 * r_adc, (
-            f"{channel}: {resistance:g} ohm in series against the part's own "
-            f"{r_adc:g} ohm"
+        assert resistance <= allowed, (
+            f"{channel}: {resistance:g} ohm in series, against the "
+            f"{allowed / 1e3:g} kOhm Table 84 allows outside the pin and the "
+            f"{r_adc:g} ohm inside it"
         )
 
 

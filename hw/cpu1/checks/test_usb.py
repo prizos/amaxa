@@ -27,9 +27,6 @@ CONNECTOR = "usb.receptacle"
 PROTECTION = "usb.protection"
 GROUND = "GND"
 
-# The spacing the pair is drawn at, which the layout also works from.
-USB_GAP = 0.2
-
 # Which declared rail each supply net is, as elsewhere on this board.
 RAILS = {"5V": "rail.5v", "3V3": "rail.3v3"}
 
@@ -344,6 +341,12 @@ def test_the_rule_the_fab_is_held_to_is_the_one_the_stackup_asks_for(
 
     sys.path.insert(0, str(board_dir.parent / "tools"))
     from layout_lib import differential_impedance
+    from mcu_pins import load_source
+
+    # The spacing the pair is actually drawn at, read from the layout rather
+    # than repeated here. It used to be a second copy of 0.2, which would have
+    # gone on agreeing with a layout that had moved.
+    gap = load_source(board_dir / "layout.py", "cpu1_layout_usb").USB_GAP
 
     text = (board_dir / "rules.kicad_dru").read_text()
     rule = re.search(
@@ -354,9 +357,9 @@ def test_the_rule_the_fab_is_held_to_is_the_one_the_stackup_asks_for(
     low, high = spec("usb", "differential_impedance")
     floor = float(rule.group(1))
     # At the pair's spacing, the narrowest trace the rule would accept.
-    impedance = differential_impedance(floor, USB_GAP, stack)
+    impedance = differential_impedance(floor, gap, stack)
     assert low <= impedance <= high, (
-        f"the rule admits {floor:g} mm traces, which at {USB_GAP:g} mm apart "
+        f"the rule admits {floor:g} mm traces, which at {gap:g} mm apart "
         f"make {impedance:.1f} ohm, outside {low:g} to {high:g}"
     )
 

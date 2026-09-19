@@ -34,9 +34,11 @@ MCU_H743 = PartSpec(
         "lse_gm_crit_max": exact(2.7e-6),       # LSEDRV = 11, high drive
         "io_current_max": exact(20e-3),
         "nrst_capacitor": exact(100e-9),
-        # Table 84: what the converter presents at an analog pin.
+        # Table 84: what the converter presents at an analog pin, and the
+        # ceiling it puts on what may be presented back to it.
         "adc_sample_capacitance": exact(4e-12),
         "adc_sample_resistance": exact(50.0),
+        "adc_external_impedance_max": exact(50e3),
         # What a 5 V-tolerant pin may see, as the datasheet states it: a
         # headroom above the *lowest* of the part's supplies, not a fixed
         # number. Recorded as the overhead so a check reads the board's own

@@ -442,6 +442,10 @@ def _frequency(design, two_pad_parts, spec):
     v_ref, _ = spec(BUCK_5V, "on_time_reference_input_voltage")
     k = t_on * v_ref / r_ref
     on_time = _parts_on(design, two_pad_parts, "Device:R", "RON", "GND")
+    assert len(on_time) == 1, (
+        f"RON reaches ground through {len(on_time)} resistors ({on_time}); the "
+        f"frequency below is worked from one of them and would be wrong"
+    )
     r_on, _ = spec(on_time[0], "resistance")
     v_out = _rail_typical(design, two_pad_parts, spec, "5V", "FB_5V", BUCK_5V)
     return k, v_out / (k * r_on), r_on

@@ -23,11 +23,6 @@ def _pin_count(pad_net) -> int:
     return len([pad for reference, pad in pad_net if reference == HEADER])
 BUS = "TRIP_SET_N"
 
-# The same budget the safety chain's checks work to: how long a bridge survives
-# a shoot-through. Everything between the current leaving its sensor and the
-# buffer letting go has to fit inside it.
-TRIP_BUDGET = 50e-9
-
 
 @pytest.fixture(scope="module")
 def pad_net(design):
@@ -189,16 +184,17 @@ def test_the_whole_trip_path_fits_the_budget(spec, comparators):
     once in the filter and again as the comparator's own delay stretches at
     lower overdrive.
     """
+    _, trip_budget = spec("trip", "budget")
     comparator = max(spec(address, "propagation_delay_max")[0] for address in comparators)
     latch, _ = spec(LATCH, "preset_to_output_max")
     buffer_off, _ = spec(BUFFER, "disable_time_max")
     spent = comparator + latch + buffer_off
-    assert spent < TRIP_BUDGET, (
-        f"{spent * 1e9:.1f} ns of a {TRIP_BUDGET * 1e9:g} ns budget before the "
+    assert spent < trip_budget, (
+        f"{spent * 1e9:.1f} ns of a {trip_budget * 1e9:g} ns budget before the "
         "signal has even been filtered"
     )
-    assert spent < TRIP_BUDGET * 0.6, (
-        f"{spent * 1e9:.1f} ns leaves only {(TRIP_BUDGET - spent) * 1e9:.1f} ns "
+    assert spent < trip_budget * 0.6, (
+        f"{spent * 1e9:.1f} ns leaves only {(trip_budget - spent) * 1e9:.1f} ns "
         "for the tap network, which is not enough to filter anything"
     )
 

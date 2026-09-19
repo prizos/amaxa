@@ -414,8 +414,8 @@ EXPOSED_PAD = re.compile(r"-\d+EP")
 
 
 @pytest.fixture(scope="module")
-def exposed_pads(pcb_text) -> dict[str, tuple[float, float, float, float]]:
-    """Every pad big enough to be a thermal pad, as (x0, y0, x1, y1)."""
+def exposed_pads(pcb_text) -> dict[str, tuple[float, float, float, float, str]]:
+    """Every pad big enough to be a thermal pad, as (x0, y0, x1, y1, net)."""
     out = {}
     for block in pcb_text.split("\n\t(footprint ")[1:]:
         address = re.search(r'\(property "address" "([^"]+)"', block)
@@ -431,6 +431,7 @@ def exposed_pads(pcb_text) -> dict[str, tuple[float, float, float, float]]:
             number = re.match(r'"([^"]*)"', pad)
             here = re.search(r"\(at ([-\d.]+) ([-\d.]+)", pad)
             size = re.search(r"\(size ([\d.]+) ([\d.]+)\)", pad)
+            on = re.search(r'\(net \d+ "([^"]*)"\)', pad)
             if not (number and here and size):
                 continue
             w, h = float(size.group(1)), float(size.group(2))
@@ -442,7 +443,8 @@ def exposed_pads(pcb_text) -> dict[str, tuple[float, float, float, float]]:
             if round(math.degrees(angle)) % 180:
                 w, h = h, w
             out[f"{address.group(1)}:{number.group(1)}"] = (
-                x - w / 2, y - h / 2, x + w / 2, y + h / 2)
+                x - w / 2, y - h / 2, x + w / 2, y + h / 2,
+                on.group(1) if on else "")
     return out
 
 
@@ -462,10 +464,16 @@ def test_every_exposed_pad_has_its_thermal_vias(exposed_pads, vias):
     catching whoever made it.
     """
     thin = []
-    for pad, (x0, y0, x1, y1) in sorted(exposed_pads.items()):
-        inside = [v for v in vias if x0 <= v[0] <= x1 and y0 <= v[1] <= y1]
+    for pad, (x0, y0, x1, y1, net) in sorted(exposed_pads.items()):
+        assert net, f"{pad} is an exposed pad on no net at all"
+        # The via has to be on the pad's own net, not merely inside its
+        # outline. A via of some other net that happens to land in the
+        # rectangle is copper the heat never reaches, and counting it made the
+        # pad look connected while it was not.
+        inside = [v for v in vias
+                  if x0 <= v[0] <= x1 and y0 <= v[1] <= y1 and v[2] == net]
         if len(inside) < THERMAL_VIAS:
-            thin.append(f"  {pad}: {len(inside)} vias inside "
+            thin.append(f"  {pad}: {len(inside)} vias on {net} inside "
                         f"{x1 - x0:.2f} x {y1 - y0:.2f} mm, wanted {THERMAL_VIAS}")
     assert not thin, (
         "Exposed pads without their thermal vias:\n" + "\n".join(thin)
