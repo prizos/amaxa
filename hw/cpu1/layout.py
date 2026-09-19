@@ -548,6 +548,9 @@ def _buck_5v() -> None:
     vias under it reach the ground plane on the first inner layer.
     """
     PLACEMENT["buck5.ic"] = (-5.0, BUS + 0.64, 0)
+    # Its ground pin sits between the package and the on-time resistor, with
+    # no room on its own line; the via goes west of it.
+    VIAS.append(("buck5.ic:1", (-8.9, 28.1), "GND", *VIA, SUPPLY))
     PLACEMENT["buck5.r_uvlo_top"] = (-10.5, 32.0, 270)
     PLACEMENT["buck5.r_uvlo_bottom"] = (-10.5, 34.5, 270)
     PLACEMENT["buck5.r_on"] = (-7.64, 36.0, 270)
@@ -1091,7 +1094,7 @@ FAULT2_DROP, FAULT2_LANE, FAULT2_COLUMN = (15.0, 1.9), -1.4, 33.0
 FAULT2_LEGS = ((15.0, -1.4),)
 # It crosses the four PWM lines turning south to the buffers; three
 # millimetres on the front is the whole of that crossing.
-FAULT2_STEP = (19.2, 32.0)
+FAULT2_STEP = (19.2, 32.4)
 
 # Where each lane surfaces onto the track its resistor already has: east of the
 # pad, so the track runs under the resistor rather than into its supply pad.
@@ -1184,6 +1187,69 @@ def _static_mcu() -> None:
              (FAULT2_COLUMN, lane), (STATIC_RISE, lane)]),
     ])
     VIAS.append((None, (STATIC_RISE, lane), net, *VIA))
+
+
+# --- the last few, each one local ---------------------------------------------
+
+# The CAN transceiver's supply pin and the capacitor beside it: the capacitor's
+# ground pad sits between them, so the track goes round it on the pin's own
+# line rather than straight across.
+CAN_SUPPLY = ((1.1, -21.9), (1.1, -22.8), (-3.3, -22.8), (-3.98, -21.4), (-3.98, -20.81))
+
+# Both gate-driver faults meet the same dual diode north of the Tag-Connect.
+# Each drops off its own lane and comes down its own column on the front,
+# because the lanes between them and it are all on the back.
+# The first drops off its lane and comes straight down. The second starts
+# south of the band, north of the USB pair, so it goes down on the back until
+# it is south of the pair and changes to the front for the lanes.
+FAULT_DIODES = (
+    # net, the column it comes down, the lane it leaves, its pad, the height
+    # it crosses at and the height the pad is on
+    ("FAULT1_N", 25.5, -14.6, "safety.d_faults:1", -28.7, -28.95),
+    ("FAULT2_N", 32.8, -8.6, "safety.d_faults:2", -28.0, -27.05),
+)
+# Where the first crosses the VBUS leg coming up from the receptacle.
+# Both of them reach the diode's own side on the back, because the trip bus's
+# link between the two diodes runs across the front between them.
+FAULT_WEST = {"FAULT1_N": 20.0, "FAULT2_N": 19.4}
+
+# Reset reaches the diode that presets the latch from the leg that goes down to
+# the debug pad, on the front for the same reason.
+# Reset reaches the diode that presets the latch from the debug pad it already
+# goes to, stepping west between the Tag-Connect's holes and the trip pull-up.
+NRST_DIODE = ((DEBUG_RIGHT, -20.0), (22.3, -20.0), (22.3, -23.4),
+              (18.6, -23.4), (18.6, -32.95))
+
+
+def _last_few() -> None:
+    # Its ground pad's way down, where the generator used to find it: the
+    # supply track now runs close enough below to put it off.
+    VIAS.append(("can.decoupling_vcc:2", (-3.02, -21.95), "GND", *VIA, SUPPLY))
+    width = _width_for("5V", SIGNAL)
+    out, down, west, up, pad = CAN_SUPPLY
+    path("5V", width, [
+        (F, ["can.transceiver:3", out]),
+        (B, [out, down, west]),
+        (F, [west, up, pad, "can.decoupling_vcc:1"]),
+    ])
+    VIAS.append((None, out, "5V", *VIA))
+    VIAS.append((None, west, "5V", *VIA))
+
+    for net, column, lane, target, across, height in FAULT_DIODES:
+        width = _width_for(net, SIGNAL)
+        # The second one's lane only starts east of the resistor column, so it
+        # runs back west on the back layer first: the trip bus crosses this
+        # corner on the front.
+        if net == "FAULT2_N":
+            ROUTES.append((net, width, B, [(33.0, lane), (column, lane)]))
+        VIAS.append((None, (column, lane), net, *VIA))
+        path(net, width, [
+            (F, [(column, lane), (column, across)]),
+            (B, [(column, across), (FAULT_WEST[net], across)]),
+            (F, [(FAULT_WEST[net], across), (FAULT_WEST[net], height), target]),
+        ])
+
+    ROUTES.append(("NRST", SIGNAL, F, [*NRST_DIODE, "safety.d_reset:1"]))
 
 
 # The lane field between each buffer and the slot column.
@@ -1664,7 +1730,7 @@ TRIP_BUS, TRIP_BUS_EAST = -49.5, 20.5
 
 # From the pull-up to the latch is the length of the board, and the front of
 # that column belongs to the package's own escapes. It goes on the back.
-TRIP_LATCH_LANE = 31.2
+TRIP_LATCH_LANE = 31.9
 
 
 def _trip_bus() -> None:
@@ -1701,8 +1767,8 @@ def _trip_bus() -> None:
         # The ten static lanes cross this column on the back on their way to
         # the resistors. It steps onto the front for their whole depth rather
         # than ten of them stepping over it.
-        (F, [(TRIP_LATCH_LANE, -26.0), (TRIP_LATCH_LANE, -6.5)]),
-        (B, [(TRIP_LATCH_LANE, -6.5), (TRIP_LATCH_LANE, rise[1]), rise]),
+        (F, [(TRIP_LATCH_LANE, -26.0), (TRIP_LATCH_LANE, -2.0)]),
+        (B, [(TRIP_LATCH_LANE, -2.0), (TRIP_LATCH_LANE, rise[1]), rise]),
         (F, [rise, "safety.latch:7"]),
     ])
 
@@ -2278,7 +2344,7 @@ def _usb() -> None:
 # whole way, down the east of the buffers, and back underneath the pair to the
 # array's middle pad, which is the only pad on that side the pair does not
 # fan out around.
-USB_VBUS_EAST, USB_VBUS_LANE, USB_VBUS_RISE = 29.5, -22.0, (28.0, -23.0)
+USB_VBUS_EAST, USB_VBUS_LANE, USB_VBUS_RISE = 30.3, -25.4, (28.0, -25.4)
 
 
 def _usb_bus_voltage() -> None:
@@ -2297,7 +2363,7 @@ def _usb_bus_voltage() -> None:
     # ground - and go under the connector's own fan-out on the back. Each steps
     # back onto the front for a millimetre to get past the trip bus, which runs
     # across this corner on the back on its way to the latch.
-    for pad, step, column in (("A4", (30.45, -31.6), 30.45),
+    for pad, step, column in (("A4", (30.45, -31.6), 30.3),
                               ("A9", (25.55, -32.4), 24.0)):
         here = (USB_VBUS_EAST, USB_VBUS_LANE) if pad == "A4" else USB_VBUS_RISE
         path(net, width, [
@@ -2428,6 +2494,12 @@ def _ethernet_local() -> None:
     ):
         ROUTES.append((net, _width_for(net, SIGNAL), F, points))
 
+    # The PHY's own supply pin and the capacitor beside it reach the plane
+    # through this one: there is no room for a via on either pad's own line,
+    # and until the stitching generator learned that a route between two
+    # surface pads reaches nothing, it never asked for one.
+    VIAS.append(("eth.dec_vdd2a:1", (-57.6, -20.6), "3V3", *VIA, SUPPLY))
+
     # XTAL1 goes to the terminal on the far corner, which means past the can
     # pad sitting between it and the package. Under the crystal rather than
     # around it: around is three millimetres further on the one net where
@@ -2545,13 +2617,44 @@ def _absolute(address: str, x: float, y: float) -> tuple[float, float]:
 
 
 def _already_reached() -> set[str]:
-    """Every `address:pad` some route or via already touches."""
-    out = set()
+    """
+    Every `address:pad` that already has a way to its plane.
+
+    A pad is only reached if the route it sits on changes layer somewhere - a
+    route joining two surface pads to each other leaves both of them exactly as
+    far from the plane as they started. This counted them as done, and the
+    PHY's supply pin and its bypass capacitor sat on the front connected to
+    nothing at all while the board looked stitched.
+    """
+    parent: dict = {}
+
+    def find(node):
+        parent.setdefault(node, node)
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    def join(one, other):
+        parent[find(one)] = find(other)
+
+    def place(point):
+        x, y = _point(point)
+        return (round(x, 3), round(y, 3))
+
     for _, _, _, points in ROUTES:
-        out |= {p for p in points if isinstance(p, str)}
+        for after in points[1:]:
+            join(place(points[0]), place(after))
+    # A via with an anchor is joined to the pad it is drawn from, which is how
+    # a supply pin's own ring via reaches the capacitor beside it.
     for entry in VIAS:
         if entry[0] is not None:
-            out.add(entry[0])
+            join(place(entry[0]), place(entry[1]))
+    grounded = {find(place(entry[1])) for entry in VIAS}
+    out = {entry[0] for entry in VIAS if entry[0] is not None}
+    for _, _, _, points in ROUTES:
+        if find(place(points[0])) in grounded:
+            out |= {p for p in points if isinstance(p, str)}
     return out
 
 
@@ -2840,6 +2943,7 @@ _tripped()
 _safety_signals()
 _static_routes()
 _static_mcu()
+_last_few()
 _field_buses()
 _field_bus_routes()
 _field_bus_mcu()
