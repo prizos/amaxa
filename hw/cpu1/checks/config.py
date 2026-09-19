@@ -93,7 +93,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "LED0603": ["polarity"],
     "LQFP144": ["power_supply_scheme"],
     "MSOP10": ["factory_default"],
-    "QFN24": ["package_outline"],
+    "QFN24": ["package_outline", "front_end"],
     "RJ45HR": ["schematic"],
     "SMB": ["cathode"],
     "SO8EP": ["land_pattern"],

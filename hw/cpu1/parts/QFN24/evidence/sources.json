@@ -1,4 +1,15 @@
 {
+  "front_end": {
+    "assumes": "",
+    "crop": "150,230,1180,720",
+    "document": "SMSC/Microchip LAN8742A/LAN8742Ai, Revision 1.1 (05-21-13), Figure 3.23",
+    "dpi": 170,
+    "page": 63,
+    "read": "2026-09-19",
+    "sha256": "7f3c0c1f27c20293837f8d3be0d92f0abe62258dc41e7ca1f04802e859276d8f",
+    "shows": "the twisted-pair interface for a single 3.3 V supply: a ferrite bead from the rail feeding VDD1A, VDD2A and FOUR 49.9 ohm resistors, one to each of TXP, TXN, RXP and RXN, with the magnetics' chip-side centre taps going to a bypass capacitor to GROUND rather than to the rail",
+    "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/8742a.pdf"
+  },
   "package_outline": {
     "assumes": "nothing about the land pattern: Chapter 6 is the package outline only, and Microchip publish no recommended footprint, via pattern or paste aperture for this part",
     "crop": "140,280,880,800",
