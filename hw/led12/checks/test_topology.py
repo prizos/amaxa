@@ -146,12 +146,12 @@ POLARITY = [
     # channel out of the FET's symbol and the cathode out of the Zener's, and
     # so holds on a board this file was not written for.
     ("switch.q_switch", "1", "GATE"),
-    ("switch.q_switch", "2", "GND"),       # source
-    ("switch.q_switch", "3", "LED_RETURN"),  # drain
+    # Its source and drain were two more rows.
+    # test_every_led_faces_the_switch_that_sinks_it reads both off the symbol.
     ("rail.ldo", "1", "GND"),
     ("rail.ldo", "2", "3V3"),   # output, and the tab
     ("rail.ldo", "3", "12V"),   # input
-] + [(f"leds[{i}].led", "1", "LED_RETURN") for i in range(4)]
+]  # The four LEDs were here too, and are derived now.
 
 
 def test_polarised_parts_face_the_right_way(net_members):
@@ -177,3 +177,63 @@ def test_polarised_parts_face_the_right_way(net_members):
             wrong.append(f"  {address} pad {pad}: on {found!r}, expected {expected!r}")
 
     assert not wrong, "Parts wired the wrong way round:\n" + "\n".join(wrong)
+
+
+def test_every_led_faces_the_switch_that_sinks_it(design, net_members):
+    """
+    Each LED's cathode is on the net the low-side switch pulls down, and the
+    switch's own source is on ground.
+
+    This board's shape: rail, resistor, LED, then one N-channel FET sinking all
+    four. An LED fitted the other way round never lights and nothing else on
+    the board notices - it is not a short, not a DRC error, and not something
+    any check that asks which parts share a net can see.
+
+    Both ends are read rather than stated. `Device:LED` names its pins K and A,
+    so which pad is the cathode comes from the symbol; the drain and source
+    come from the FET's, through the same reader the gate-clamp check uses. Two
+    of these used to be rows in POLARITY below, and four more were the LEDs.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "checks"))
+    from symbols import symbol_pin_names
+    from test_protection import _fet
+
+    net_of_pad = {
+        (address, pad): net
+        for net, members in net_members.items()
+        for address, pad in members
+    }
+    switches = {
+        address: found[0]
+        for address, part in design["parts"].items()
+        for found in [_fet(part["symbol"])] if found
+        and net_of_pad.get((address, found[0]["S"])) == "GND"
+    }
+    assert len(switches) == 1, f"expected one low-side switch, found {sorted(switches)}"
+    switch, pads = next(iter(switches.items()))
+    sunk = net_of_pad[(switch, pads["D"])]
+
+    leds = {
+        address for address, part in design["parts"].items()
+        if part["symbol"] == "Device:LED"
+    }
+    assert leds, "no LEDs found, and this check is about them"
+    names = {name: pad for pad, name in symbol_pin_names("Device:LED").items()}
+
+    wrong = []
+    for led in sorted(leds):
+        cathode = net_of_pad.get((led, names["K"]))
+        anode = net_of_pad.get((led, names["A"]))
+        if cathode != sunk:
+            wrong.append(
+                f"  {led}: its cathode is on {cathode!r} and its anode on "
+                f"{anode!r}, while {switch} sinks {sunk!r} - so it is reversed "
+                "and will never light"
+            )
+    assert not wrong, (
+        f"LEDs not facing {switch}:\n" + "\n".join(wrong)
+    )
