@@ -1,8 +1,13 @@
 # cpu1 — the control board
 
 The STM32H743ZIT6 board that generates every hard real-time signal, and is later
-soldered onto one analog power board. **In progress,** and built one block at a
-time.
+soldered onto one analog power board. Built one block at a time, and now
+**fully routed**: every net is drawn, `board.mk` says `ROUTING := complete`, and
+DRC runs in the mode that demands every connection.
+
+Eight pins are reserved rather than committed — the encoder and Hall inputs,
+which wait on the motion-feedback connector. They are the board's only pending
+nets.
 
 **What is on it, and how much of it is drawn, is in
 [`review/README.md`](review/README.md)** — the board plotted layer by layer,
@@ -18,7 +23,7 @@ will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)); the review lists them.
 |---|---|
 | Stackup | PCBWay's published regular 4-layer build: 1 oz copper throughout, 7628 prepreg, 1.03 mm core, 1.51 mm finished |
 | Layers | F.Cu signal, In1.Cu solid ground, In2.Cu supply islands, B.Cu signal |
-| Size | 100 × 80 mm, provisional until the blocks and power-board headers are placed |
+| Size | 130 × 110 mm — grown from 100 × 80 to hold the Ethernet jack |
 | MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at JLCPCB** on 2026-09-17; see [its review note](parts/LQFP144/LQFP144.md) |
 
 ## The pin map

@@ -1,4 +1,4 @@
-# What is stopping the last thirty-six connections on cpu1
+# What was stopping the last thirty-six connections on cpu1
 
 Written after taking cpu1 from 373 unrouted connections to 36 and then failing
 twice, on two different blocks, for the same underlying reason. Both failures
@@ -111,3 +111,39 @@ computed from pad geometry, moving a block moves its routes, and the cost of
 trying a placement is one edit and one DRC run. That is what made it possible
 to establish, rather than guess, that the corridor is 0.55 mm and a via is
 0.95.
+
+## How both were resolved
+
+Both, in the end, went the way this note predicted: by moving a block rather
+than by threading around one. Neither took the specific decision proposed
+above, and the reason is worth recording.
+
+**Ethernet.** The proposal was to move the CAN and RS-485 transceivers east.
+That was surveyed and would have worked, but it costs a working block its
+routing and buys one corridor. What the survey also turned up is that the
+emptiest copper on this board is *under the package*: the back of an LQFP-144
+carries nothing but the supply ring's vias and whatever the static band put
+there, and the static band is all in the north half. So three of the four
+north-edge RMII lines turn inward instead of outward, drop through inside the
+ring, and cross the die. The field buses never had to move.
+
+The six on the west and south edges went the other way - out past the analog
+bank on the far side of the analog header, which is the one strip on this board
+where nothing else wanted to be. Seven small parts moved out of that strip, and
+each of them was there because it landed first, not because it belonged.
+
+**The static band.** The four PWM drops did move east, as proposed, and the
+strip behind the package opened up exactly as the arithmetic said it would.
+
+**The DC-link sense line.** Not in this note at all, and the single biggest
+obstacle of the three: it rose thirty millimetres east of the comparator it
+feeds, putting a back-layer line across the full width of the board at
+y -15.65. The rule that placed it - "rise as far east as the last tap" - is
+right for the three current sense lines and wrong for the one whose tap is last
+on the row. Making the riser a field of the lane rather than something inferred
+from the taps freed the channel the reset line now takes.
+
+The lesson the note drew stands, and is the reason all three fixes look alike:
+the difficulty is never the route, it is the escape, and the strip was
+allocated first-come-first-served. Every fix was to move whichever block got
+there first.
