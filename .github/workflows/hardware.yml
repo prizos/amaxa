@@ -76,25 +76,25 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate the board from source
-        run: make build
+        run: tools/ci_run.sh "Generate the board from source" make build
 
       # Placement, routing and the pours, from <board>/layout.py.
       - name: Lay out the board
-        run: make layout
+        run: tools/ci_run.sh "Lay out the board" make layout
 
       # The design a build describes must not depend on the run.
       - name: Reproducibility
-        run: make reproducible
+        run: tools/ci_run.sh "Reproducibility" make reproducible
 
       - name: Nothing reaches the network
-        run: make offline
+        run: tools/ci_run.sh "Nothing reaches the network" make offline
 
       - name: Design checks
-        run: make check
+        run: tools/ci_run.sh "Design checks" make check
 
       # KiCad's own checker, against the PCBWay limits and the board's rules.
       - name: Design rule check
-        run: make drc
+        run: tools/ci_run.sh "Design rule check" make drc
 
       # The decks take their values from the build, so a component change moves
       # the simulation with it.
@@ -108,7 +108,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Renders, 3D model and fab package
-        run: make outputs
+        run: tools/ci_run.sh "Renders, 3D model and fab package" make outputs
 
       # A stable, readable description of the board. Two runs of this are worth
       # comparing by eye in a way two .kicad_pcb files never were.
@@ -197,7 +197,7 @@ jobs:
       # Not `make tools`: that also demands kicad-cli, pcbnew and ngspice, which
       # this job does not need. `make pins` builds the virtualenv itself.
       - name: Pin map against the silicon
-        run: make pins
+        run: tools/ci_run.sh "Pin map against the silicon" make pins
 
   # A tag is a deliberate act, so that is when the orderable package is built.
   # It is published as an artifact rather than attached to a release: this
