@@ -1226,6 +1226,11 @@ def _last_few() -> None:
     # supply track now runs close enough below to put it off.
     VIAS.append(("can.decoupling_vcc:2", (-3.02, -21.95), "GND", *VIA, SUPPLY))
     width = _width_for("5V", SIGNAL)
+    # The CAN transceiver's 5 V does not reach the island beside the regulator,
+    # so it goes north to the lane that feeds the comparators instead.
+    ROUTES.append(("5V", _width_for("5V", SIGNAL), B,
+                   [CAN_SUPPLY[1], (5.9, CAN_SUPPLY[1][1]),
+                    (5.9, TRIP_SUPPLY_LANE)]))
     out, down, west, up, pad = CAN_SUPPLY
     path("5V", width, [
         (F, ["can.transceiver:3", out]),
@@ -1250,6 +1255,66 @@ def _last_few() -> None:
         ])
 
     ROUTES.append(("NRST", SIGNAL, F, [*NRST_DIODE, "safety.d_reset:1"]))
+
+
+# The threshold DAC's two I2C lines. They leave the west edge two pins apart
+# and have to reach the DAC, which is north-west of the package behind the boot
+# pad, the crystal, the bulk capacitor and two test networks. The back layer
+# through there is nearly empty - only the button's long wire and the DC link's
+# sense line cross it - but it is stitched with plane vias, and a via is what
+# neither of these can put anywhere. So each one is written out: a column where
+# there is room for one, a step onto the front where it has to pass a wire, and
+# a jog where the next via would not have fitted.
+I2C_PATHS = {
+    # West on the back at the pin's own height, past everything the crystal
+    # and the decoupling row put in the way, then north on the front in the
+    # strip between the crystal and the analog fan's lanes - which is the one
+    # column on this side with nothing on the front in it at all. The button's
+    # wire and the DC link's sense line both cross it, and both are on the
+    # back, so neither costs a via.
+    "DAC_SCL": (
+        (F, [(-12.0, -3.75)]),
+        (B, [(-18.2, -3.75)]),
+        (F, [(-18.2, -23.4)]),
+        (B, [(-11.4, -23.4), (-11.4, -24.5)]),
+        (F, ["trip.dac:2"]),
+    ),
+    "DAC_SDA": (
+        (F, [(-12.7, -4.25)]),
+        (B, [(-19.2, -4.25)]),
+        (F, [(-19.2, -22.2)]),
+        (B, [(-6.8, -22.2)]),
+        (F, ["trip.r_sda_pullup:2"]),
+    ),
+}
+
+# And from the DAC to the pull-up each one has, on the front, each on its own
+# side of the other.
+I2C_PULLUPS = {
+    "DAC_SCL": ((-8.8, -24.5), (-8.8, -22.6), "trip.r_scl_pullup:2"),
+    "DAC_SDA": ((-8.3, -25.0), "trip.dac:3"),
+}
+
+
+def _dac_i2c() -> None:
+    """The two I2C lines from the package to the threshold DAC and its pulls."""
+    # The DAC's ground pin used to reach the plane west of it; the data line
+    # now runs there, so it goes south instead.
+    VIAS.append(("trip.dac:4", (-7.5, -25.5), "GND", *VIA, SUPPLY))
+    VIAS.append(("trip.dac:10", (-12.5, -24.0), "GND", *VIA, SUPPLY))
+
+    for net, legs in I2C_PATHS.items():
+        width = _width_for(net, SIGNAL)
+        pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+        here: list = [f"{MCU}:{pin}"]
+        steps = []
+        for layer, points in legs:
+            steps.append((layer, here + list(points)))
+            here = [points[-1]]
+        path(net, width, steps)
+        for layer, points in legs[:-1]:
+            VIAS.append((None, points[-1], net, *VIA))
+        ROUTES.append((net, width, F, [legs[-1][1][-1], *I2C_PULLUPS[net]]))
 
 
 # The lane field between each buffer and the slot column.
@@ -2735,13 +2800,16 @@ STITCH_PLACES = (
     (50.0, 11.5), (50.0, 16.0), (50.0, 20.5),   # beyond the digital connector
     (31.5, -28.5),                    # the USB connector's fan-out
     (20.0, -16.0),                    # the debug escapes
-    (0.0, 33.5),                      # power good, under the switch node
+    # Power good, below the 5 V island rather than inside it: a 3V3 via in
+    # there reaches the gap the island leaves in the 3V3 pour, and this one
+    # sat in exactly that gap until the stitching generator learned to say so.
+    (0.0, 40.5),
     (12.0, -26.0),                    # the CAN termination's midpoint
     (-60.0, -6.0), (-60.0, -30.0),    # the Ethernet crystal and its pairs
     # The strip the analog fan crosses layers in. Thirty-six layer changes
     # happened here in one commit and there was not a tie within ten
     # millimetres of any of them; the check said so before the board did.
-    (-19.5, 8.5), (-19.5, -6.0), (-19.5, -18.0),
+    (-19.5, 8.5), (-28.5, -9.0), (-33.0, -19.5),
     (-30.0, 8.5), (-33.0, -1.0), (-33.0, -7.5), (-33.0, -15.5),
     (38.0, -42.0),                    # the static signals' way under the header
     (39.5, -15.5),                    # and where that column moved to
@@ -2944,6 +3012,7 @@ _safety_signals()
 _static_routes()
 _static_mcu()
 _last_few()
+_dac_i2c()
 _field_buses()
 _field_bus_routes()
 _field_bus_mcu()
