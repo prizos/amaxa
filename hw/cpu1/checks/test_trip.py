@@ -16,6 +16,11 @@ DAC = "trip.dac"
 LATCH = "safety.latch"
 BUFFER = "safety.buffer1"
 HEADER = "header.analog"
+
+
+def _pin_count(pad_net) -> int:
+    """How many pins the connector has, counted on the board rather than said."""
+    return len([pad for reference, pad in pad_net if reference == HEADER])
 BUS = "TRIP_SET_N"
 
 # The same budget the safety chain's checks work to: how long a bridge survives
@@ -304,7 +309,8 @@ def test_the_dac_has_a_channel_for_every_threshold(design, pad_net, spec):
 
 def test_the_analog_connector_carries_what_the_pin_map_says(design, pad_net, pin_map):
     """The generated pinout and the netlist agree, pin by pin."""
-    expected = pin_map.header_pins(pin_map.HEADER_ANALOG, pin_map.HEADER_GROUND, 30)
+    expected = pin_map.header_pins(pin_map.HEADER_ANALOG, pin_map.HEADER_GROUND,
+                                _pin_count(pad_net))
     wrong = []
     for number, net in sorted(expected.items()):
         found = pad_net.get((HEADER, str(number)))
@@ -313,7 +319,7 @@ def test_the_analog_connector_carries_what_the_pin_map_says(design, pad_net, pin
     assert not wrong, "Analog connector pins:\n" + "\n".join(wrong)
 
 
-def test_every_analog_signal_sits_next_to_a_ground(pin_map):
+def test_every_analog_signal_sits_next_to_a_ground(pad_net, pin_map):
     """
     Same rule as the digital connector, and it matters more here.
 
@@ -321,7 +327,8 @@ def test_every_analog_signal_sits_next_to_a_ground(pin_map):
     error in whatever the control loop does next, and the return path is what
     decides how much it picks up.
     """
-    pins = pin_map.header_pins(pin_map.HEADER_ANALOG, pin_map.HEADER_GROUND, 30)
+    pins = pin_map.header_pins(pin_map.HEADER_ANALOG, pin_map.HEADER_GROUND,
+                                _pin_count(pad_net))
     lonely = []
     for number, net in pins.items():
         if net == pin_map.HEADER_GROUND:

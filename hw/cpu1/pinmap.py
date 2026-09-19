@@ -81,11 +81,10 @@ PINS = [
     Pin("PE12", "TIM1_CH3N", "PWM1_C_LOW"),
     # The fourth channel of each timer is a single-ended output: no
     # complementary partner, so no hardware dead time. That is a property of
-    # the silicon and is worth a power board knowing. What it drives is not:
-    # a brake chopper, a PFC switch, a fan, a second-stage gate - the power
-    # board decides, the ID straps say which board it is, and firmware
-    # configures it. Naming these for one application put that decision on
-    # this board, where it does not belong.
+    # the silicon and is worth a power board knowing. What it drives is not.
+    # The power board decides, the ID straps say which board it is, and
+    # firmware configures it; naming these channels for one application put
+    # that decision on this board, where it does not belong.
     Pin("PE14", "TIM1_CH4", "PWM1_CH4", note="single-ended: no complementary pair, no dead time"),
     Pin("PE15", "TIM1_BKIN", "TRIP1_N", net="TRIP_N", note="from the hardware trip latch, active low"),
     Pin("PE6", "TIM1_BKIN2", "FAULT1_N", note="gate-driver fault, active low"),
@@ -126,8 +125,13 @@ PINS = [
     Pin("PB4", "TIM3_CH1", "HALL_1"),
     Pin("PB5", "TIM3_CH2", "HALL_2"),
     Pin("PB0", "TIM3_CH3", "HALL_3"),
-    Pin("PB6", "USART1_TX", "ENC_SERIAL_TX", note="reserved: the encoder type is undecided"),
-    Pin("PB7", "USART1_RX", "ENC_SERIAL_RX"),
+    # UART5 rather than USART1, which is the same job on the other side of the
+    # package. USART1's only free pair here is PB6/PB7, on the north edge
+    # beside the Hall inputs and the length of the board from the connector all
+    # of this goes to; UART5's PB13/PB12 are the first two pins of the east
+    # edge, five pins from the encoder's own.
+    Pin("PB13", "UART5_TX", "ENC_SERIAL_TX", note="reserved: the encoder type is undecided"),
+    Pin("PB12", "UART5_RX", "ENC_SERIAL_RX"),
 
     # --- safety chain and power-board control ----------------------------------------
     Pin("PG4", "GPIO", "PWM_ENABLE_N", "out", note="pulled up on the board, so off until driven"),
@@ -156,35 +160,69 @@ PINS = [
 
 # The digital header to the power board, as a sequence rather than a pinout: two
 # signals then a ground, all the way along, and the pin numbers fall out of the
-# order. J3 is a 2x20 with KiCad's odd/even numbering, so this list is read
+# order. J3 is a 2x26 with KiCad's odd/even numbering, so this list is read
 # straight through - pin 1, pin 2, pin 3 - across both rows.
 #
 # Every PWM name here is the *buffered* net, the one on the far side of the
 # octal buffer and its series resistor. The MCU's own net of the same name
 # without the suffix never reaches this connector, and a check says so.
 HEADER_GROUND = "GND"
-HEADER_DIGITAL = [
-    # The static signals first, at the end of the connector furthest from the
-    # buffers: straps and feedback, which change once a minute at most.
-    # In the order they leave the package, furthest first, for the same reason
-    # the buffered outputs are: ten tracks crossing the board without crossing
-    # each other.
+
+# The static signals first, at the end of the connector furthest from the
+# buffers: straps and feedback, which change once a minute at most. In the
+# order they leave the package, furthest first, for the same reason the
+# buffered outputs are: ten tracks crossing the board without crossing each
+# other.
+HEADER_STATIC = [
     "RELAY1", "RELAY2",
     "ID_STRAP0", "ID_STRAP1", "ID_STRAP2", "ID_STRAP3",
     "FAULT1_N",
     "STO1_FEEDBACK", "STO2_FEEDBACK",
     "FAULT2_N",
     "3V3",
-    # Then the buffered outputs, in the order their buffer presents them, which
-    # is the order the MCU's own pins come out of the package. Nothing here is
-    # grouped by phase, and that is deliberate: this order is what lets fifteen
-    # tracks cross the board without crossing each other, and the table is what
-    # makes it checkable rather than a drawing nobody dares touch.
+]
+
+# Then the buffered outputs, one list per buffer, in the order their buffer
+# presents them - which is the order the MCU's own pins come out of the
+# package. Nothing here is grouped by phase, and that is deliberate: this order
+# is what lets fifteen tracks cross the board without crossing each other.
+#
+# Two lists rather than one slice of a longer one. The layout needs to know
+# which buffer each name belongs to, and it used to find out by indexing this
+# table at 11 and 18 - which stopped being true the moment anything was added
+# to the end of it.
+HEADER_BUFFER2 = [
     "PWM2_CH4_OUT", "PWM2_C_HIGH_OUT", "PWM2_B_HIGH_OUT", "PWM2_A_HIGH_OUT",
     "PWM2_A_LOW_OUT", "PWM2_C_LOW_OUT", "PWM2_B_LOW_OUT",
+]
+HEADER_BUFFER1 = [
     "PWM1_CH4_OUT", "PWM1_C_HIGH_OUT", "PWM1_C_LOW_OUT", "PWM1_B_HIGH_OUT",
     "PWM1_B_LOW_OUT", "PWM1_A_HIGH_OUT", "PWM1_A_LOW_OUT", "GATE_ENABLE_OUT",
 ]
+
+# Last, on the six positions the connector grew to hold them, the motion
+# feedback. These go straight from the MCU to the connector with nothing in
+# between, and that is the point: the motor's wires land on the power board, so
+# that board decides what the encoder is - single-ended, RS-422, open collector
+# - and cpu1 carries pins rather than a commitment.
+#
+# The order is the order they leave the package, north to south: the two on the
+# north edge, then the five on the east edge from its top, then the one on the
+# south. They cross the board on In2.Cu in one fan-out, and a fan-out only
+# stays planar if the pins are in the same order as the pins that feed them.
+# The order is not the order the pins come out of the package - it is the
+# order the tracks arrive, which is the reverse. All eight run east on In2.Cu
+# in parallel rows, and a row can only cross another signal's column if that
+# column has already turned. The five from the east edge turn furthest east, so
+# they take the northern pins; the three from the north and south edges cross
+# the whole board first and take the southern ones.
+HEADER_FEEDBACK = [
+    "ENC_SERIAL_RX", "ENC_SERIAL_TX",
+    "ENC_A", "ENC_B", "ENC_Z",
+    "HALL_1", "HALL_3", "HALL_2",
+]
+
+HEADER_DIGITAL = HEADER_STATIC + HEADER_BUFFER2 + HEADER_BUFFER1 + HEADER_FEEDBACK
 
 
 # The analog header, the same way. Every name here is the *raw* signal as it

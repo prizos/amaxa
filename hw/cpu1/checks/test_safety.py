@@ -16,6 +16,11 @@ BUFFERS = ("safety.buffer1", "safety.buffer2")
 LATCH = "safety.latch"
 HEADER = "header.digital"
 
+
+def _pin_count(pad_net) -> int:
+    """How many pins the connector has, counted on the board rather than said."""
+    return len([pad for reference, pad in pad_net if reference == HEADER])
+
 # What a trip may take, from the comparator's output to the buffer letting go.
 # The comparators are a later block; this is the budget the rest has to fit in,
 # and it is set by how long a bridge survives a shoot-through, not by anything
@@ -151,7 +156,7 @@ def test_every_buffered_output_has_a_series_resistor_and_a_pull_down(
     assert not problems, "Buffered outputs:\n" + "\n".join(problems)
 
 
-def test_every_connector_signal_sits_next_to_a_ground(pin_map):
+def test_every_connector_signal_sits_next_to_a_ground(pad_net, pin_map):
     """
     No pin on the connector is more than one position from a return path.
 
@@ -159,7 +164,8 @@ def test_every_connector_signal_sits_next_to_a_ground(pin_map):
     antenna with a connector on it. The pattern comes from the pin map's own
     table, so this checks the generator rather than a drawing of the result.
     """
-    pins = pin_map.header_pins(pin_map.HEADER_DIGITAL, pin_map.HEADER_GROUND, 40)
+    pins = pin_map.header_pins(pin_map.HEADER_DIGITAL, pin_map.HEADER_GROUND,
+                                _pin_count(pad_net))
     lonely = []
     for number, net in pins.items():
         if net == pin_map.HEADER_GROUND:
@@ -376,7 +382,8 @@ def test_the_connector_carries_what_the_pin_map_says_it_does(design, pad_net, pi
     wiring disagreeing - which is exactly what a hand-drawn connector hides
     until someone builds a cable.
     """
-    expected = pin_map.header_pins(pin_map.HEADER_DIGITAL, pin_map.HEADER_GROUND, 40)
+    expected = pin_map.header_pins(pin_map.HEADER_DIGITAL, pin_map.HEADER_GROUND,
+                                _pin_count(pad_net))
     wrong = []
     for number, net in sorted(expected.items()):
         found = pad_net.get((HEADER, str(number)))

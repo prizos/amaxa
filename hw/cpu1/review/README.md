@@ -8,28 +8,28 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |  |  |
 |---|---|
 | **Size** | 130 × 110 mm |
-| **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
+| **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
 | **Footprints** | 249 |
-| **Nets** | 191, of which 8 pending |
-| **Routing** | 1227 track segments, 526 vias, 3 zones |
+| **Nets** | 191 |
+| **Routing** | 1262 track segments, 534 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
 
 Plotted separately rather than stacked: a stacked plot of a board with
-3 filled zones is a solid rectangle. The layer list is read from
+4 filled zones is a solid rectangle. The layer list is read from
 the board file rather than written down here, for the same reason the gerber
 list is — a fixed `F.Cu,B.Cu` list silently leaves a 4-layer board's planes out.
 
 ### `F.Cu`
 
-The component side, and most of the board's copper. Dense around the LQFP-144's escapes, the two regulators and the PWM fan; the long parallel runs across the middle are the analog inputs on their way from the header to the comparators. The two pairs in the top-left corner are the Ethernet link, and the only tracks on this board drawn to an impedance rather than a width.
+The component side, and most of the board's copper. Dense around the LQFP-144's escapes, the two regulators and the buffered PWM outputs; the long parallel runs across the middle are the analog inputs on their way from the header to the comparators. The two pairs in the top-left corner are the Ethernet link, and the only tracks on this board drawn to an impedance rather than a width.
 
 ![F.Cu plot](F_Cu.svg)
 
 ### `In1.Cu`
 
-One solid ground plane, notched at the top-left corner where the Ethernet jack's cable end sits. **No AGND/DGND split anywhere on this board** - analog is kept together by placement instead, which is a decision recorded in the plan rather than a habit.
+Ground, solid, notched at the top-left corner where the Ethernet jack's cable end sits. **No AGND/DGND split anywhere on this board** - analog is kept together by placement instead, which is a decision recorded in the plan rather than a habit. This is the plane the impedance-controlled pairs on F.Cu are referenced to.
 
 Zones on this layer: `GND`
 
@@ -37,11 +37,25 @@ Zones on this layer: `GND`
 
 ### `In2.Cu`
 
-Power islands. 3V3 fills most of the layer; the 5 V island inside it is a higher-priority zone, so it wins the overlap. That is what lets the two share a layer without a hand-drawn boundary between them.
-
-Zones on this layer: `3V3`, `5V`
+The inner signal layer, and the reason this board is six layers rather than four. It carries the eight motion-feedback signals from the package to the connector: on four layers every one of those crossings was a via, and there was nowhere left to put one.
 
 ![In2.Cu plot](In2_Cu.svg)
+
+### `In3.Cu`
+
+The second ground plane. It is under the inner signal layer rather than under B.Cu on purpose: a track on In2.Cu cannot be moved to the other side of an obstruction the way one on an outer layer can, so it gets a solid reference above and below and never has to find its return around the edge of an island.
+
+Zones on this layer: `GND`
+
+![In3.Cu plot](In3_Cu.svg)
+
+### `In4.Cu`
+
+Power islands. 3V3 fills most of the layer; the 5 V island inside it is a higher-priority zone, so it wins the overlap. That is what lets the two share a layer without a hand-drawn boundary between them.
+
+Zones on this layer: `5V`, `3V3`
+
+![In4.Cu plot](In4_Cu.svg)
 
 ### `B.Cu`
 
@@ -375,7 +389,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `J4` | `header.analog` | analog | PZ254-2-15-Z-8.5 | C3012255 | `PinHeader_2x15_P2.54mm_Vertical` |
-| `J3` | `header.digital` | digital | PZ254-2-20-Z-8.5 | C2894981 | `PinHeader_2x20_P2.54mm_Vertical` |
+| `J3` | `header.digital` | digital | PZ254-2-26-Z-8.5 | C2894981 | `PinHeader_2x26_P2.54mm_Vertical` |
 
 #### Plane stitching
 
@@ -424,20 +438,12 @@ schematic after the fact.
 
 ## Nets
 
-8 of the 191 nets are ERC waivers: each has exactly one
-connection, because the block at its other end is not drawn yet. A check
-requires that to stay true, so when the block lands the waiver has to go.
-
-| Waiting on | Nets |
-|---|---|
-| M8: the motion-feedback connector, once the encoder type is settled | `ENC_A`, `ENC_B`, `ENC_SERIAL_RX`, `ENC_SERIAL_TX`, `ENC_Z`, `HALL_1`, `HALL_2`, `HALL_3` |
-
 <details>
 <summary><strong>Every net</strong> — all 191, by size</summary>
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 215 |  |
+| `GND` | 219 |  |
 | `3V3` | 96 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
@@ -538,6 +544,11 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `DAC_SPARE` | 2 |  |
 | `DAC_TEST` | 2 |  |
 | `DAC_TEST_OUT` | 2 |  |
+| `ENC_A` | 2 |  |
+| `ENC_B` | 2 |  |
+| `ENC_SERIAL_RX` | 2 |  |
+| `ENC_SERIAL_TX` | 2 |  |
+| `ENC_Z` | 2 |  |
 | `ETH_CRS_DV` | 2 |  |
 | `ETH_MDC` | 2 |  |
 | `ETH_NINTSEL` | 2 |  |
@@ -558,6 +569,9 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `FAST8_SENSE` | 2 |  |
 | `GATE_ENABLE` | 2 |  |
 | `GATE_ENABLE_B` | 2 |  |
+| `HALL_1` | 2 |  |
+| `HALL_2` | 2 |  |
+| `HALL_3` | 2 |  |
 | `LED_COMMS` | 2 |  |
 | `LED_COMMS_A` | 2 |  |
 | `LED_FAULT` | 2 |  |
@@ -620,14 +634,6 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `VCAP2` | 2 |  |
 | `VIN_FUSED` | 2 |  |
 | `VIN_RAW` | 2 |  |
-| `ENC_A` | 1 | pending |
-| `ENC_B` | 1 | pending |
-| `ENC_SERIAL_RX` | 1 | pending |
-| `ENC_SERIAL_TX` | 1 | pending |
-| `ENC_Z` | 1 | pending |
-| `HALL_1` | 1 | pending |
-| `HALL_2` | 1 | pending |
-| `HALL_3` | 1 | pending |
 
 </details>
 

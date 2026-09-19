@@ -1,9 +1,9 @@
-(footprint "PinHeader_2x20_P2.54mm_Vertical"
+(footprint "PinHeader_2x26_P2.54mm_Vertical"
 	(version 20241229)
 	(generator "kicad-footprint-generator")
 	(layer "F.Cu")
-	(descr "Through hole straight pin header, 2x20, 2.54mm pitch, double rows")
-	(tags "Through hole pin header THT 2x20 2.54mm double row")
+	(descr "Through hole straight pin header, 2x26, 2.54mm pitch, double rows")
+	(tags "Through hole pin header THT 2x26 2.54mm double row")
 	(property "Reference" "REF**"
 		(at 1.27 -2.38 0)
 		(layer "F.SilkS")
@@ -14,8 +14,8 @@
 			)
 		)
 	)
-	(property "Value" "PinHeader_2x20_P2.54mm_Vertical"
-		(at 1.27 50.64 0)
+	(property "Value" "PinHeader_2x26_P2.54mm_Vertical"
+		(at 1.27 65.88 0)
 		(layer "F.Fab")
 		(effects
 			(font
@@ -45,7 +45,7 @@
 	)
 	(fp_line
 		(start -1.38 1.27)
-		(end -1.38 49.64)
+		(end -1.38 64.88)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -62,8 +62,8 @@
 		(layer "F.SilkS")
 	)
 	(fp_line
-		(start -1.38 49.64)
-		(end 3.92 49.64)
+		(start -1.38 64.88)
+		(end 3.92 64.88)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -90,7 +90,7 @@
 	)
 	(fp_line
 		(start 3.92 -1.38)
-		(end 3.92 49.64)
+		(end 3.92 64.88)
 		(stroke
 			(width 0.12)
 			(type solid)
@@ -98,8 +98,8 @@
 		(layer "F.SilkS")
 	)
 	(fp_rect
-		(start -1.77 -1.78)
-		(end 4.32 50.03)
+		(start -1.77 -1.77)
+		(end 4.32 65.27)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -117,7 +117,7 @@
 		(layer "F.Fab")
 	)
 	(fp_line
-		(start -1.27 49.53)
+		(start -1.27 64.77)
 		(end -1.27 0)
 		(stroke
 			(width 0.1)
@@ -136,7 +136,7 @@
 	)
 	(fp_line
 		(start 3.81 -1.27)
-		(end 3.81 49.53)
+		(end 3.81 64.77)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -144,8 +144,8 @@
 		(layer "F.Fab")
 	)
 	(fp_line
-		(start 3.81 49.53)
-		(end -1.27 49.53)
+		(start 3.81 64.77)
+		(end -1.27 64.77)
 		(stroke
 			(width 0.1)
 			(type solid)
@@ -153,7 +153,7 @@
 		(layer "F.Fab")
 	)
 	(fp_text user "${REFERENCE}"
-		(at 1.27 24.13 90)
+		(at 1.27 31.75 90)
 		(layer "F.Fab")
 		(effects
 			(font
@@ -442,8 +442,92 @@
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
 	)
+	(pad "41" thru_hole circle
+		(at 0 50.8)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "42" thru_hole circle
+		(at 2.54 50.8)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "43" thru_hole circle
+		(at 0 53.34)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "44" thru_hole circle
+		(at 2.54 53.34)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "45" thru_hole circle
+		(at 0 55.88)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "46" thru_hole circle
+		(at 2.54 55.88)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "47" thru_hole circle
+		(at 0 58.42)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "48" thru_hole circle
+		(at 2.54 58.42)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "49" thru_hole circle
+		(at 0 60.96)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "50" thru_hole circle
+		(at 2.54 60.96)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "51" thru_hole circle
+		(at 0 63.5)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
+	(pad "52" thru_hole circle
+		(at 2.54 63.5)
+		(size 1.7 1.7)
+		(drill 1)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+	)
 	(embedded_fonts no)
-	(model "${KICAD9_3DMODEL_DIR}/Connector_PinHeader_2.54mm.3dshapes/PinHeader_2x20_P2.54mm_Vertical.step"
+	(model "${KICAD9_3DMODEL_DIR}/Connector_PinHeader_2.54mm.3dshapes/PinHeader_2x26_P2.54mm_Vertical.step"
 		(offset
 			(xyz 0 0 0)
 		)

@@ -353,15 +353,15 @@
 #define PIN_HALL_3_PIN GPIO_PIN_0
 #define PIN_HALL_3_AF GPIO_AF2_TIM3
 
-/* ENC_SERIAL_TX: USART1_TX on PB6, pin 136. reserved: the encoder type is undecided */
+/* ENC_SERIAL_TX: UART5_TX on PB13, pin 74. reserved: the encoder type is undecided */
 #define PIN_ENC_SERIAL_TX_PORT GPIOB
-#define PIN_ENC_SERIAL_TX_PIN GPIO_PIN_6
-#define PIN_ENC_SERIAL_TX_AF GPIO_AF7_USART1
+#define PIN_ENC_SERIAL_TX_PIN GPIO_PIN_13
+#define PIN_ENC_SERIAL_TX_AF GPIO_AF14_UART5
 
-/* ENC_SERIAL_RX: USART1_RX on PB7, pin 137 */
+/* ENC_SERIAL_RX: UART5_RX on PB12, pin 73 */
 #define PIN_ENC_SERIAL_RX_PORT GPIOB
-#define PIN_ENC_SERIAL_RX_PIN GPIO_PIN_7
-#define PIN_ENC_SERIAL_RX_AF GPIO_AF7_USART1
+#define PIN_ENC_SERIAL_RX_PIN GPIO_PIN_12
+#define PIN_ENC_SERIAL_RX_AF GPIO_AF14_UART5
 
 /* PWM_ENABLE_N: GPIO output on PG4, pin 89. pulled up on the board, so off until driven */
 #define PIN_PWM_ENABLE_N_PORT GPIOG

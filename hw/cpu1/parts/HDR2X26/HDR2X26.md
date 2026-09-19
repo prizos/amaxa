@@ -1,15 +1,28 @@
-# HDR2X20 — the digital connector to the power board
+# HDR2X26 — the digital connector to the power board
 
 | | |
 |---|---|
-| Component | `HEADER_2X20` |
+| Component | `HEADER_2X26` |
 | Manufacturer | HCTL |
-| Part number | `PZ254-2-20-Z-8.5` |
-| LCSC | [C2894981](https://www.lcsc.com/product-detail/C2894981.html) |
-| Footprint | `PinHeader_2x20_P2.54mm_Vertical` |
+| Part number | `PZ254-2-26-Z-8.5` — **unverified** |
+| LCSC | **unverified** — C2894981 is the 2x20 |
+| Footprint | `PinHeader_2x26_P2.54mm_Vertical` |
 
-40 pins, 2.54 mm, through-hole, 3 A per contact. Stock 906, read from JLCPCB's
-component API on 2026-09-17.
+52 pins, 2.54 mm, through-hole, 3 A per contact.
+
+**Grown from 2x20.** The board reserved eight pins for motion feedback - three
+encoder lines, three Hall inputs and a serial pair - and had nowhere to put
+them. Six more positions at the far end carry all eight with the same
+ground-every-two pattern, and the connector grew southwards so every pin that
+already existed kept its position and every track that already reached one was
+left alone.
+
+**Needs a human eye: the ordering code.** The stock figure was read for the
+2x20 part - LCSC C2894981, 906 in stock, JLCPCB's component API, 2026-09-17.
+That is the forty-pin part. The number here follows HCTL's own series pattern
+for a fifty-two-pin body, and neither it nor an LCSC code for it has been
+looked up: this environment cannot reach a distributor. Check both before
+ordering.
 
 ## A pin header, deliberately
 
@@ -36,15 +49,15 @@ Two things follow from that, and both are on purpose:
   `test_every_connector_signal_sits_next_to_a_ground` checks the pattern rather
   than the drawing.
 - **The order is the order the signals leave the package**, not a grouping by
-  phase. It looks arbitrary on the connector and it is what lets twenty-five
+  phase. It looks arbitrary on the connector and it is what lets thirty-three
   tracks cross the board without crossing each other. A cable made to this
   pinout is made from the table.
 
 ## Pin mapping
 
 Pins 1 and 2 are the first position, 3 and 4 the second, odd on one row and even
-on the other — KiCad's `Conn_02x20_Odd_Even`, which is the numbering the
+on the other — KiCad's `Conn_02x26_Odd_Even`, which is the numbering the
 footprint's pads carry.
 
-**Footprint.** KiCad stock `Connector_PinHeader_2.54mm:PinHeader_2x20_P2.54mm_Vertical`,
+**Footprint.** KiCad stock `Connector_PinHeader_2.54mm:PinHeader_2x26_P2.54mm_Vertical`,
 unmodified.

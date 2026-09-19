@@ -92,6 +92,11 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
 # Part libraries whose review note still says "Needs a human eye": things no
 # machine here can confirm against a manufacturer's drawing.
 NEEDS_A_HUMAN_EYE: dict[str, str] = {
+    "HDR2X26": (
+        "the fifty-two-pin header's ordering code and its LCSC number. The "
+        "stock figure on file is the forty-pin part's; the number here "
+        "follows the series pattern and has not been looked up"
+    ),
     "LQFP144": "which supply pin each of datasheet Figure 13's decoupling values belongs to",
     "XTAL_MC306": "that the crystal is between pads 1 and 4, as KiCad's footprint has it",
     "LED0603": "pad 1 is the cathode, from KiCad's convention not KENTO's drawing",

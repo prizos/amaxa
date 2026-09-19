@@ -62,11 +62,13 @@ BOARD = {
     # standard process, with the same 0.15 mm drill and 0.1 mm track and
     # spacing, so nothing in fab/pcbway.kicad_dru changes.
     #
-    # F.Cu / In1 ground / In2 supply islands / In3 signal / In4 ground / B.Cu.
-    # Both outer layers now sit across a prepreg from solid ground, which is
-    # what the board was missing: B.Cu used to be referenced to the supply
-    # islands, and a track crossing an island's edge changed what its return
-    # current flowed in.
+    # F.Cu / In1 ground / In2 signal / In3 ground / In4 supply islands / B.Cu.
+    # The new signal layer goes between the two grounds, not beside the
+    # supplies: it is the one layer with no way out, since a track there
+    # cannot be moved to the other side of anything, so it gets a solid
+    # reference above and below. B.Cu keeps the reference it already had -
+    # the islands, one prepreg away, exactly as on four layers - so every
+    # track on it and the rule that polices island crossings are unchanged.
     #
     # The outer prepreg is unchanged - PCBWay's published 7628 build, 0.1960
     # pressed to 0.1855 - and that is deliberate. Every impedance-controlled
@@ -99,7 +101,7 @@ BOARD = {
     "pour_inset": 0.5,
 }
 
-F, B = "F.Cu", "B.Cu"
+F, B, MID = "F.Cu", "B.Cu", "In2.Cu"
 VIA = (0.5, 0.2)          # PCBWay: 0.15 mm drill, 0.15 mm annular ring, minimum
 STUB = 0.2                # between 0.5 mm-pitch pads
 SUPPLY = 0.25             # pin to its capacitor
@@ -519,7 +521,7 @@ POWER = 0.4                        # the input rail, before any regulator
 RAIL = 0.3                         # 5 V and the switch nodes
 # The island stops short of the bottom edge: the power-good pull-up sits below
 # it, and a 3V3 via inside the island would reach nothing but a gap.
-ISLAND = (-9.0, 24.5, 33.0, 36.5)  # the 5 V island on In2.Cu: x0, y0, x1, y1
+ISLAND = (-9.0, 24.5, 33.0, 36.5)  # the 5 V island on In4.Cu: x0, y0, x1, y1
 
 
 def _power() -> None:
@@ -690,10 +692,10 @@ def _buck_3v3() -> None:
         LABELS[address] = (0.0, -2.6)
 
     # 5 V in and the enable tied to it, each straight into the island.
-    ROUTES.append(("5V", RAIL, F, ["buck3v3.ic:3", (32.14, 26.5)]))
-    VIAS.append((None, (32.14, 26.5), "5V", *VIA))
-    ROUTES.append(("5V", RAIL, F, ["buck3v3.ic:5", (28.5, 29.0)]))
-    VIAS.append((None, (28.5, 29.0), "5V", *VIA))
+    ROUTES.append(("5V", RAIL, F, ["buck3v3.ic:3", (32.14, 27.3)]))
+    VIAS.append((None, (32.14, 27.3), "5V", *VIA))
+    ROUTES.append(("5V", RAIL, F, ["buck3v3.ic:5", (28.5, 28.5)]))
+    VIAS.append((None, (28.5, 28.5), "5V", *VIA))
     for address, at in (("buck3v3.c_in", (26.0, 28.6)), ("buck3v3.c_in_hf", (28.0, 28.0))):
         VIAS.append((f"{address}:1", at, "5V", *VIA, POWER))
     for address, at in (("buck3v3.c_in", (26.0, 24.4)), ("buck3v3.c_in_hf", (28.0, 24.9))):
@@ -798,9 +800,10 @@ def _island_outline() -> list[tuple[float, float]]:
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
-# Ground on the first inner layer, and the supplies on the second: 3V3 over the
-# whole board, with the 5 V island cut out of it by priority rather than by
-# outline. KiCad fills the higher priority first and the 3V3 pour keeps clear.
+# Ground on the first and third inner layers, and the supplies on the fourth:
+# 3V3 over the whole board, with the 5 V island cut out of it by priority
+# rather than by outline. KiCad fills the higher priority first and the 3V3
+# pour keeps clear.
 PLANES = [
     {
         "net": "GND",
@@ -813,7 +816,7 @@ PLANES = [
     },
     {
         "net": "3V3",
-        "layer": "In2.Cu",
+        "layer": "In4.Cu",
         "outline": _pour_outline(),
         "pad_clearance": 0.3,
         "min_thickness": 0.25,
@@ -822,7 +825,7 @@ PLANES = [
     },
     {
         "net": "5V",
-        "layer": "In2.Cu",
+        "layer": "In4.Cu",
         "outline": _island_outline(),
         "priority": 1,
         "pad_clearance": 0.3,
@@ -830,12 +833,12 @@ PLANES = [
         "thermal_gap": 0.3,
         "thermal_bridge": 0.4,
     },
-    # The second ground plane, under B.Cu. This is the layer six buys: the
-    # back was referenced to the supply islands before, and every track on it
-    # that crossed an island's edge handed its return current across.
+    # The second ground plane, under In2.Cu. This is the layer six buys: the
+    # middle signal layer is referenced to ground on both sides, so its return
+    # current never has to find its way around an island's edge.
     {
         "net": "GND",
-        "layer": "In4.Cu",
+        "layer": "In3.Cu",
         "outline": _pour_outline(),
         "pad_clearance": 0.3,
         "min_thickness": 0.25,
@@ -883,12 +886,12 @@ BUFFER1, BUFFER2, LATCH = (28.5, 18.27), (28.5, 2.2), (26.0, 9.0)
 
 _TSSOP = 0.65                    # lead pitch of both buffers
 PINMAP = load_source(HERE / "pinmap.py", "cpu1_pinmap")
-HEADER_NET = PINMAP.header_pins(PINMAP.HEADER_DIGITAL, PINMAP.HEADER_GROUND, 40)
+HEADER_NET = PINMAP.header_pins(PINMAP.HEADER_DIGITAL, PINMAP.HEADER_GROUND, 52)
 HEADER_PIN = {net: number for number, net in HEADER_NET.items()}
 
 
 def _header_at(number: int) -> tuple[float, float]:
-    """Where pin `number` of a 2x20 odd/even header sits, with pin 1 at the origin."""
+    """Where pin `number` of a 2x26 odd/even header sits, with pin 1 at the origin."""
     x, y = HEADER_ORIGIN
     position = (number + 1) // 2 - 1
     return (x + (0.0 if number % 2 else HEADER_PITCH), round(y + position * HEADER_PITCH, 4))
@@ -899,7 +902,7 @@ def _lane_of(name: str) -> float:
     # 2.0 mm apart, not 1.4. At the tighter pitch there was nowhere to put a
     # via beside two of these resistors' supply pads, which the plane stitching
     # generator refused to guess at rather than placing one on a neighbour.
-    statics = [n for n in PINMAP.HEADER_DIGITAL[:11] if n != "3V3"]
+    statics = [n for n in PINMAP.HEADER_STATIC if n != "3V3"]
     return round(-26.6 + 2.0 * statics.index(name), 4)
 
 
@@ -975,8 +978,8 @@ def _width_for(net: str, floor: float = 0.0) -> float:
 def _buffered() -> list[tuple[str, str]]:
     """(buffer, signal name) for all fifteen buffered outputs, in header order."""
     out = []
-    for address, names in (("safety.buffer2", PINMAP.HEADER_DIGITAL[11:18]),
-                           ("safety.buffer1", PINMAP.HEADER_DIGITAL[18:])):
+    for address, names in (("safety.buffer2", PINMAP.HEADER_BUFFER2),
+                           ("safety.buffer1", PINMAP.HEADER_BUFFER1)):
         out.extend((address, name) for name in names)
     return sorted(out, key=lambda pair: HEADER_PIN[pair[1]])
 
@@ -1437,8 +1440,8 @@ def _buffer_fanout() -> None:
     runs at the height of its pin, passes only over lanes whose verticals have
     not reached that height yet.
     """
-    for address, names in (("safety.buffer1", PINMAP.HEADER_DIGITAL[18:]),
-                           ("safety.buffer2", PINMAP.HEADER_DIGITAL[11:18])):
+    for address, names in (("safety.buffer1", PINMAP.HEADER_BUFFER1),
+                           ("safety.buffer2", PINMAP.HEADER_BUFFER2)):
         pin_y = {
             name: round(PLACEMENT[address][1] + (channel - 2.5) * _TSSOP, 4)
             for channel, name in enumerate(names)
@@ -2658,6 +2661,7 @@ def _ethernet() -> None:
     _ethernet_north()
     _ethernet_west()
     _gate_enable()
+    _feedback()
 
 
 def _ethernet_local() -> None:
@@ -2728,6 +2732,87 @@ GATE_ENABLE_PATH = (
     (B, [(1.5, 14.8), (1.5, 20.5), (24.3, 20.5)]),
     (F, [(24.3, 20.5), "safety.buffer1:9"]),
 )
+
+
+# --- motion feedback, from the package to the connector ----------------------
+#
+# Eight signals that were reserved and reached nothing. On four layers they
+# could not be routed: the front was walled by the PWM fan and the back by the
+# 5 V spine, and there were four places left to put a via where eight were
+# needed. On six there is a whole signal layer between the ground plane and the
+# supply islands, and each of these is one diagonal across it.
+#
+# They leave the package on three different edges and arrive in one fan, which
+# only works because the connector's last six rows are in the order the pins
+# come out: the two on the north edge, the five on the east edge from its top,
+# then the one on the south. `HEADER_FEEDBACK` says so and this depends on it.
+# The two on the north edge turn inward and drop inside the pin ring, where
+# In2.Cu is empty - the supply vias are a ring, and the middle of a ring is a
+# hole. The one on the south edge drops just past its own pads. The five on the
+# east edge drop east of the debug and trip columns, each one further east than
+# the last so their columns do not meet.
+#
+# Columns run west to east and rows run south to north, in the same order: a
+# row can only cross a column that has already turned, so the westernmost
+# column has to be the one that turns furthest south.
+# net: (front-layer escape points, the point it reaches In2.Cu, any corners on
+# In2.Cu before the column, the column it comes south on). The column is not
+# always below the drop: the two on the north edge are half a millimetre apart
+# and one has to get east of the other, which it does on In2.Cu where the
+# other's escape is not.
+#
+# West of the package there is exactly one column clear of plane vias from the
+# north edge to the connector - x -5.0, between the 5 V buck's ground vias at
+# -5.6 and the comparator tap at -4.5 - so HALL_2 takes it. HALL_3 drops level
+# with its own pin and misses everything north of it. HALL_1 comes south at
+# -2.25, which is the MCU's own 3V3 via, so it steps clear of that via before
+# it starts.
+FEEDBACK_OUT = {
+    "ENC_SERIAL_RX": ([(18.0, 8.75)], (18.0, 9.9), [], 18.0),
+    "ENC_SERIAL_TX": ([], (16.6, 8.25), [], 16.6),
+    "ENC_A": ([], (15.7, 4.75), [], 15.7),
+    "ENC_B": ([(15.2, 4.25)], (15.2, 3.5), [], 15.2),
+    "ENC_Z": ([], (14.7, 2.75), [], 14.7),
+    "HALL_1": ([(-3.75, -9.6)], (-3.3, -8.8), [(-3.3, -7.6)], -2.25),
+    "HALL_3": ([], (-4.25, 12.15), [], -3.25),
+    "HALL_2": ([], (-4.25, -9.2), [], -5.0),
+}
+
+# The latch's decoupling sits where two of these diagonals pass, and the
+# stitching generator searches outward from a pad rather than guessing: a via
+# goes through In2.Cu like every other layer, so a track there is as much in
+# its way as one on the front.
+FEEDBACK_LATCH_VIAS = (("safety.latch.decoupling:1", (18.52, 8.3), "3V3"),
+                       ("safety.latch.decoupling:2", (19.48, 8.3), "GND"),
+                       ("safety.r_enable_pullup:1", (17.49, 11.9), "3V3"))
+
+
+def _feedback() -> None:
+    """The eight motion-feedback signals, across In2.Cu to the connector."""
+    for pad, at, net in FEEDBACK_LATCH_VIAS:
+        VIAS.append((pad, at, net, *VIA, SUPPLY))
+
+    for net, (corners, drop, lead, column) in FEEDBACK_OUT.items():
+        width = _width_for(net, SIGNAL)
+        pad = f"{MCU}:{_mcu_pad(net)}"
+        number = HEADER_PIN[net]
+        pin = f"header.digital:{number}"
+        row = _header_at(number)[1]
+        last = lead[-1] if lead else drop
+        step = [] if last[0] == column else [(column, round(last[1] + 0.8, 4))]
+        if number % 2:
+            finish = [*step, (column, row), pin]
+        else:
+            # The second row is behind the first, and the first is through-hole:
+            # the only way past it is between two of its pins, as every other
+            # second-row signal on this connector does.
+            between = round(row + HEADER_PITCH / 2, 4)
+            finish = [*step, (column, between),
+                      (HEADER_ORIGIN[0] + HEADER_PITCH, between), pin]
+        path(net, width, [
+            (F, [pad, *corners, drop]),
+            (MID, [drop, *lead, *finish]),
+        ])
 
 
 def _gate_enable() -> None:

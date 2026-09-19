@@ -213,8 +213,6 @@ INTENT: dict[str, tuple[float, float]] = {
 # Which later block connects the other end of each net. Matched in order; a net
 # matching none of these is an error, so a new pin cannot slip in unexplained.
 _MILESTONES = [
-    (r"^(ENC_\w+|HALL_\d)$",
-     "M8: the motion-feedback connector, once the encoder type is settled"),
     (r"^(FAST1|FAST2|FAST3|FAST4|FAST5|FAST6|FAST7|FAST8|SLOW\d|BOARD_ID\d|COMP_FAST4|DAC_TEST)$",
      "M6: the ADC input networks and comparator taps"),
     (r"^\w+_SENSE$",
@@ -228,7 +226,7 @@ _MILESTONES = [
 _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
     r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY\d|STO\d_FEEDBACK|ID_STRAP\d"
-    r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+|USB_\w+"
+    r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+|USB_\w+|ENC_\w+|HALL_\d"
     r"|ETH_\w+"
     r"|FAST1|FAST2|FAST3|FAST4|FAST5|FAST6|FAST7|FAST8|SLOW\d|BOARD_ID\d|COMP_FAST4|DAC_TEST)$"
 )
@@ -687,8 +685,9 @@ def safety_chain(v3v3, gnd, nets) -> None:
     v3v3 += enable_pull_up[1]
     nets["PWM_ENABLE_N"] += enable_pull_up[2]
 
-    header = part(parts.HEADER_2X20, "header.digital", "J3")
-    pins = PINMAP.header_pins(PINMAP.HEADER_DIGITAL, PINMAP.HEADER_GROUND, 40)
+    header = part(parts.HEADER_2X26, "header.digital", "J3")
+    pins = PINMAP.header_pins(PINMAP.HEADER_DIGITAL, PINMAP.HEADER_GROUND,
+                              len(header.pins))
 
     buffered = {}
     reference = 21
@@ -791,7 +790,8 @@ def analog_input(v5, gnd, nets) -> None:
     and an analog supply for them.
     """
     header = part(parts.HEADER_2X15, "header.analog", "J4")
-    pins = PINMAP.header_pins(PINMAP.HEADER_ANALOG, PINMAP.HEADER_GROUND, 30)
+    pins = PINMAP.header_pins(PINMAP.HEADER_ANALOG, PINMAP.HEADER_GROUND,
+                              len(header.pins))
 
     # 5 V through a bead, which is what VDDA gets and for the same reason. A
     # low-noise LDO here would be better and is what the plan asks for; the

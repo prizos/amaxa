@@ -483,10 +483,10 @@ RES_33R_0402 = PartSpec(
 
 # Pin headers for now, by the user's decision: the connector to the power board
 # gets chosen when there is a power board to connect to.
-HEADER_2X20 = PartSpec(
-    symbol="Connector_Generic:Conn_02x20_Odd_Even",
-    footprint="HDR2X20:PinHeader_2x20_P2.54mm_Vertical", prefix="J",
-    manufacturer="HCTL", mpn="PZ254-2-20-Z-8.5", lcsc="C2894981", value="digital",
+HEADER_2X26 = PartSpec(
+    symbol="Connector_Generic:Conn_02x26_Odd_Even",
+    footprint="HDR2X26:PinHeader_2x26_P2.54mm_Vertical", prefix="J",
+    manufacturer="HCTL", mpn="PZ254-2-26-Z-8.5", lcsc="C2894981", value="digital",
     params={"current_rating": exact(3.0)},
 )
 

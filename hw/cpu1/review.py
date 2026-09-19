@@ -76,7 +76,8 @@ BLOCKS: list[tuple[str, tuple[str, ...], str]] = [
 LAYERS: dict[str, str] = {
     "F_Cu": (
         "The component side, and most of the board's copper. Dense around the "
-        "LQFP-144's escapes, the two regulators and the PWM fan; the long "
+        "LQFP-144's escapes, the two regulators and the buffered PWM "
+        "outputs; the long "
         "parallel runs across the middle are the analog inputs on their way "
         "from the header to the comparators. The two pairs in the top-left "
         "corner are the Ethernet link, and the only tracks on this board "
@@ -89,18 +90,20 @@ LAYERS: dict[str, str] = {
         "recorded in the plan rather than a habit. This is the plane the "
         "impedance-controlled pairs on F.Cu are referenced to."
     ),
-    "In3_Cu": (
+    "In2_Cu": (
         "The inner signal layer, and the reason this board is six layers "
-        "rather than four. On four, every crossing was a via and there was "
-        "nowhere left to put one."
+        "rather than four. It carries the eight motion-feedback signals from "
+        "the package to the connector: on four layers every one of those "
+        "crossings was a via, and there was nowhere left to put one."
+    ),
+    "In3_Cu": (
+        "The second ground plane. It is under the inner signal layer rather "
+        "than under B.Cu on purpose: a track on In2.Cu cannot be moved to the "
+        "other side of an obstruction the way one on an outer layer can, so "
+        "it gets a solid reference above and below and never has to find its "
+        "return around the edge of an island."
     ),
     "In4_Cu": (
-        "The second ground plane. B.Cu used to face the supply islands, so a "
-        "track on it that crossed an island's edge handed its return current "
-        "from one plane to another halfway along. Now both outer layers sit "
-        "across a prepreg from solid ground."
-    ),
-    "In2_Cu": (
         "Power islands. 3V3 fills most of the layer; the 5 V island inside it "
         "is a higher-priority zone, so it wins the overlap. That is what lets "
         "the two share a layer without a hand-drawn boundary between them."

@@ -5,9 +5,11 @@ soldered onto one analog power board. Built one block at a time, and now
 **fully routed**: every net is drawn, `board.mk` says `ROUTING := complete`, and
 DRC runs in the mode that demands every connection.
 
-Eight pins are reserved rather than committed — the encoder and Hall inputs,
-which wait on the motion-feedback connector. They are the board's only pending
-nets.
+The encoder and Hall inputs now reach the digital connector too, which is why
+this board is six layers rather than four: see
+[`docs/research/16-cpu1-motion-feedback.md`](../../docs/research/16-cpu1-motion-feedback.md)
+for the arithmetic. What the encoder *is* — single-ended, RS-422, open
+collector — is still the power board's decision; cpu1 carries pins.
 
 **What is on it, and how much of it is drawn, is in
 [`review/README.md`](review/README.md)** — the board plotted layer by layer,
@@ -22,7 +24,7 @@ will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)); the review lists them.
 | | |
 |---|---|
 | Stackup | 6 layers, 1 oz copper throughout. The outer prepreg is PCBWay's published 7628 build, 0.1855 mm — unchanged from the 4-layer spin, so the controlled-impedance pairs are unchanged. The inner cores and middle prepreg are **provisional**: see `layout.py` |
-| Layers | F.Cu signal, In1.Cu ground, In2.Cu supply islands, In3.Cu signal, In4.Cu ground, B.Cu signal |
+| Layers | F.Cu signal, In1.Cu ground, In2.Cu signal, In3.Cu ground, In4.Cu supply islands, B.Cu signal |
 | Size | 130 × 110 mm — grown from 100 × 80 to hold the Ethernet jack |
 | MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at JLCPCB** on 2026-09-17; see [its review note](parts/LQFP144/LQFP144.md) |
 
@@ -97,9 +99,6 @@ could not be fetched and has not been read.
 
 ## Still to come
 
-- The eight motion-feedback pins reach the digital connector, which is why this
-  board is six layers; see `docs/research/16-cpu1-motion-feedback.md` for what
-  four could not do.
 - The ordering codes still marked **unverified**, and the pinouts in
   `checks/config.py` that need a person with a datasheet open.
 - Confirming the inner stackup with PCBWay.
