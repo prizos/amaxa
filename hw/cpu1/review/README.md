@@ -11,7 +11,7 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 4 layers — F.Cu / In1.Cu / In2.Cu / B.Cu |
 | **Footprints** | 249 |
 | **Nets** | 191, of which 8 pending |
-| **Routing** | 1227 track segments, 525 vias, 3 zones |
+| **Routing** | 1227 track segments, 526 vias, 3 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -214,18 +214,18 @@ schematic after the fact.
 | `R42` | `safety.pulldown.pwm1_a_low_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R39` | `safety.pulldown.pwm1_b_high_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R40` | `safety.pulldown.pwm1_b_low_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
-| `R36` | `safety.pulldown.pwm1_brake_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R37` | `safety.pulldown.pwm1_c_high_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R38` | `safety.pulldown.pwm1_c_low_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R36` | `safety.pulldown.pwm1_ch4_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R47` | `safety.pulldown.pwm2_a_high_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R48` | `safety.pulldown.pwm2_a_low_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R46` | `safety.pulldown.pwm2_b_high_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R50` | `safety.pulldown.pwm2_b_low_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R45` | `safety.pulldown.pwm2_c_high_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R49` | `safety.pulldown.pwm2_c_low_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
-| `R44` | `safety.pulldown.pwm2_pfc_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
-| `R52` | `safety.pulldown.relay_main` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
-| `R51` | `safety.pulldown.relay_precharge` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R44` | `safety.pulldown.pwm2_ch4_out` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R51` | `safety.pulldown.relay1` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R52` | `safety.pulldown.relay2` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R57` | `safety.pulldown.sto1_feedback` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R58` | `safety.pulldown.sto2_feedback` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R53` | `safety.pullup.id_strap0` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
@@ -242,16 +242,16 @@ schematic after the fact.
 | `R27` | `safety.series.pwm1_a_low` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R24` | `safety.series.pwm1_b_high` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R25` | `safety.series.pwm1_b_low` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
-| `R21` | `safety.series.pwm1_brake` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R22` | `safety.series.pwm1_c_high` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R23` | `safety.series.pwm1_c_low` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
+| `R21` | `safety.series.pwm1_ch4` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R32` | `safety.series.pwm2_a_high` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R33` | `safety.series.pwm2_a_low` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R31` | `safety.series.pwm2_b_high` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R35` | `safety.series.pwm2_b_low` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R30` | `safety.series.pwm2_c_high` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 | `R34` | `safety.series.pwm2_c_low` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
-| `R29` | `safety.series.pwm2_pfc` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
+| `R29` | `safety.series.pwm2_ch4` | 33R | 0402WGF330JTCE | C25105 | `R_0402_1005Metric` |
 
 #### Trip comparators
 
@@ -490,21 +490,21 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `PGOOD` | 3 |  |
 | `PWM1_A_HIGH_OUT` | 3 |  |
 | `PWM1_A_LOW_OUT` | 3 |  |
-| `PWM1_BRAKE_OUT` | 3 |  |
 | `PWM1_B_HIGH_OUT` | 3 |  |
 | `PWM1_B_LOW_OUT` | 3 |  |
+| `PWM1_CH4_OUT` | 3 |  |
 | `PWM1_C_HIGH_OUT` | 3 |  |
 | `PWM1_C_LOW_OUT` | 3 |  |
 | `PWM2_A_HIGH_OUT` | 3 |  |
 | `PWM2_A_LOW_OUT` | 3 |  |
 | `PWM2_B_HIGH_OUT` | 3 |  |
 | `PWM2_B_LOW_OUT` | 3 |  |
+| `PWM2_CH4_OUT` | 3 |  |
 | `PWM2_C_HIGH_OUT` | 3 |  |
 | `PWM2_C_LOW_OUT` | 3 |  |
-| `PWM2_PFC_OUT` | 3 |  |
 | `RAMP` | 3 |  |
-| `RELAY_MAIN` | 3 |  |
-| `RELAY_PRECHARGE` | 3 |  |
+| `RELAY1` | 3 |  |
+| `RELAY2` | 3 |  |
 | `RPP_GATE` | 3 |  |
 | `RS485_A` | 3 |  |
 | `RS485_B` | 3 |  |
@@ -565,12 +565,12 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `PWM1_A_HIGH_B` | 2 |  |
 | `PWM1_A_LOW` | 2 |  |
 | `PWM1_A_LOW_B` | 2 |  |
-| `PWM1_BRAKE` | 2 |  |
-| `PWM1_BRAKE_B` | 2 |  |
 | `PWM1_B_HIGH` | 2 |  |
 | `PWM1_B_HIGH_B` | 2 |  |
 | `PWM1_B_LOW` | 2 |  |
 | `PWM1_B_LOW_B` | 2 |  |
+| `PWM1_CH4` | 2 |  |
+| `PWM1_CH4_B` | 2 |  |
 | `PWM1_C_HIGH` | 2 |  |
 | `PWM1_C_HIGH_B` | 2 |  |
 | `PWM1_C_LOW` | 2 |  |
@@ -583,12 +583,12 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `PWM2_B_HIGH_B` | 2 |  |
 | `PWM2_B_LOW` | 2 |  |
 | `PWM2_B_LOW_B` | 2 |  |
+| `PWM2_CH4` | 2 |  |
+| `PWM2_CH4_B` | 2 |  |
 | `PWM2_C_HIGH` | 2 |  |
 | `PWM2_C_HIGH_B` | 2 |  |
 | `PWM2_C_LOW` | 2 |  |
 | `PWM2_C_LOW_B` | 2 |  |
-| `PWM2_PFC` | 2 |  |
-| `PWM2_PFC_B` | 2 |  |
 | `RON` | 2 |  |
 | `RS485_DE` | 2 |  |
 | `RS485_RX` | 2 |  |

@@ -171,10 +171,10 @@
 #define PIN_PWM1_C_LOW_PIN GPIO_PIN_12
 #define PIN_PWM1_C_LOW_AF GPIO_AF1_TIM1
 
-/* PWM1_BRAKE: TIM1_CH4 on PE14, pin 67. brake chopper */
-#define PIN_PWM1_BRAKE_PORT GPIOE
-#define PIN_PWM1_BRAKE_PIN GPIO_PIN_14
-#define PIN_PWM1_BRAKE_AF GPIO_AF1_TIM1
+/* PWM1_CH4: TIM1_CH4 on PE14, pin 67. single-ended: no complementary pair, no dead time */
+#define PIN_PWM1_CH4_PORT GPIOE
+#define PIN_PWM1_CH4_PIN GPIO_PIN_14
+#define PIN_PWM1_CH4_AF GPIO_AF1_TIM1
 
 /* TRIP1_N: TIM1_BKIN on PE15, pin 68. from the hardware trip latch, active low */
 #define PIN_TRIP1_N_PORT GPIOE
@@ -216,10 +216,10 @@
 #define PIN_PWM2_C_LOW_PIN GPIO_PIN_15
 #define PIN_PWM2_C_LOW_AF GPIO_AF3_TIM8
 
-/* PWM2_PFC: TIM8_CH4 on PC9, pin 99. PFC switch */
-#define PIN_PWM2_PFC_PORT GPIOC
-#define PIN_PWM2_PFC_PIN GPIO_PIN_9
-#define PIN_PWM2_PFC_AF GPIO_AF3_TIM8
+/* PWM2_CH4: TIM8_CH4 on PC9, pin 99. single-ended: no complementary pair, no dead time */
+#define PIN_PWM2_CH4_PORT GPIOC
+#define PIN_PWM2_CH4_PIN GPIO_PIN_9
+#define PIN_PWM2_CH4_AF GPIO_AF3_TIM8
 
 /* TRIP2_N: TIM8_BKIN on PG2, pin 87. one latch output, one node, both timers */
 #define PIN_TRIP2_N_PORT GPIOG
@@ -385,13 +385,13 @@
 #define PIN_GATE_ENABLE_PORT GPIOD
 #define PIN_GATE_ENABLE_PIN GPIO_PIN_7
 
-/* RELAY_PRECHARGE: GPIO output on PG0, pin 56 */
-#define PIN_RELAY_PRECHARGE_PORT GPIOG
-#define PIN_RELAY_PRECHARGE_PIN GPIO_PIN_0
+/* RELAY1: GPIO output on PG0, pin 56 */
+#define PIN_RELAY1_PORT GPIOG
+#define PIN_RELAY1_PIN GPIO_PIN_0
 
-/* RELAY_MAIN: GPIO output on PG1, pin 57 */
-#define PIN_RELAY_MAIN_PORT GPIOG
-#define PIN_RELAY_MAIN_PIN GPIO_PIN_1
+/* RELAY2: GPIO output on PG1, pin 57 */
+#define PIN_RELAY2_PORT GPIOG
+#define PIN_RELAY2_PIN GPIO_PIN_1
 
 /* STO1_FEEDBACK: GPIO input on PG9, pin 124 */
 #define PIN_STO1_FEEDBACK_PORT GPIOG

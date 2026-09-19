@@ -1012,13 +1012,13 @@ def _output_routes() -> None:
 # those five drop to the back at their own lane, before the first row's columns
 # start, and come up at the pin.
 STATIC_TURN = {
-    "RELAY_PRECHARGE": 42.7, "ID_STRAP1": 42.4, "ID_STRAP2": 42.1,
+    "RELAY1": 42.7, "ID_STRAP1": 42.4, "ID_STRAP2": 42.1,
     "STO1_FEEDBACK": 41.8, "STO2_FEEDBACK": 41.5,
 }
 # East of the 5 V spine, which runs the length of the board on the back here.
 STATIC_UNDER = {
     "FAULT2_N": 37.0, "FAULT1_N": 37.7, "ID_STRAP3": 38.4,
-    "ID_STRAP0": 39.1, "RELAY_MAIN": 39.8,
+    "ID_STRAP0": 39.1, "RELAY2": 39.8,
 }
 
 
@@ -1062,8 +1062,8 @@ def _static_routes() -> None:
 # the top, and the one off the east edge is pointing the right way already.
 STATIC_BAND = (
     # net, its line through the band, the column it turns north on
-    ("RELAY_PRECHARGE", -6.70, 13.0),
-    ("RELAY_MAIN", -6.21, 13.7),
+    ("RELAY1", -6.70, 13.0),
+    ("RELAY2", -6.21, 13.7),
     ("ID_STRAP0", -5.72, 15.0),
     ("ID_STRAP1", -5.23, 15.7),
     ("ID_STRAP2", -4.74, 16.4),
@@ -1080,7 +1080,7 @@ STATIC_CLIMB = (-7.5, -2.5)
 
 # The two off the south edge cross the package on the front, where the band's
 # own tracks cannot be in their way, and drop into the two lines nearest them.
-STATIC_SOUTH = {"RELAY_PRECHARGE": (4.0, 0.75), "RELAY_MAIN": (4.6, 1.25)}
+STATIC_SOUTH = {"RELAY1": (4.0, 0.75), "RELAY2": (4.6, 1.25)}
 
 # The two off the north edge never enter the band. They go out on the front at
 # their own pin's height, cross the field-bus escapes on the back, and come
@@ -1428,7 +1428,7 @@ def _static_pulls() -> None:
     package, furthest first.
     """
     pulls = {
-        "RELAY_PRECHARGE": "down", "RELAY_MAIN": "down",
+        "RELAY1": "down", "RELAY2": "down",
         "ID_STRAP0": "up", "ID_STRAP1": "up", "ID_STRAP2": "up", "ID_STRAP3": "up",
         "FAULT1_N": "up", "FAULT2_N": "up",
         "STO1_FEEDBACK": "down", "STO2_FEEDBACK": "down",
@@ -2036,7 +2036,7 @@ PWM_BEHIND = (
     ("PWM2_A_HIGH", (11.9, -2.75), 19.8, (23.0, 1.875)),
     ("PWM2_B_HIGH", (18.6, -3.25), 20.6, (24.0, 1.225)),
     ("PWM2_C_HIGH", (19.4, -3.75), 21.4, (23.0, 0.575)),
-    ("PWM2_PFC", (20.2, -4.25), 22.2, (24.0, -0.075)),
+    ("PWM2_CH4", (20.2, -4.25), 22.2, (24.0, -0.075)),
 )
 
 PWM_STRAY, PWM_STRAY_TURN, PWM_STRAY_EXIT = 14.2, 24.0, 24.0
@@ -2045,9 +2045,9 @@ PWM_STRAY, PWM_STRAY_TURN, PWM_STRAY_EXIT = 14.2, 24.0, 24.0
 def _pwm_inputs() -> None:
     behind = {entry[0]: entry[1:] for entry in PWM_BEHIND}
     # Every net with a pin at one end and a buffer input at the other. Tested
-    # that way round because the names do not divide cleanly: the brake and the
-    # PFC channel have one word where the others have two, and a filter written
-    # on the names left both of them unrouted.
+    # that way round because the names do not divide cleanly: each timer's
+    # fourth channel has one word where the others have two, and a filter
+    # written on the names left both of them unrouted.
     for net in sorted(n for n in DESIGN["nets"] if n.startswith(("PWM1_", "PWM2_"))):
         nodes = {address: pad for address, pad in DESIGN["nets"][net]}
         buffered = next((a for a in nodes if a.startswith("safety.buffer")), None)

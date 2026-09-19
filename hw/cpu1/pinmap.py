@@ -72,25 +72,32 @@ PINS = [
     Pin("PD8", "USART3_TX", "CONSOLE_TX", note="also the ROM bootloader's"),
     Pin("PD9", "USART3_RX", "CONSOLE_RX"),
 
-    # --- PWM: TIM1, the main bridge -------------------------------------------
+    # --- PWM: TIM1, six complementary outputs and a single-ended one -----------
     Pin("PE9", "TIM1_CH1", "PWM1_A_HIGH"),
     Pin("PE8", "TIM1_CH1N", "PWM1_A_LOW"),
     Pin("PE11", "TIM1_CH2", "PWM1_B_HIGH"),
     Pin("PE10", "TIM1_CH2N", "PWM1_B_LOW"),
     Pin("PE13", "TIM1_CH3", "PWM1_C_HIGH"),
     Pin("PE12", "TIM1_CH3N", "PWM1_C_LOW"),
-    Pin("PE14", "TIM1_CH4", "PWM1_BRAKE", note="brake chopper"),
+    # The fourth channel of each timer is a single-ended output: no
+    # complementary partner, so no hardware dead time. That is a property of
+    # the silicon and is worth a power board knowing. What it drives is not:
+    # a brake chopper, a PFC switch, a fan, a second-stage gate - the power
+    # board decides, the ID straps say which board it is, and firmware
+    # configures it. Naming these for one application put that decision on
+    # this board, where it does not belong.
+    Pin("PE14", "TIM1_CH4", "PWM1_CH4", note="single-ended: no complementary pair, no dead time"),
     Pin("PE15", "TIM1_BKIN", "TRIP1_N", net="TRIP_N", note="from the hardware trip latch, active low"),
     Pin("PE6", "TIM1_BKIN2", "FAULT1_N", note="gate-driver fault, active low"),
 
-    # --- PWM: TIM8, a second bridge or a PFC stage -----------------------------
+    # --- PWM: TIM8, the same again --------------------------------------------
     Pin("PC6", "TIM8_CH1", "PWM2_A_HIGH"),
     Pin("PA5", "TIM8_CH1N", "PWM2_A_LOW", note="PA7 is Ethernet's CRS_DV"),
     Pin("PC7", "TIM8_CH2", "PWM2_B_HIGH"),
     Pin("PB14", "TIM8_CH2N", "PWM2_B_LOW"),
     Pin("PC8", "TIM8_CH3", "PWM2_C_HIGH"),
     Pin("PB15", "TIM8_CH3N", "PWM2_C_LOW"),
-    Pin("PC9", "TIM8_CH4", "PWM2_PFC", note="PFC switch"),
+    Pin("PC9", "TIM8_CH4", "PWM2_CH4", note="single-ended: no complementary pair, no dead time"),
     Pin("PG2", "TIM8_BKIN", "TRIP2_N", net="TRIP_N", note="one latch output, one node, both timers"),
     Pin("PG3", "TIM8_BKIN2", "FAULT2_N", note="gate-driver fault, active low"),
 
@@ -128,8 +135,11 @@ PINS = [
     Pin("PF0", "I2C2_SDA", "DAC_SDA", note="trip-threshold DAC"),
     Pin("PF1", "I2C2_SCL", "DAC_SCL"),
     Pin("PD7", "GPIO", "GATE_ENABLE", "out"),
-    Pin("PG0", "GPIO", "RELAY_PRECHARGE", "out"),
-    Pin("PG1", "GPIO", "RELAY_MAIN", "out"),
+    # Two relay drives, not a pre-charge and a main contactor. Which one is
+    # which - if the power board has relays at all - is that board's
+    # business, read from the ID straps and configured in firmware.
+    Pin("PG0", "GPIO", "RELAY1", "out"),
+    Pin("PG1", "GPIO", "RELAY2", "out"),
     Pin("PG9", "GPIO", "STO1_FEEDBACK", "in"),
     Pin("PG10", "GPIO", "STO2_FEEDBACK", "in"),
     Pin("PE2", "GPIO", "ID_STRAP0", "in"),
@@ -159,7 +169,7 @@ HEADER_DIGITAL = [
     # In the order they leave the package, furthest first, for the same reason
     # the buffered outputs are: ten tracks crossing the board without crossing
     # each other.
-    "RELAY_PRECHARGE", "RELAY_MAIN",
+    "RELAY1", "RELAY2",
     "ID_STRAP0", "ID_STRAP1", "ID_STRAP2", "ID_STRAP3",
     "FAULT1_N",
     "STO1_FEEDBACK", "STO2_FEEDBACK",
@@ -170,9 +180,9 @@ HEADER_DIGITAL = [
     # grouped by phase, and that is deliberate: this order is what lets fifteen
     # tracks cross the board without crossing each other, and the table is what
     # makes it checkable rather than a drawing nobody dares touch.
-    "PWM2_PFC_OUT", "PWM2_C_HIGH_OUT", "PWM2_B_HIGH_OUT", "PWM2_A_HIGH_OUT",
+    "PWM2_CH4_OUT", "PWM2_C_HIGH_OUT", "PWM2_B_HIGH_OUT", "PWM2_A_HIGH_OUT",
     "PWM2_A_LOW_OUT", "PWM2_C_LOW_OUT", "PWM2_B_LOW_OUT",
-    "PWM1_BRAKE_OUT", "PWM1_C_HIGH_OUT", "PWM1_C_LOW_OUT", "PWM1_B_HIGH_OUT",
+    "PWM1_CH4_OUT", "PWM1_C_HIGH_OUT", "PWM1_C_LOW_OUT", "PWM1_B_HIGH_OUT",
     "PWM1_B_LOW_OUT", "PWM1_A_HIGH_OUT", "PWM1_A_LOW_OUT", "GATE_ENABLE_OUT",
 ]
 

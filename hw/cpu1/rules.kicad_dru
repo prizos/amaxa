@@ -20,7 +20,7 @@
 # Everything the MCU drives or reads: microamps to milliamps, so the width is
 # for etch tolerance, and 0.15 mm leaves room to escape a 0.5 mm-pitch package.
 (rule "mcu signals"
-	(condition "A.NetName == 'SW*' || A.NetName == 'HSE_*' || A.NetName == 'LSE_*' || A.NetName == 'BOOT0' || A.NetName == 'NRST' || A.NetName == 'CONSOLE_*' || A.NetName == 'LED_*' || A.NetName == 'BUTTON' || A.NetName == 'PWM*' || A.NetName == 'TRIP*' || A.NetName == 'FAULT*' || A.NetName == 'GATE_ENABLE' || A.NetName == 'RELAY_*' || A.NetName == 'STO*' || A.NetName == 'ID_STRAP*' || A.NetName == 'DAC_*' || A.NetName == 'ENC_*' || A.NetName == 'HALL_*' || A.NetName == 'USB_*' || A.NetName == 'CAN_*' || A.NetName == 'ETH_*' || A.NetName == 'RS485_*'")
+	(condition "A.NetName == 'SW*' || A.NetName == 'HSE_*' || A.NetName == 'LSE_*' || A.NetName == 'BOOT0' || A.NetName == 'NRST' || A.NetName == 'CONSOLE_*' || A.NetName == 'LED_*' || A.NetName == 'BUTTON' || A.NetName == 'PWM*' || A.NetName == 'TRIP*' || A.NetName == 'FAULT*' || A.NetName == 'GATE_ENABLE' || A.NetName == 'RELAY*' || A.NetName == 'STO*' || A.NetName == 'ID_STRAP*' || A.NetName == 'DAC_*' || A.NetName == 'ENC_*' || A.NetName == 'HALL_*' || A.NetName == 'USB_*' || A.NetName == 'CAN_*' || A.NetName == 'ETH_*' || A.NetName == 'RS485_*'")
 	(constraint track_width (min 0.15mm))
 	(severity error))
 

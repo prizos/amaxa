@@ -357,7 +357,7 @@ def test_every_connector_signal_is_defined_with_nothing_attached(
         "ID_STRAP0": "3V3", "ID_STRAP1": "3V3", "ID_STRAP2": "3V3", "ID_STRAP3": "3V3",
         "FAULT1_N": "3V3", "FAULT2_N": "3V3",
         "STO1_FEEDBACK": "GND", "STO2_FEEDBACK": "GND",
-        "RELAY_PRECHARGE": "GND", "RELAY_MAIN": "GND",
+        "RELAY1": "GND", "RELAY2": "GND",
     }
     wrong = []
     for net, rail in expected.items():

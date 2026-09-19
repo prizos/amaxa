@@ -227,7 +227,7 @@ _MILESTONES = [
 # block that will, so a pin cannot be added without saying where it goes.
 _CONNECTED = re.compile(
     r"^(SW\w+|HSE_\w+|LSE_\w+|CONSOLE_\w+|LED_\w+|BUTTON|BOOT0|NRST|VDDA|VCAP\d"
-    r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY_\w+|STO\d_FEEDBACK|ID_STRAP\d"
+    r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY\d|STO\d_FEEDBACK|ID_STRAP\d"
     r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+|USB_\w+"
     r"|ETH_\w+"
     r"|IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$"
@@ -697,11 +697,11 @@ def safety_chain(v3v3, gnd, nets) -> None:
         # eight tracks into each buffer run side by side and never cross. The
         # header table downstream follows the same order for the same reason.
         ("safety.buffer1", "U5", [
-            "PWM1_BRAKE", "PWM1_C_HIGH", "PWM1_C_LOW", "PWM1_B_HIGH",
+            "PWM1_CH4", "PWM1_C_HIGH", "PWM1_C_LOW", "PWM1_B_HIGH",
             "PWM1_B_LOW", "PWM1_A_HIGH", "PWM1_A_LOW", "GATE_ENABLE",
         ]),
         ("safety.buffer2", "U6", [
-            "PWM2_PFC", "PWM2_C_HIGH", "PWM2_B_HIGH", "PWM2_A_HIGH",
+            "PWM2_CH4", "PWM2_C_HIGH", "PWM2_B_HIGH", "PWM2_A_HIGH",
             "PWM2_A_LOW", "PWM2_C_LOW", "PWM2_B_LOW", None,
         ]),
     )):
@@ -736,7 +736,7 @@ def safety_chain(v3v3, gnd, nets) -> None:
     # The relays are not buffered - they are not in the PWM path - but they are
     # pulled down for the same reason: a pin nobody is driving must not close a
     # contactor.
-    for name in ("RELAY_PRECHARGE", "RELAY_MAIN"):
+    for name in ("RELAY1", "RELAY2"):
         pull_down = part(parts.RES_10K_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
         reference += 1
         nets[name] += pull_down[1]
