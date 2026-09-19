@@ -355,17 +355,28 @@ def _debug() -> None:
     VIAS.append((f"{MCU}:25", inward, "NRST", *VIA, STUB))
     # Along the middle of the package and out to the right, clear of the three
     # debug tracks running down to the pads.
-    PLACEMENT["core.nrst.cap"] = (24.6, -2.0, 0)
+    PLACEMENT["core.nrst.cap"] = (19.4, -6.0, 0)
     LABELS["core.nrst.cap"] = (0.0, -1.3)
-    VIAS.append(("core.nrst.cap:2", (26.2, -2.0), "GND", *VIA, SUPPLY))
-    cap_via = (23.2, -2.0)
+    VIAS.append(("core.nrst.cap:2", (21.0, -6.0), "GND", *VIA, SUPPLY))
+    cap_via = (17.9, -6.0)
     path("NRST", SIGNAL, [
         # North of the buffer fan, not through it: fourteen PWM lines turn
-        # south in the strip this used to cross.
-        (B, [inward, (-6.5, 0.5), (-6.5, -5.0), (23.2, -5.0), cap_via]),
+        # south in the strip this used to cross. It runs at 3.27, the last
+        # line in the band the ten static signals leave the package through,
+        # and turns north at 17.5 - east of every one of their turns, so by
+        # the time it gets there none of them is still running.
+        (B, [inward, (-6.5, 0.5), (-6.5, -3.27), (17.9, -3.27), cap_via]),
         (F, [cap_via, "core.nrst.cap:1"]),
     ])
-    ROUTES.append(("NRST", SIGNAL, B, [cap_via, (23.2, -20.0), (DEBUG_RIGHT, -20.0)]))
+    # And down to the debug pad on the front, because the static lanes all
+    # cross that column on the back.
+    path("NRST", SIGNAL, [
+        (B, [cap_via, (17.9, -7.5), (29.0, -7.5), (29.0, -9.9)]),
+        # The static lanes cross this column on the back, so it crosses them
+        # on the front; east of the USB pair, which crosses it the other way.
+        (F, [(29.0, -9.9), (29.0, -20.0)]),
+        (B, [(29.0, -20.0), (DEBUG_RIGHT, -20.0)]),
+    ])
 
 
 def _indicators() -> None:
@@ -444,8 +455,8 @@ def _boot_and_console() -> None:
     # The two rail pads go north-east, out of the strip the latch's signals
     # cross. They carry no signal - a plane via each is the whole net - so
     # anywhere the planes reach will do.
-    PLACEMENT["tp_gnd"] = (31.0, -4.0)
-    PLACEMENT["tp_3v3"] = (31.0, -6.5)
+    PLACEMENT["tp_gnd"] = (52.0, 28.0)
+    PLACEMENT["tp_3v3"] = (52.0, 31.0)
     for address in ("tp_console_tx", "tp_console_rx", "tp_gnd", "tp_3v3"):
         LABELS[address] = (2.6, 0.0)
     ROUTES.append(("CONSOLE_TX", SIGNAL, F, [f"{MCU}:77", (20.5, 6.75), "tp_console_tx:1"]))
@@ -453,8 +464,8 @@ def _boot_and_console() -> None:
         # The dip happens east of the buffer fan, not through it.
         f"{MCU}:78", (21.5, 6.25), (21.5, 5.45), "tp_console_rx:1",
     ]))
-    VIAS.append(("tp_gnd:1", (32.4, -4.0), "GND", *VIA, SUPPLY))
-    VIAS.append(("tp_3v3:1", (32.4, -6.5), "3V3", *VIA, SUPPLY))
+    VIAS.append(("tp_gnd:1", (53.5, 28.0), "GND", *VIA, SUPPLY))
+    VIAS.append(("tp_3v3:1", (53.5, 31.0), "3V3", *VIA, SUPPLY))
 
 
 
@@ -1027,6 +1038,154 @@ def _static_routes() -> None:
             ])
 
 
+# --- the ten static signals, from the package to their pulls -----------------
+#
+# The last signals off the package and the only ones that cross the whole
+# board. Their pins are on four different edges and the resistors they meet are
+# in one column on the far side, so a bundle sorted by pin would have to be
+# unsorted at the other end. They are sorted once instead, on the way out:
+# ordered the way the resistor column is ordered rather than the way the pins
+# are, each turning north on its own column and running east on its own lane.
+# Nothing crosses anything, which is what the ordering buys.
+#
+# Seven of them leave through the band between the supply ring and the PWM
+# lines that drop behind the package - three and a half millimetres, which is
+# eight lines at the pitch a via needs, and reset crosses in it too. The other
+# three take routes their own pins make easy: two off the north edge go over
+# the top, and the one off the east edge is pointing the right way already.
+STATIC_BAND = (
+    # net, its line through the band, the column it turns north on
+    ("RELAY_PRECHARGE", -6.70, 13.0),
+    ("RELAY_MAIN", -6.21, 13.7),
+    ("ID_STRAP0", -5.72, 15.0),
+    ("ID_STRAP1", -5.23, 15.7),
+    ("ID_STRAP2", -4.74, 16.4),
+    ("ID_STRAP3", -4.25, 16.9),
+    ("FAULT1_N", -3.76, 17.2),
+)
+
+# The five on the west edge run inward on the front at their own pin's height,
+# climb together in one window, and drop through in a staggered row - staggered
+# because the pins are half a millimetre apart and a via is not.
+STATIC_WEST = {"ID_STRAP0": -1.0, "ID_STRAP1": -0.2, "ID_STRAP2": 0.6,
+               "ID_STRAP3": 1.4, "FAULT1_N": 2.2}
+STATIC_CLIMB = (-7.5, -2.5)
+
+# The two off the south edge cross the package on the front, where the band's
+# own tracks cannot be in their way, and drop into the two lines nearest them.
+STATIC_SOUTH = {"RELAY_PRECHARGE": (4.0, 0.75), "RELAY_MAIN": (4.6, 1.25)}
+
+# The two off the north edge never enter the band. They go out on the front at
+# their own pin's height, cross the field-bus escapes on the back, and come
+# back to the front for the strip the lanes fill. The one that ends further
+# south goes out further north, so neither crosses the other.
+STATIC_OVER = {"STO1_FEEDBACK": (-12.0, 22.4, -15.9, 4.4, 11.0),
+               "STO2_FEEDBACK": (-14.0, 23.5, -16.9, 3.8, 11.0)}
+STATIC_OVER_STEP = (8.2, 21.5)
+STATIC_OVER_HOP = (23.0, 24.0)
+
+# The one off the east edge is south of the band and has to get north of it, so
+# it goes east first, past every column, and turns up the far side.
+FAULT2_OUT = ((11.6, 1.25), (12.4, 1.6))
+FAULT2_DROP, FAULT2_LANE, FAULT2_COLUMN = (15.0, 1.9), -1.4, 33.0
+FAULT2_LEGS = ((15.0, -1.4),)
+# It crosses the four PWM lines turning south to the buffers; three
+# millimetres on the front is the whole of that crossing.
+FAULT2_STEP = (19.2, 32.0)
+
+# Where each lane surfaces onto the track its resistor already has: east of the
+# pad, so the track runs under the resistor rather than into its supply pad.
+STATIC_RISE = 35.9
+
+# The debug port's three back-layer runs cross the lanes that go furthest
+# north. They step onto the front for as far as they have to, which for one of
+# them is only as far as its own lane.
+DEBUG_CROSSING = -18.73
+DEBUG_STEP = (-17.6, -21.8)
+
+# The Tag-Connect's pads and unplated holes sit on two lanes. Each goes round
+# on the side its neighbours leave free.
+SWD_DODGE = {"ID_STRAP0": (33.0, -23.7), "ID_STRAP2": (22.4, -19.37)}
+
+
+def _static_lane(net: str, lane: float) -> tuple:
+    """How far north the column goes, and the lane from there to where it rises."""
+    if net in SWD_DODGE:
+        after, over = SWD_DODGE[net]
+        return over, [(after, over), (after, lane), (STATIC_RISE, lane)]
+    return lane, [(STATIC_RISE, lane)]
+
+
+def _static_mcu() -> None:
+    """Each static signal from its package pin to the track its resistor has."""
+    start, finish = STATIC_CLIMB
+    for net, slot, column in STATIC_BAND:
+        width = _width_for(net, SIGNAL)
+        pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+        lane = _lane_of(net)
+
+        if net in STATIC_WEST:
+            drop = (STATIC_WEST[net], slot)
+            ROUTES.append((net, width, F, [
+                f"{MCU}:{pin}", (start, _point(f"{MCU}:{pin}")[1]),
+                (finish, slot), drop]))
+        else:
+            column_x, out = STATIC_SOUTH[net]
+            drop = (column_x, slot)
+            ROUTES.append((net, width, F, [
+                f"{MCU}:{pin}", (out, 9.0), (column_x, 7.0), drop]))
+        VIAS.append((None, drop, net, *VIA))
+
+        deepest, tail = _static_lane(net, lane)
+        legs = [drop, (column, slot)]
+        if deepest < DEBUG_CROSSING:
+            step = max(deepest, DEBUG_STEP[1])
+            path(net, width, [
+                (B, legs + [(column, DEBUG_STEP[0])]),
+                (F, [(column, DEBUG_STEP[0]), (column, step)]),
+                (B, [(column, step), (column, deepest), *tail]),
+            ])
+        else:
+            ROUTES.append((net, width, B, legs + [(column, deepest), *tail]))
+        VIAS.append((None, (STATIC_RISE, lane), net, *VIA))
+
+    west, east = STATIC_OVER_STEP
+    for net, (over, column, out, turn, along) in STATIC_OVER.items():
+        width = _width_for(net, SIGNAL)
+        pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+        lane = _lane_of(net)
+        at = _point(f"{MCU}:{pin}")
+        path(net, width, [
+            (F, [f"{MCU}:{pin}", (at[0], out), (turn, out)]),
+            (B, [(turn, out), (west, out)]),
+            (F, [(west, out), (along, over), (east, over)]),
+            (B, [(east, over), (column, over), (column, lane),
+                 (STATIC_OVER_HOP[0], lane)]),
+            # One of the two has to cross the other's column; a millimetre on
+            # the front is the whole of it.
+            (F, [(STATIC_OVER_HOP[0], lane), (STATIC_OVER_HOP[1], lane)]),
+            (B, [(STATIC_OVER_HOP[1], lane), (STATIC_RISE, lane)]),
+        ])
+        for where in ((turn, out), (west, out), (east, over),
+                      (STATIC_OVER_HOP[0], lane), (STATIC_OVER_HOP[1], lane),
+                      (STATIC_RISE, lane)):
+            VIAS.append((None, where, net, *VIA))
+
+    net = "FAULT2_N"
+    width = _width_for(net, SIGNAL)
+    pin = next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+    lane = _lane_of(net)
+    ROUTES.append((net, width, F, [f"{MCU}:{pin}", *FAULT2_OUT, FAULT2_DROP]))
+    VIAS.append((None, FAULT2_DROP, net, *VIA))
+    path(net, width, [
+        (B, [FAULT2_DROP, *FAULT2_LEGS, (FAULT2_STEP[0], FAULT2_LANE)]),
+        (F, [(FAULT2_STEP[0], FAULT2_LANE), (FAULT2_STEP[1], FAULT2_LANE)]),
+        (B, [(FAULT2_STEP[1], FAULT2_LANE), (FAULT2_COLUMN, FAULT2_LANE),
+             (FAULT2_COLUMN, lane), (STATIC_RISE, lane)]),
+    ])
+    VIAS.append((None, (STATIC_RISE, lane), net, *VIA))
+
+
 # The lane field between each buffer and the slot column.
 LANE_ONE, LANE_PITCH = 33.2, 0.6
 
@@ -1505,7 +1664,7 @@ TRIP_BUS, TRIP_BUS_EAST = -49.5, 20.5
 
 # From the pull-up to the latch is the length of the board, and the front of
 # that column belongs to the package's own escapes. It goes on the back.
-TRIP_LATCH_LANE = 30.5
+TRIP_LATCH_LANE = 31.2
 
 
 def _trip_bus() -> None:
@@ -1535,11 +1694,15 @@ def _trip_bus() -> None:
 
     # And up the east side of the board to the latch, on the back: the front
     # of that column is the package's own escapes for its whole length.
-    drop, rise = (19.75, -24.0), (29.6, 8.75)
+    drop, rise = (19.75, -25.4), (29.6, 8.75)
     path(net, width, [
         (F, ["safety.r_trip_pullup:2", drop]),
-        (B, [drop, (drop[0], -26.0), (TRIP_LATCH_LANE, -26.0),
-             (TRIP_LATCH_LANE, rise[1]), rise]),
+        (B, [drop, (drop[0], -26.0), (TRIP_LATCH_LANE, -26.0)]),
+        # The ten static lanes cross this column on the back on their way to
+        # the resistors. It steps onto the front for their whole depth rather
+        # than ten of them stepping over it.
+        (F, [(TRIP_LATCH_LANE, -26.0), (TRIP_LATCH_LANE, -6.5)]),
+        (B, [(TRIP_LATCH_LANE, -6.5), (TRIP_LATCH_LANE, rise[1]), rise]),
         (F, [rise, "safety.latch:7"]),
     ])
 
@@ -1660,10 +1823,17 @@ def _adc_to_package() -> None:
 PWM_BEHIND = (
     ("PWM2_C_LOW", (16.5, 7.25), 18.0, (20.0, 3.175)),
     ("PWM2_B_LOW", (17.5, 7.75), 19.0, (21.0, 3.825)),
+    # Three of these four drop at eighteen millimetres and beyond rather than
+    # just outside the package. They ran east on the back from wherever they
+    # dropped, so it costs them nothing, and their four vias were what left
+    # the band between here and the supply ring too shallow for the ten static
+    # signals to leave the package through. The first one stays where it is:
+    # its line runs behind the two indicator LEDs, and on the front it would
+    # bridge the mask to their pads.
     ("PWM2_A_HIGH", (11.9, -2.75), 19.8, (23.0, 1.875)),
-    ("PWM2_B_HIGH", (13.0, -3.25), 20.6, (24.0, 1.225)),
-    ("PWM2_C_HIGH", (14.1, -3.75), 21.4, (23.0, 0.575)),
-    ("PWM2_PFC", (15.2, -4.25), 22.2, (24.0, -0.075)),
+    ("PWM2_B_HIGH", (18.6, -3.25), 20.6, (24.0, 1.225)),
+    ("PWM2_C_HIGH", (19.4, -3.75), 21.4, (23.0, 0.575)),
+    ("PWM2_PFC", (20.2, -4.25), 22.2, (24.0, -0.075)),
 )
 
 PWM_STRAY, PWM_STRAY_TURN, PWM_STRAY_EXIT = 14.2, 24.0, 24.0
@@ -2127,14 +2297,16 @@ def _usb_bus_voltage() -> None:
     # ground - and go under the connector's own fan-out on the back. Each steps
     # back onto the front for a millimetre to get past the trip bus, which runs
     # across this corner on the back on its way to the latch.
-    for pad, step, column in (("A4", (30.45, -31.6), 29.95),
+    for pad, step, column in (("A4", (30.45, -31.6), 30.45),
                               ("A9", (25.55, -32.4), 24.0)):
         here = (USB_VBUS_EAST, USB_VBUS_LANE) if pad == "A4" else USB_VBUS_RISE
         path(net, width, [
             (F, [f"usb.receptacle:{pad}", step]),
-            (B, [step, (column, step[1]), (column, -26.6)]),
-            (F, [(column, -26.6), (column, -25.4)]),
-            (B, [(column, -25.4), (column, here[1]), here]),
+            (B, [step, (column, step[1]), (column, -29.5)]),
+            # On the front for the whole depth of the static lanes and the
+            # trip bus, which all cross this corner on the back.
+            (F, [(column, -29.5), (column, here[1])]),
+            (B, [(column, here[1]), here]),
         ])
 
 
@@ -2667,6 +2839,7 @@ _pwm_inputs()
 _tripped()
 _safety_signals()
 _static_routes()
+_static_mcu()
 _field_buses()
 _field_bus_routes()
 _field_bus_mcu()
