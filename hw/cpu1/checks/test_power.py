@@ -12,6 +12,7 @@ Datasheets: TI SNVSAU4A (LM5164, January 2019), SLVSCB0B (TPS562200, August
 SMBJ series table recorded in `parts/SMB/SMB.md`.
 """
 
+import collections
 import pytest
 
 BUCK_5V = "buck5.ic"
@@ -750,33 +751,67 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, spe
 # are checked against the clamp by name above. A net not listed contributes
 # nothing, which leaves every divider leg bounded by the resistor above it.
 def _net_voltages(spec) -> dict[str, float]:
+    """The highest each named net reaches, and what to assume for the rest.
+
+    The named ones are the rails and the nodes that swing with them. The
+    default matters more: an unnamed net used to come back as 0 V, so a
+    resistor that touched nothing on this list dissipated nothing and could
+    not fail its rating however small it was. Sixty-five of the eighty-five
+    resistors on this board took that path. Unknown now means *the highest
+    voltage on the board*, so a net nobody has thought about is the worst
+    case rather than the best one, and the way to make a check pass is to
+    name the net rather than to leave it out.
+    """
     _, input_high = spec("input", "voltage")
     _, v5 = spec("rail.5v", "voltage")
     _, v3v3 = spec("rail.3v3", "voltage")
-    return {
+    named = {
         "GND": 0.0,
         "VIN": input_high, "VIN_RAW": input_high, "VIN_FUSED": input_high,
         "RPP_GATE": input_high, "SW_5V": input_high, "UVLO": input_high,
         "5V": v5, "SW_3V3": v5,
         "3V3": v3v3,
     }
+    # Everything else is a signal net, and on this board a signal net is
+    # driven from the logic rail - the MCU, the buffers, the latch, the
+    # comparators through their pull-ups. Defaulting to 0 V, which is what
+    # this did, meant a resistor touching none of the names above dissipated
+    # nothing and could not fail its rating however small it was: thirty-seven
+    # of the eighty-five resistors on this board took that path. Defaulting to
+    # the logic rail is the smallest honest assumption, and the two nets that
+    # break it - the field buses, which a fault drives to tens of volts - are
+    # checked against their transceivers' own declared fault voltage by
+    # `test_a_bus_termination_survives_the_fault_its_transceiver_declares`.
+    return named
 
 
 def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
     """
-    Every resistor on the board, against the worst voltage its nets can reach.
+    Every resistor **between two nets whose voltage is known**, derated by half.
 
-    Derated by half, which is what a 0402 in still air is worth. Where one end
-    of a resistor is a node with no declared voltage - a divider tap, a
-    feedback pin - the check takes the known end against ground, which is the
-    most that can appear across it, and the same current flows in the leg below
-    anyway.
+    Half is what a 0402 in still air is worth. Where one end is a node with no
+    declared voltage - a divider tap, a feedback pin - the check takes the
+    known end against ground, which is the most that can appear across it, and
+    the same current flows in the leg below anyway.
+
+    **What it does not cover, and why.** A resistor in series with a signal
+    dissipates the load current squared times its resistance, and nothing here
+    knows that current: a 10 ohm feeding an ADC input carries microamps, while
+    the same 10 ohm across a rail would be a quarter of a watt. So V^2/R only
+    means anything where both ends are held by something, and this walks the
+    resistors where that is true. It used to say "every resistor on the board"
+    and get the rest by accident, because an unnamed net came back as 0 V and
+    0 W passes any rating - thirty-seven of the eighty-five took that path,
+    including both field buses' terminations. Those are now checked against
+    their transceivers' own fault voltage, which is the case that mattered.
     """
     voltages = _net_voltages(spec)
     hot = []
     for address, (net_a, net_b) in sorted(two_pad_parts.items()):
         if design["parts"][address]["symbol"] != "Device:R":
             continue
+        if net_a not in voltages and net_b not in voltages:
+            continue                      # a signal in series with a signal
         across = max(voltages.get(net_a, 0.0), voltages.get(net_b, 0.0))
         resistance, _ = spec(address, "resistance")
         rated, _ = spec(address, "max_power")
@@ -827,4 +862,125 @@ def test_the_ripple_coupling_capacitor_holds_through_a_transient(design, two_pad
         f"Equation 26 only to {supported * 1e6:.1f} us, short of the "
         f"{SETTLING_TIME * 1e6:g} us the datasheet's own example is sized for. "
         f"It wants at least {SETTLING_TIME / (3 * r_fb1) * 1e12:.0f} pF."
+    )
+
+
+def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pad_net, spec):
+    """
+    A resistor in series feeding another resistor to a rail, at the current
+    that divider actually passes.
+
+    This is the other half of the resistors on this board, and V^2/R says
+    nothing about them: what a series element dissipates is the load current
+    squared times its resistance, not the rail squared over it. Where the load
+    is itself a resistor the netlist knows the whole path, so the current is
+    derivable - which covers every damping resistor between a PWM buffer and
+    the connector, each of which feeds the pull-down that holds that gate line
+    low.
+
+    The sixteen of them were unchecked until now, and the check above could not
+    have covered them: it would have put the whole logic rail across 33 ohms
+    and called 0.36 W on a 62.5 mW part a failure, when the real figure is
+    four microwatts.
+    """
+    voltages = _net_voltages(spec)
+    hot = []
+    for address, (net_a, net_b) in sorted(two_pad_parts.items()):
+        if design["parts"][address]["symbol"] != "Device:R":
+            continue
+        if net_a in voltages or net_b in voltages:
+            continue                      # the check above owns these
+        series, _ = spec(address, "resistance")
+        rated, _ = spec(address, "max_power")
+        worst = 0.0
+        for near, far in ((net_a, net_b), (net_b, net_a)):
+            if near not in voltages:
+                continue
+            for other, beyond in _through_resistor(design, pad_net, far):
+                if other == address or beyond not in voltages:
+                    continue
+                load, _ = spec(other, "resistance")
+                current = abs(voltages[near] - voltages[beyond]) / (series + load)
+                worst = max(worst, current**2 * series)
+        if worst > rated * POWER_DERATING:
+            hot.append(f"  {address}: {worst * 1e3:.1f} mW, rated {rated * 1e3:g} mW")
+    assert not hot, "Series resistors past half their rating:\n" + "\n".join(hot)
+
+
+def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
+    design, two_pad_parts, pad_net, spec, spec_has
+):
+    """
+    The field buses' terminations, against the voltage their own part says the
+    bus can be driven to - but only where the copper actually completes.
+
+    Both transceivers declare a `bus_fault_voltage`, 58 V for the CAN part and
+    18 V for the RS-485 one, and it was already used to check that the
+    connector's contacts can take it. A termination is a resistor across that
+    same voltage, and nothing asked what it dissipates.
+
+    It matters that the answer is derived rather than assumed either way. Both
+    terminations sit behind a `SolderJumper_2_Open`, so on a board as
+    fabricated there is no DC path across the bus at all: CAN's lower resistor
+    reaches CAN_L on one side and a 4.7 nF capacitor on the other, which
+    passes no direct current, and the RS-485 resistor's far end stops at the
+    open jumper. Nothing dissipates, and the check says so by walking the path
+    instead of by an exemption somebody wrote down.
+
+    **Close either jumper and that changes.** 58 V across CAN's 120.8 ohm
+    split is 0.48 A and 13.9 W in each 0402; 18 V across the RS-485 120 ohm is
+    2.7 W. A terminated node does not survive a bus short to battery, which is
+    normal for CAN and is why termination lives at the cable ends - but it is
+    a thing to know before closing a jumper, and `parts/R0402/R0402.md` now
+    says it.
+    """
+    voltages = _net_voltages(spec)
+
+    # What a direct current can actually flow through: a resistor or a bridged
+    # jumper. Not a capacitor, and not a jumper that is open as fabricated.
+    conducting = []
+    for address, part in design["parts"].items():
+        symbol = part["symbol"]
+        if symbol == "Device:R" or (symbol.startswith("Jumper:") and "Open" not in symbol):
+            a, b = pad_net.get((address, "1")), pad_net.get((address, "2"))
+            if a and b:
+                conducting.append((address, a, b))
+
+    hot = []
+    for transceiver in sorted(design["parts"]):
+        if not spec_has(transceiver, "bus_fault_voltage"):
+            continue
+        fault, _ = spec(transceiver, "bus_fault_voltage")
+        driven = {net for (address, _), net in pad_net.items() if address == transceiver}
+        driven |= set(voltages)
+
+        for address, net_a, net_b in conducting:
+            if design["parts"][address]["symbol"] != "Device:R":
+                continue
+            reach = {}
+            for start in (net_a, net_b):
+                seen, edge = {start}, [start]
+                while edge:                      # walk out, never back through self
+                    net = edge.pop()
+                    for other, x, y in conducting:
+                        if other == address:
+                            continue
+                        far = y if x == net else x if y == net else None
+                        if far and far not in seen:
+                            seen.add(far)
+                            edge.append(far)
+                reach[start] = seen & driven
+            if not (reach[net_a] and reach[net_b]):
+                continue                         # no complete path: nothing flows
+            if not (reach[net_a] | reach[net_b]) & (driven - set(voltages)):
+                continue                         # not this transceiver's bus
+            resistance, _ = spec(address, "resistance")
+            rated, _ = spec(address, "max_power")
+            power = fault**2 / resistance
+            if power > rated * POWER_DERATING:
+                hot.append(f"  {address}: {power:.1f} W if {transceiver}'s bus is "
+                           f"driven to {fault:g} V, rated {rated * 1e3:g} mW")
+    assert not hot, (
+        "Bus terminations that a declared fault destroys:\n" + "\n".join(sorted(set(hot)))
+        + "\nEither the part survives it or the board stops claiming it does."
     )
