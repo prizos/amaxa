@@ -113,6 +113,19 @@ class Board:
                     float(size.group(1)) if size else 0.9,
                     float(size.group(2)) if size else 0.9,
                 ))
+            # Each silkscreen line as the box it occupies, in the same frame.
+            # Its own outline is not something a part's label has to dodge -
+            # that is where a designator belongs - but a neighbour's is.
+            silk = []
+            for line_start, line_end in sexp_blocks(block, "fp_line"):
+                line = block[line_start:line_end]
+                if '"F.SilkS"' not in line:
+                    continue
+                ends = re.findall(r"\((?:start|end) ([-\d.]+) ([-\d.]+)\)", line)
+                if len(ends) != 2:
+                    continue
+                (x0, y0), (x1, y1) = ((float(a), float(b)) for a, b in ends)
+                silk.append(((x0 + x1) / 2, (y0 + y1) / 2, abs(x1 - x0), abs(y1 - y0)))
             out[address] = {
                 "span": (start, end),
                 "reference": props.get("Reference"),
@@ -123,6 +136,7 @@ class Board:
                 # including the repeats `pads` drops: a label has to dodge a
                 # switch's second pole as much as its first.
                 "pad_boxes": boxes,
+                "silk_boxes": silk,
             }
         return out
 
@@ -152,12 +166,12 @@ def strip_generated(text: str) -> str:
     return text
 
 
-def _pad_rects(footprints: dict, placement: dict, address: str) -> list:
-    """Every pad of one placed part, as (x0, y0, x1, y1) in board millimetres."""
+def _part_rects(footprints: dict, placement: dict, address: str, key: str) -> list:
+    """One part's pads, or its silkscreen, as (x0, y0, x1, y1) in board millimetres."""
     x, y, *rest = placement[address]
     turn = math.radians(-(rest[0] if rest else 0))
     out = []
-    for px, py, w, h in footprints[address].get("pad_boxes", ()):
+    for px, py, w, h in footprints[address].get(key, ()):
         ax = x + px * math.cos(turn) - py * math.sin(turn)
         ay = y + px * math.sin(turn) + py * math.cos(turn)
         # A turned pad's width and height swap; for anything but a right angle
@@ -209,7 +223,15 @@ def label(text: str, footprints: dict, placement: dict, labels: dict, font: dict
     same side.
     """
     size = font["size"]
-    pads = [rect for address in placement for rect in _pad_rects(footprints, placement, address)]
+    pads = {
+        address: _part_rects(footprints, placement, address, "pad_boxes")
+        for address in placement
+    }
+    silk = {
+        address: _part_rects(footprints, placement, address, "silk_boxes")
+        for address in placement
+    }
+    everything = [rect for rects in pads.values() for rect in rects]
     taken: list = []
 
     chosen: dict[str, tuple[float, float]] = {}
@@ -220,10 +242,13 @@ def label(text: str, footprints: dict, placement: dict, labels: dict, font: dict
         reference = footprints[address].get("reference") or address
         half_w = (len(reference) * size * 0.72 + 0.3) / 2
         half_h = (size + 0.3) / 2
-        own = _pad_rects(footprints, placement, address)
+        own = pads[address]
         x, y, *_ = placement[address]
         reach_x = max((x1 - x for _, _, x1, _ in own), default=0.4)
         reach_y = max((y1 - y for _, _, _, y1 in own), default=0.4)
+        # Its own outline is where a designator belongs; every other part's is
+        # something to step over.
+        others = [rect for other, rects in silk.items() if other != address for rect in rects]
         fixed = labels.get(address, labels.get("*"))
         candidates = ([fixed] if fixed is not None else []) + [
             (sx * (reach_x + half_w + 0.35 + step), sy * (reach_y + half_h + 0.35 + step))
@@ -231,11 +256,18 @@ def label(text: str, footprints: dict, placement: dict, labels: dict, font: dict
             for sx, sy in LABEL_SIDES
         ]
         chosen[address] = candidates[0]
-        for dx, dy in candidates:
-            box = (x + dx - half_w, y + dy - half_h, x + dx + half_w, y + dy + half_h)
-            if _clear(box, pads, 0.15) and _clear(box, taken, 0.15):
-                chosen[address] = (dx, dy)
-                break
+        # Two passes: the second drops the neighbours' outlines. A designator
+        # over an outline is untidy and still legible, so a part with nowhere
+        # tidy left takes an untidy place rather than landing back on a pad.
+        for obstacles in (everything + others, everything):
+            for dx, dy in candidates:
+                box = (x + dx - half_w, y + dy - half_h, x + dx + half_w, y + dy + half_h)
+                if _clear(box, obstacles, 0.15) and _clear(box, taken, 0.15):
+                    chosen[address] = (dx, dy)
+                    break
+            else:
+                continue
+            break
         dx, dy = chosen[address]
         taken.append((x + dx - half_w, y + dy - half_h, x + dx + half_w, y + dy + half_h))
 

@@ -137,8 +137,9 @@ down: above the part, then below, either side, the corners, taking the first
 place that clears every pad and every designator already placed. No two are
 printed over each other, which a check enforces.
 
-Sixteen still cross a neighbour's *outline*, and four of those are a part's own
-reference over its own outline. Those are untidy and still legible; a
+Six still cross an outline, and four of those are a part's own reference over
+its own outline - which is where a designator belongs. One crosses a
+neighbour's. A designator over an outline is untidy and still legible; a
 designator over another designator is not, and there are none.
 """),
 ]
