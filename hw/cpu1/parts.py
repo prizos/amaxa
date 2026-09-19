@@ -626,6 +626,12 @@ CAN_TRANSCEIVER = PartSpec(
         "loop_delay_max": exact(210e-9),
         "bus_fault_voltage": exact(58.0),
         "data_rate_max": exact(8e6),
+        # Section 6.3, and read off the table in SOIC8/evidence. This one is
+        # qualified to SAE J2962-2 per ISO 10650 and not to IEC 61000-4-2,
+        # which the document never quotes: the discharge is applied while the
+        # part is powered and working, which is the harder of the two, so the
+        # number is recorded and the standard is recorded beside it.
+        "esd_contact_discharge": exact(8e3),
     },
 )
 
@@ -641,6 +647,11 @@ RS485_TRANSCEIVER = PartSpec(
         "supply_voltage": between(3.0, 5.5),
         "bus_fault_voltage": exact(18.0),
         "data_rate_max": exact(50e6),
+        "esd_contact_discharge": exact(18e3),
+        # Section 7.3, "ESD Ratings [IEC]", on the bus pins. TI's own summary
+        # says this is what removes the need for external protection on the
+        # bus, and at 18 kV contact it is more than twice what the connector
+        # requirement asks for.
     },
 )
 

@@ -46,6 +46,8 @@ THVD1452*, SLLSEY3E (May 2018, revised May 2019).
 | THVD1450 V_CC | 3 to 5.5 V | §7.4 |
 | THVD1450 bus voltage, absolute max | −18 to 18 V at any bus pin | §7.1 |
 | THVD1450 signalling rate | 50 Mbps | §7.4 |
+| TCAN1044V bus ESD | ±8 kV powered contact, SAE J2962-2 per ISO 10650 | §6.3, `evidence/can_esd_ratings.png` |
+| THVD1450 bus ESD | ±18 kV contact, IEC 61000-4-2 | §7.3, `evidence/rs485_esd_ratings.png` |
 
 **The signalling rate was wrong here once.** It was recorded as 500 kbps, which
 is the THVD1410's figure — the same datasheet covers four parts and the rate is
@@ -57,14 +59,42 @@ bus-pin absolute maximum are both 18 in this datasheet and mean nothing like
 each other. `bus_fault_voltage` is the DC one, from §7.1, and it is what the
 connector's fault-current check works from.
 
+## Neither bus has a protection device, and that is the decision
+
+The plan asked for ESD on both. Neither got one, because both transceivers are
+already qualified on their bus pins at or above what the connectors need, and a
+TVS array in front of a part rated higher than the array is capacitance on a
+pair whose impedance matters in exchange for nothing.
+
+`bus.esd_level` asks for **8 kV by contact**, IEC 61000-4-2 level 4, which is
+what anything with a connector on the outside of a machine is expected to
+survive. `test_nothing_unrated_for_a_strike_sits_on_a_bus_terminal` walks out
+from each connector and requires that every part it reaches is either a
+two-terminal passive or carries a rating that meets it — so the decision
+survives a transceiver being swapped, and so would an unrated buffer hung on
+the pair, which a check naming the transceiver would miss.
+
+**The two are not qualified to the same standard, and the check compares them
+as though they were.** The THVD1450's ±18 kV is IEC 61000-4-2 contact. The
+TCAN1044V's ±8 kV is SAE J2962-2 per ISO 10650, a *powered* contact discharge:
+the part is running while it is struck, which is the harder of the two tests at
+the same voltage, and TI's document never quotes IEC 61000-4-2 at all. Treating
+8 kV powered as meeting an 8 kV IEC requirement is the one assumption here, and
+it is written into `evidence/sources.json` beside the crop rather than left in
+the arithmetic.
+
 ## The orderable is the automotive part
 
-`TCAN1044VDRQ1` is the AEC-Q100 orderable, whose own datasheet is a scanned
-document nothing here could read — 44 pages that yield ten kilobytes of text.
-Every figure above comes from the industrial TCAN1044V datasheet, SLLSFG2,
-which is the same silicon and is machine-readable. The −Q1 document was fetched
-and confirmed to list `TCAN1044VDRQ1` as an orderable; nothing else was taken
-from it.
+`TCAN1044VDRQ1` is the AEC-Q100 orderable. Its English datasheet is a scan that
+nothing here could read — 44 pages yielding ten kilobytes of text — which is
+why the electrical figures above were first taken from the industrial
+TCAN1044V datasheet, SLLSFG2, the same silicon.
+
+**That is no longer the only readable source.** TI's Chinese-language edition of
+the −Q1 document, **ZHCSIP6B** (August 2019, revised October 2021), is text and
+is what LCSC serves for C1852061. Its tables are in English. The ESD figure
+comes from it, and V_CC, V_IO, the ±58 V bus rating, the 210 ns loop delay and
+the 8 Mbps rate were all re-read there and agree with SLLSFG2.
 
 ## Pin mapping
 

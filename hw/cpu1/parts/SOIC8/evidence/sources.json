@@ -1,0 +1,24 @@
+{
+  "can_esd_ratings": {
+    "assumes": "that a powered contact discharge under ISO 10650 is not weaker than the same voltage under IEC 61000-4-2, which this document does not quote at all",
+    "crop": "160,1280,1400,307",
+    "document": "TCAN1044-Q1, TCAN1044V-Q1, ZHCSIP6B, August 2019, revised October 2021",
+    "dpi": 200,
+    "page": 4,
+    "read": "2026-09-20",
+    "sha256": "77637416f54d96558d83286db364d58777b81b58176501f81809db0ca956089f",
+    "shows": "Section 6.3: the CAN bus terminals are qualified to SAE J2962-2 per ISO 10650, plus/minus 8 kV powered contact discharge and plus/minus 15 kV powered air discharge",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/61d3abbc4d53936543404dab3e63be01.pdf"
+  },
+  "rs485_esd_ratings": {
+    "assumes": "nothing further: the standard, the pins and the number are all named in the table",
+    "crop": "147,1140,1413,260",
+    "document": "THVD1410, THVD1450, THVD1451, THVD1452, ZHCSI82E, May 2018, revised May 2019",
+    "dpi": 200,
+    "page": 8,
+    "read": "2026-09-20",
+    "sha256": "db9fc93709d880e670769f9e9a1b0313c6a8fca7fe9ee953d1225b2a29d19a0f",
+    "shows": "Section 7.3: the bus pins are rated plus/minus 18 kV contact discharge and plus/minus 25 kV air-gap discharge per IEC 61000-4-2, and plus/minus 4 kV fast transient per IEC 61000-4-4",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/9f2a8443c84023845b66c00fea3c3b36.pdf"
+  }
+}

@@ -202,6 +202,15 @@ INTENT: dict[str, tuple[float, float]] = {
     # is 8 kV by contact, which is the level anything with a connector on the
     # outside of a machine is expected to meet.
     "usb.esd_level": (8e3, 15e3),
+    # The same level, asked of the field buses, and for the same reason: CAN
+    # and RS-485 leave this board on a cable that a person can touch. Neither
+    # carries an external protection device, because neither needs one - both
+    # transceivers are qualified on their bus pins, and the check below is
+    # what holds that. The CAN part's qualification is SAE J2962-2 per ISO
+    # 10650 rather than IEC 61000-4-2, a powered discharge rather than an
+    # unpowered one; the two are not the same test, and that is recorded in
+    # parts/SOIC8/evidence rather than smoothed over here.
+    "bus.esd_level": (8e3, 18e3),
     # What IEEE 802.3 allows the link's clock to drift by, end to end. The
     # PHY's datasheet then splits it into tolerance, stability and ageing.
     "ethernet.clock_budget": (0.0, 50e-6),

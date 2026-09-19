@@ -448,3 +448,53 @@ def test_every_receiver_enable_is_tied_to_the_state_that_listens(
                 "the receiver is not held on"
             )
     assert found, "no receiver enable found, and this check is about them"
+
+
+def test_nothing_unrated_for_a_strike_sits_on_a_bus_terminal(
+    design, pads_of, spec, spec_has, buses
+):
+    """
+    Every piece of silicon a cable can reach is qualified for a discharge.
+
+    CAN and RS-485 leave this board on connectors a person can touch, and a
+    person carries a few kilovolts across a carpet. IEC 61000-4-2 level 4 is
+    8 kV by contact, which is what anything with a connector on the outside of
+    a machine is expected to survive, and it is what `bus.esd_level` asks for.
+
+    Neither bus has a protection device on it. That is a decision rather than
+    an omission: both transceivers are qualified on their bus pins, at 8 kV
+    powered contact and 18 kV contact respectively, and a TVS array in front
+    of a part already rated higher than the array adds capacitance to a pair
+    whose impedance matters and buys nothing.
+
+    What the check holds is the thing that decision depends on - that the only
+    parts a bus terminal reaches are passives and parts carrying a rating.
+    Swap in a cheaper transceiver with no system-level qualification and this
+    fails; hang an unrated buffer or a bias network's amplifier on the pair and
+    it fails the same way, which is the case a named transceiver would miss.
+    """
+    required, _ = spec("bus", "esd_level")
+    for bus, (_, header, wires) in sorted(buses.items()):
+        assert wires, f"{bus} has no bus nets"
+        for net in wires:
+            exposed = {
+                address for address, pads in pads_of.items()
+                if net in pads.values() and address != header
+            }
+            assert exposed, f"{net} reaches the connector and nothing else"
+            for address in sorted(exposed):
+                # Two terminals and no supply pin is a passive: a termination
+                # resistor, a jumper, a capacitor. It has no junction to punch
+                # through and no datasheet figure to hold it to.
+                if len(pads_of[address]) <= 2:
+                    continue
+                assert spec_has(address, "esd_contact_discharge"), (
+                    f"{bus}: {address} sits on {net}, which leaves the board, "
+                    f"and states no contact-discharge rating"
+                )
+                rated, _ = spec(address, "esd_contact_discharge")
+                assert rated >= required, (
+                    f"{bus}: {address} is rated {rated / 1e3:g} kV by contact "
+                    f"against the {required / 1e3:g} kV a connector on the "
+                    f"outside of a machine has to survive"
+                )
