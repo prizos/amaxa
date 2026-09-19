@@ -59,3 +59,25 @@ and the AUP part of the same function is pin-identical.
 
 **Footprint.** KiCad stock `Package_SO:VSSOP-8_2.3x2mm_P0.5mm`, unmodified.
 The DCU package is 2.3 × 2.0 mm on a 0.5 mm pitch.
+
+## Clearing the latch hides the break input while it happens
+
+With `~PRE` and `~CLR` both low the datasheet's nonstable condition drives
+**both** Q and Q-bar high. Q-bar is `TRIP_N`, which is the board's only trip
+status signal and both timers' break input — so for as long as firmware holds
+the clear asserted, the break input reads *no trip* whatever the trip bus is
+doing.
+
+That is a trap for the rearm sequence, and the firmware had it: `pwm_rearm()`
+refuses to rearm while `pwm_break_input_active()`, and that function reads the
+same pin. Clear and rearm in one breath, with a fault still asserting, and the
+board reports "rearmed" every time.
+
+`pwm_clear_trip_latch()` in `firmware/apps/hello_hw/pwm.c` is the sequence
+that does not have the trap: it releases `~CLR` **before** anything is read,
+so what gets read is the state after the latch has settled. A trip source that
+is still asserting sets the latch again as soon as `~CLR` goes high, and the
+break input goes back low, which is the answer the caller wanted.
+
+Nothing called the clear yet when this was written, which is the reason to put
+the correct sequence in before something does.

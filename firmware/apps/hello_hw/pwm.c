@@ -209,6 +209,31 @@ bool pwm_break_input_active(void)
     return HAL_GPIO_ReadPin(BOARD_PWM_PORT, BOARD_PWM_BKIN_PIN) == GPIO_PIN_RESET;
 }
 
+#ifdef BOARD_TRIP_CLEAR_PORT
+/* Clear the hardware trip latch, and report whether the trip actually went.
+ *
+ * The ordering here is the whole point. The latch is a '1G74 used as an SR,
+ * with the trip bus on ~PRE and this pin on ~CLR, and with both of them low
+ * the datasheet's nonstable condition drives *both* Q and Q-bar high. Q-bar
+ * is the break input, so while this pin is held low the break input reads
+ * "no trip" whatever the trip bus is doing - which would make
+ * pwm_break_input_active() return false, and pwm_rearm() succeed, on a board
+ * with a fault still asserting.
+ *
+ * So the pin is released before anything is read, and the state that counts
+ * is the one after it. A trip source that is still asserting sets the latch
+ * again as soon as ~CLR goes high, and the break input goes back low.
+ */
+bool pwm_clear_trip_latch(void)
+{
+    HAL_GPIO_WritePin(BOARD_TRIP_CLEAR_PORT, BOARD_TRIP_CLEAR_PIN, GPIO_PIN_RESET);
+    HAL_Delay(1);       /* the latch needs nanoseconds; a millisecond is free */
+    HAL_GPIO_WritePin(BOARD_TRIP_CLEAR_PORT, BOARD_TRIP_CLEAR_PIN, GPIO_PIN_SET);
+    HAL_Delay(1);
+    return !pwm_break_input_active();
+}
+#endif
+
 void pwm_software_break(void)
 {
     TIM1->EGR = TIM_EGR_BG;
@@ -216,6 +241,9 @@ void pwm_software_break(void)
 
 int pwm_rearm(void)
 {
+    /* Read the break input, never while the latch's clear is asserted - see
+     * pwm_clear_trip_latch(). A caller that clears and rearms has to let the
+     * clear go first, or this reads the nonstable state and believes it. */
     if (pwm_break_input_active()) {
         return -1;
     }

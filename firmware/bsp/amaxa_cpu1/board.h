@@ -51,6 +51,11 @@
                                 PIN_PWM1_B_LOW_PIN | PIN_PWM1_B_HIGH_PIN |  \
                                 PIN_PWM1_C_LOW_PIN | PIN_PWM1_C_HIGH_PIN)
 #define BOARD_PWM_BKIN_PIN     PIN_TRIP1_N_PIN
+
+/* The only way to clear the hardware trip latch. Held high by a pull-up on
+ * the board, so a reset - or no firmware at all - does not clear it. */
+#define BOARD_TRIP_CLEAR_PORT  PIN_TRIP_CLEAR_N_PORT
+#define BOARD_TRIP_CLEAR_PIN   PIN_TRIP_CLEAR_N_PIN
 #define BOARD_PWM_AF           PIN_PWM1_A_LOW_AF
 
 #endif /* BOARD_H */

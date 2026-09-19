@@ -8,6 +8,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* For BOARD_TRIP_CLEAR_PORT, which decides whether this board has a trip
+ * latch to clear at all. */
+#include "board.h"
+
 struct pwm_config {
     uint32_t pwm_hz;         /* switching frequency */
     uint32_t deadtime_ns;    /* requested dead-time */
@@ -37,7 +41,17 @@ void pwm_set_modulation(uint32_t permille);
 uint32_t pwm_get_modulation(void);
 
 bool pwm_outputs_enabled(void);     /* TIM1 main output enable (MOE) */
-bool pwm_break_input_active(void);  /* PE15 is low */
+bool pwm_break_input_active(void);
+
+#ifdef BOARD_TRIP_CLEAR_PORT
+/* Clear the hardware trip latch and report whether the trip actually went.
+ *
+ * Only on a board that has one. The sequence matters: while the clear is
+ * asserted the latch drives both its outputs high, so the break input reads
+ * "no trip" regardless of the trip bus - which is exactly the reading a
+ * rearm must not act on. See the comment on the definition. */
+bool pwm_clear_trip_latch(void);
+#endif  /* PE15 is low */
 void pwm_software_break(void);
 int pwm_rearm(void);                /* 0 on success, negative if a break is still active */
 
