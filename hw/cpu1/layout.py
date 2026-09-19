@@ -411,10 +411,10 @@ def _button() -> None:
     Its leads are through holes, so the bottom-layer track reaches one pole
     directly, and the pole tied to 3V3 meets that plane through its own holes.
     """
-    PLACEMENT["core.button.switch"] = (-38.0, 14.0)
+    PLACEMENT["core.button.switch"] = (-36.5, 5.25)
     # West of the switch rather than east: east of it is the strip the analog
     # lines change layer in, and this resistor's ground via was in it.
-    PLACEMENT["core.button.pulldown"] = (-36.0, 23.0, 0)
+    PLACEMENT["core.button.pulldown"] = (-35.0, 12.0, 0)
     LABELS["core.button.switch"] = (3.2, -2.4)
     LABELS["core.button.pulldown"] = (0.0, -1.3)
     inward = PINS["7"].at(SUPPLY_RING_2)
@@ -426,7 +426,7 @@ def _button() -> None:
     # south-west side, which is the side its switch is on anyway.
     ROUTES.append(("BUTTON", SIGNAL, B, [
         inward, (-12.0, -5.75), (-39.5, -5.75), (-40.3, -5.49), (-46.5, -5.49),
-        (-46.5, 18.5), "core.button.switch:2",
+        (-46.5, 9.75), "core.button.switch:2",
     ]))
     ROUTES.append(("BUTTON", SIGNAL, F, ["core.button.switch:2", "core.button.pulldown:1"]))
     # A tactile switch has two legs on each pole, and they are separate pads:
@@ -435,7 +435,6 @@ def _button() -> None:
             for pad in _pads_of("core.button.switch")["2"]]
     if len(legs) > 1:
         ROUTES.append(("BUTTON", SIGNAL, F, legs))
-    VIAS.append(("core.button.pulldown:2", (-34.2, 23.0), "GND", *VIA, SUPPLY))
 
 
 def _boot_and_console() -> None:
@@ -709,26 +708,29 @@ def _reference() -> None:
     PLACEMENT["vref.c_in"] = (-12.56, 22.0, 270)
     PLACEMENT["core.vref.c1u"] = (-16.5, 19.0, 180)
     PLACEMENT["tp_vref"] = (-7.5, 18.05)
+    # The decoupling capacitor for pin 39 steps west: the reference's riser
+    # runs down this column now, and there is no room for both.
+    PLACEMENT["core.dec.p39"] = (-8.0, 13.4, 270)
     for address in ("vref.ic", "vref.c_in", "core.vref.c1u", "tp_vref"):
         LABELS[address] = (0.0, -2.6)
 
     pin = PINS[VREF_PIN]
     inward = pin.at(SUPPLY_RING_2)
     VIAS.append((f"{MCU}:{VREF_PIN}", inward, "VREF+", *VIA, STUB))
-    surfaced = (-5.5, 12.2)
+    surfaced = (-7.25, 12.2)
     # Out through the corner well inside the ring, then up to the front as soon
     # as it is clear of the package: south of here is the channel the six
     # analog pins on this edge cross on the back, and this is the one net that
     # would otherwise have to cross all six of them.
     path("VREF+", SUPPLY, [
         (B, [inward, (-6.5, 8.0), (-6.5, 10.5), surfaced]),
-        (F, [surfaced, (-5.5, 18.05), "tp_vref:1"]),
+        (F, [surfaced, (-7.25, 18.05), "tp_vref:1"]),
     ])
     ROUTES.append(("VREF+", SUPPLY, F, ["tp_vref:1", "vref.ic:2"]))
     ROUTES.append(("VREF+", SUPPLY, F, [
         "vref.ic:2", (-12.56, 16.0), (-15.99, 16.0), "core.vref.c1u:1",
     ]))
-    VIAS.append(("core.vref.c1u:2", (-18.2, 19.0), "GND", *VIA, SUPPLY))
+    VIAS.append(("core.vref.c1u:2", (-16.98, 17.8), "GND", *VIA, SUPPLY))
 
     # The reference's own supply, up from the island on the 5 V side.
     ROUTES.append(("5V", RAIL, F, [(-6.0, 25.0), (-6.0, 21.49), "vref.c_in:1"]))
@@ -1752,7 +1754,7 @@ def _adc_inputs() -> None:
     # edge in the middle of the analog fan's own escapes, and from there this
     # is the only direction that is not through them.
     PLACEMENT["adc.dac_test.series"] = (-13.0, 9.6, 0)
-    PLACEMENT["tp_dac_test"] = (-16.5, 10.5)
+    PLACEMENT["tp_dac_test"] = (-15.5, 11.3)
     LABELS["adc.dac_test.series"] = (0.0, -1.3)
     LABELS["tp_dac_test"] = (0.0, -2.0)
 
@@ -2212,7 +2214,7 @@ def _safety_signals() -> None:
 def _dac_test_points() -> None:
     width = _width_for("DAC_TEST_OUT", SIGNAL)
     ROUTES.append(("DAC_TEST_OUT", width, F, [
-        "adc.dac_test.series:2", (-12.0, 10.6), (-15.3, 10.5), "tp_dac_test:1",
+        "adc.dac_test.series:2", (-12.0, 10.6), (-14.3, 11.3), "tp_dac_test:1",
     ]))
     ROUTES.append(("DAC_SPARE", _width_for("DAC_SPARE", SIGNAL), F, [
         "tp_dac_spare:1", (-12.2, -19.6), (-12.2, -23.0),
@@ -2571,7 +2573,7 @@ def _ethernet() -> None:
     # escape along.
     PLACEMENT["eth.dec_vdd2a"] = (-58.5, -19.5, 180)
     PLACEMENT["eth.dec_vdd1a"] = (-51.5, -22.5, 90)
-    PLACEMENT["eth.dec_vddio"] = (-54.25, -12.5, 270)
+    PLACEMENT["eth.dec_vddio"] = (-55.5, -10.8, 90)
     PLACEMENT["eth.r_refclk_strap"] = (-58.7, -17.75, 180)
 
     # The package's left side carries both crystal pins, so the crystal gets
@@ -2593,7 +2595,7 @@ def _ethernet() -> None:
     # they come the length of the board to get here - and with the resistor
     # the other way round the line has to pass over the 3V3 pad to reach the
     # one it wants.
-    PLACEMENT["eth.r_mdio_pullup"] = (-51.0, -8.5, 180)
+    PLACEMENT["eth.r_mdio_pullup"] = (-16.0, 14.0, 0)
     PLACEMENT["eth.r_reset_pullup"] = (-51.0, -6.0, 180)
 
     for address, x in (("eth.tap_bypass1", -47.0), ("eth.tap_bypass2", -44.5)):
@@ -2610,6 +2612,7 @@ def _ethernet() -> None:
     _ethernet_pairs()
     _ethernet_local()
     _ethernet_north()
+    _ethernet_west()
 
 
 def _ethernet_local() -> None:
@@ -2639,6 +2642,11 @@ def _ethernet_local() -> None:
     # and until the stitching generator learned that a route between two
     # surface pads reaches nothing, it never asked for one.
     VIAS.append(("eth.dec_vdd2a:1", (-57.6, -20.6), "3V3", *VIA, SUPPLY))
+
+    # The supply pin in the middle of the receive pins has one row of its own
+    # between the pad and the first RMII line, and the generator will not find
+    # it by searching: it is narrower than the step the search takes.
+    VIAS.append(("eth.phy:9", (-54.25, -14.25), "3V3", *VIA, SUPPLY))
 
     # XTAL1 goes to the terminal on the far corner, which means past the can
     # pad sitting between it and the package. Under the crystal rather than
@@ -2732,6 +2740,113 @@ def _ethernet_north() -> None:
         (F, [(ETH_RESET_WEST, under), (ETH_RESET_WEST, down), pull]),
     ])
     ROUTES.append((net, width, F, [(turn, down), (turn, landing), "eth.phy:15"]))
+
+
+# --- the RMII, from the west and south edges to the PHY -----------------------
+#
+# The other six leave the package pointing south and west, which is the right
+# direction and the wrong side of the analog input bank: that bank and the
+# analog header between them hold every column from x -21 to x -44 over the
+# whole height of the board. The one way past is south of the header's last
+# pin, in the strip between the button and the 5 V spine, and from there the
+# west edge of the board is empty from the bottom corner up to the PHY.
+#
+# So all six go the long way round: out of the package, down to that strip,
+# west along it on the back, north up the empty edge, and into the PHY from
+# below - which is the side its receive pins face anyway.
+#
+# The six are ordered so that the one landing furthest west is southernmost in
+# the strip, westmost in the climb, and first to leave it. One ordering applied
+# at every turn is the whole of why six lines can cross a hundred and thirty
+# millimetres of board without crossing each other.
+
+# How each one gets clear of the package. The three on the south edge step
+# across to a column the analog fan's own vias leave free and come straight
+# down the front. The three on the west edge cannot: their row is walled in by
+# the crystal's escape on one side and the input fan's vias on the other, so
+# they drop to the back and cross under that field - MDC further in than the
+# other two, because at its height the field reaches the package.
+ETH_SOUTH = (
+    # net, the column it steps to, the row it turns west on, where it drops
+    ("ETH_RXD1", -5.05, 20.9, -9.5),
+    ("ETH_RXD0", -5.35, 20.4, -10.3),
+    ("ETH_CRS_DV", -5.65, 19.9, -11.1),
+)
+ETH_SOUTH_STEP = (11.2, 11.6)
+ETH_WEST_IN = {
+    # net: the point it drops on, and the back-layer way to its column
+    "ETH_MDIO": ((-12.4, 8.75), ()),
+    # The management clock's row is the one the input fan's own vias reach
+    # into, so it crosses that field at the one height where the decoupling
+    # column leaves half a millimetre either side, and steps north again
+    # before the crystal capacitor's via.
+    "ETH_MDC": ((-9.2, 4.25), ((-12.0, 6.25), (-14.6, 6.25), (-16.5, 7.0))),
+    "ETH_REF_CLK": ((-11.7, 8.25), ()),
+}
+ETH_WEST_COLUMN = {"ETH_MDIO": -18.6, "ETH_MDC": -19.6, "ETH_REF_CLK": -20.2}
+ETH_WEST_STRIP = {"ETH_MDIO": 19.4, "ETH_MDC": 18.9, "ETH_REF_CLK": 18.4}
+# The management line's pull-up sits on the column it climbs out of the
+# package on, forty millimetres from the PHY: a bus pull-up is a DC term and
+# does not care, and every millimetre nearer the PHY is inside the fan.
+ETH_MDIO_PULL = (14.0, "eth.r_mdio_pullup:1")
+
+# The climb up the west edge, the row each one leaves it on, and the way from
+# there to its pad. The four that land on the PHY's south edge turn north into
+# it; the two on its east edge step north once more first, because their pins
+# are north of the row the other four cross on.
+ETH_CLIMB = (
+    ("ETH_RXD1", -49.35, -12.5, (-55.25,)),
+    ("ETH_RXD0", -49.0, -13.0, (-54.75,)),
+    ("ETH_CRS_DV", -48.65, -13.5, (-53.25,)),
+    ("ETH_MDIO", -48.3, -14.0, (-52.75,)),
+    ("ETH_MDC", -47.95, -14.5, (-51.0, -15.75)),
+    ("ETH_REF_CLK", -47.6, -15.0, (-50.5, -16.25)),
+)
+ETH_CLIMB_TARGET = {
+    "ETH_RXD1": "eth.phy:7", "ETH_RXD0": "eth.phy:8",
+    "ETH_CRS_DV": "eth.phy:11", "ETH_MDIO": "eth.phy:12",
+    "ETH_MDC": "eth.phy:13", "ETH_REF_CLK": "eth.phy:14",
+}
+def _ethernet_west() -> None:
+    """The six RMII lines that go the long way round the analog bank."""
+    strip = dict(ETH_WEST_STRIP)
+    lead: dict = {}
+    for net, column, row, drop in ETH_SOUTH:
+        pad = f"{MCU}:{_mcu_pad(net)}"
+        x = _point(pad)[0]
+        strip[net] = row
+        lead[net] = [
+            (F, [pad, (x, ETH_SOUTH_STEP[0]), (column, ETH_SOUTH_STEP[1]),
+                 (column, row), (drop, row)]),
+            (B, [(drop, row)]),
+        ]
+    for net, (drop, corners) in ETH_WEST_IN.items():
+        pad = f"{MCU}:{_mcu_pad(net)}"
+        column = ETH_WEST_COLUMN[net]
+        lead[net] = [
+            (F, [pad, drop]),
+            (B, [drop, *corners, (column, drop[1] if not corners else corners[-1][1])]),
+            (F, [(column, corners[-1][1] if corners else drop[1]),
+                 (column, strip[net])]),
+            (B, [(column, strip[net])]),
+        ]
+
+    for net, climb, row, rest in ETH_CLIMB:
+        width = _width_for(net, SIGNAL)
+        legs = lead[net]
+        back = [*legs[-1][1], (climb, strip[net]), (climb, row), (rest[0], row)]
+        if len(rest) > 1:
+            back.append((rest[0], rest[1]))
+        legs[-1] = (B, back)
+        path(net, width, [*legs, (F, [back[-1], ETH_CLIMB_TARGET[net]])])
+
+    row, pull = ETH_MDIO_PULL
+    ROUTES.append(("ETH_MDIO", _width_for("ETH_MDIO", SIGNAL), F,
+                   [(ETH_WEST_COLUMN["ETH_MDIO"], row), pull]))
+
+
+def _mcu_pad(net: str) -> str:
+    return next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
 
 
 # Where each pair's two halves have to end up, and the fact that forces the
@@ -2966,8 +3081,8 @@ STITCH_PLACES = (
     # The strip the analog fan crosses layers in. Thirty-six layer changes
     # happened here in one commit and there was not a tie within ten
     # millimetres of any of them; the check said so before the board did.
-    (-19.5, 8.5), (-28.5, -9.0), (-33.0, -19.5),
-    (-30.0, 8.5), (-33.0, -1.0), (-33.0, -7.5), (-33.0, -15.5),
+    (-22.3, 8.5), (-28.5, -9.0), (-33.0, -19.5),
+    (-31.0, 12.5), (-33.0, -1.0), (-33.0, -7.5), (-33.0, -15.5),
     (38.0, -42.0),                    # the static signals' way under the header
     (39.5, -15.5),                    # and where that column moved to
 )
