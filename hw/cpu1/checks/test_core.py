@@ -276,6 +276,40 @@ def test_crystal_sees_its_load_capacitance(oscillator, design, two_pad_parts, pa
 
 
 @pytest.mark.parametrize("oscillator", ["hse", "lse"])
+def test_the_stray_an_oscillator_declares_covers_its_own_copper(
+    oscillator, design, pad_net, spec, board_capacitance
+):
+    """
+    The declared stray is at least what the tracks and pads account for.
+
+    ST gives no capacitance for the OSC pins, so the load check above works
+    from a band this design declares - and a declared band is a belief until
+    something measures it. The copper can be measured: every track's width and
+    length and every pad's area are in the board file, and what they are worth
+    against the plane below follows from the stackup.
+
+    That does not make the declaration redundant. It has to cover the MCU pin
+    as well, which no datasheet here states, so the check is one-sided: the
+    floor may sit above the copper and not below it. The LSE's floor sat below
+    it - 2.0 pF declared against 2.1 pF of copper on its longer leg, which left
+    the pin nothing at all and made the low corner of the load a figure that
+    could not happen.
+    """
+    crystal = _crystal(design, oscillator)
+    part = design["parts"][crystal]
+    terminals = ("1", "4") if part["symbol"] == "Device:Crystal_GND23" else ("1", "2")
+    declared_low, _ = spec(oscillator, "stray_capacitance")
+    for terminal in terminals:
+        net = pad_net[(crystal, terminal)]
+        copper = board_capacitance(net)
+        assert copper <= declared_low, (
+            f"{oscillator} declares {declared_low * 1e12:.2f} pF of stray at "
+            f"its low corner and {net} is {copper * 1e12:.2f} pF of copper "
+            f"before the pin is counted"
+        )
+
+
+@pytest.mark.parametrize("oscillator", ["hse", "lse"])
 def test_oscillator_has_gain_margin(oscillator, design, spec):
     """
     The MCU can drive the crystal with margin to spare.

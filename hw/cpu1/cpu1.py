@@ -102,12 +102,15 @@ INTENT: dict[str, tuple[float, float]] = {
     # a small inductor, low enough that switching losses at 36 V stay modest.
     "buck5.switching_frequency": (350e3, 450e3),
     # Pin and board capacitance each crystal's load capacitors sit alongside.
-    # ST's datasheet offers 10 pF as a rough estimate; these crystals are placed
-    # a few millimetres from their pins, so a tighter band is assumed, and it is
-    # the thing to measure at bring-up - the oscillator's frequency error is
-    # what it moves.
+    # ST's datasheet offers 10 pF as a rough estimate and says nothing about the
+    # OSC pins themselves, so these are assumed, and they are the thing to
+    # measure at bring-up - the oscillator's frequency error is what they move.
+    # The floors are not free to be anything: the board file says what the
+    # tracks and pads on each leg are worth, and a check holds each floor above
+    # its own copper. The LSE's was 2 pF against 2.23 pF of copper on the
+    # longer leg, which is a corner the board could not reach.
     "hse.stray_capacitance": (3e-12, 5e-12),
-    "lse.stray_capacitance": (2e-12, 4e-12),
+    "lse.stray_capacitance": (2.5e-12, 4.5e-12),
     # An indicator LED that can be seen in a lit room, at the least current the
     # tolerances allow.
     "leds.visible_current": (0.5e-3, 20e-3),
@@ -231,10 +234,6 @@ INTENT: dict[str, tuple[float, float]] = {
     # with whatever that pad was decoupling; a pad that needs more than this
     # wants moving rather than reaching for.
     "routing.stub_length": (0.0, 3.5),
-    # The stray capacitance either side of the PHY's crystal: its own pins are
-    # in the datasheet, this is what the board adds beside them. Same figure as
-    # the MCU's oscillators and the same reason - it is measured at bring-up.
-    "ethernet.stray_capacitance": (1e-12, 3e-12),
 }
 
 # Which later block connects the other end of each net. Matched in order; a net
@@ -1295,7 +1294,7 @@ def ethernet(v3v3, gnd, nets) -> None:
     xout.connect(phy["XTAL2"], crystal[3])
     gnd += crystal[2], crystal[4]
     for address, ref, node in (("eth.xtal.c_in", "C64", xin), ("eth.xtal.c_out", "C65", xout)):
-        cap = part(parts.CAP_33P_0402, address, ref)
+        cap = part(parts.CAP_36P_0402, address, ref)
         node += cap[1]
         gnd += cap[2]
 

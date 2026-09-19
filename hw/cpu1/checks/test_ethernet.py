@@ -28,6 +28,19 @@ JACK = "eth.jack"
 CRYSTAL = "eth.xtal.crystal"
 GROUND = "GND"
 
+# IEC 60063's E24 series, the one every 0402 C0G capacitor is stocked against.
+# A load capacitor cannot be any value wanted, so "the right value" means the
+# closest one this series offers, and that is a published standard rather than
+# a belief about this board.
+E24 = (10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30, 33, 36,
+       39, 43, 47, 51, 56, 62, 68, 75, 82, 91)
+
+
+def _E24_VALUES(near: float) -> list[float]:
+    """Every E24 value in the two decades around `near`, in farads."""
+    decade = 10.0 ** math.floor(math.log10(near / 10.0))
+    return [v * decade * scale for scale in (1, 10) for v in E24]
+
 RAILS = {"5V": "rail.5v", "3V3": "rail.3v3"}
 
 # Which declared range each supply pin is held to, by the name the symbol gives
@@ -205,7 +218,9 @@ def test_the_phy_can_drive_the_crystal_it_was_given(spec):
     )
 
 
-def test_the_crystal_sees_the_load_it_is_cut_for(design, spec, spec_has, pads_of, net_on):
+def test_the_crystal_sees_the_load_it_is_cut_for(
+    design, spec, spec_has, pads_of, net_on, board_capacitance
+):
     """
     The two load capacitors in series, plus what the pins and the board add.
 
@@ -214,11 +229,24 @@ def test_the_crystal_sees_the_load_it_is_cut_for(design, spec, spec_has, pads_of
     whole link's clock comes out of this, and 100BASE-TX has fifty parts per
     million to spend on everything.
 
-    The pin capacitance is the datasheet's; the board's stray is this design's
-    own declared band, as it is for the MCU's two oscillators, and bring-up
-    measures the frequency error that would show it wrong.
+    The pin capacitance is the datasheet's. The board's is **measured off the
+    board file**, per leg, rather than declared: each terminal's copper sits in
+    parallel with that terminal's own capacitor, and this board's two legs are
+    not the same length - the four-pad crystal puts its terminals on a
+    diagonal, so one track goes the long way round, 1.98 pF against 1.11. A
+    single declared figure across the pair hides that, and hid a load error of
+    more than a picofarad while reading as though it had been thought about.
+
+    What the check then asks is not that the load land exactly on the cut: no
+    capacitor value can do that, because the values come in a series and the
+    ideal here is 35.5 pF. It asks that **no value in the series gets closer**,
+    which is the strongest statement available and needs nothing this board
+    cannot measure. Turning the residual into parts per million would need the
+    crystal's motional capacitance, and this manufacturer prints "N/A" against
+    it - so the ppm is not derivable, and is not asserted.
     """
     caps = []
+    strays = []
     for name in ("XTAL1/CLKIN", "XTAL2"):
         net = net_on(name)
         on_it = [
@@ -227,17 +255,29 @@ def test_the_crystal_sees_the_load_it_is_cut_for(design, spec, spec_has, pads_of
         ]
         assert len(on_it) == 1, f"{name} has {len(on_it)} capacitors to ground"
         caps.append(on_it[0])
+        strays.append(board_capacitance(net))
 
     pin, _ = spec(PHY, "xtal_pin_capacitance")
-    stray_low, stray_high = spec("ethernet", "stray_capacitance")
     (c1_low, c1_high), (c2_low, c2_high) = (spec(c, "capacitance") for c in caps)
-    load_low = (c1_low + pin) * (c2_low + pin) / (c1_low + c2_low + 2 * pin) + stray_low
-    load_high = (c1_high + pin) * (c2_high + pin) / (c1_high + c2_high + 2 * pin) + stray_high
+    assert (c1_low, c1_high) == (c2_low, c2_high), (
+        f"{caps[0]} and {caps[1]} are different values; the load below is "
+        f"worked from one of them"
+    )
+
+    def load(value: float) -> float:
+        """The series load a pair of `value` capacitors presents, as built."""
+        legs = [value + pin + stray for stray in strays]
+        return legs[0] * legs[1] / sum(legs)
 
     wanted, _ = spec(CRYSTAL, "load_capacitance")
-    assert load_low <= wanted <= load_high, (
-        f"the crystal is cut for {wanted * 1e12:.1f} pF and sees "
-        f"{load_low * 1e12:.2f} to {load_high * 1e12:.2f} pF"
+    nominal = (c1_low + c1_high) / 2
+    best = min(_E24_VALUES(nominal), key=lambda v: abs(load(v) - wanted))
+    assert abs(best - nominal) < 1e-15, (
+        f"the crystal is cut for {wanted * 1e12:.1f} pF; a pair of "
+        f"{nominal * 1e12:g} pF presents {load(nominal) * 1e12:.2f} pF and a "
+        f"pair of {best * 1e12:g} pF would present {load(best) * 1e12:.2f}. "
+        f"The board's own copper is {strays[0] * 1e12:.2f} and "
+        f"{strays[1] * 1e12:.2f} pF of that"
     )
 
 

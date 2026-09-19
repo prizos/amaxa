@@ -189,6 +189,43 @@ def differential_impedance(width: float, gap: float, stack: Microstrip) -> float
     )
 
 
+# The two constants the capacitance below needs, in SI: everything else in this
+# module is millimetres, and the conversions are written out where they happen.
+LIGHT = 2.99792458e8            # m/s
+PERMITTIVITY = 8.854187817e-12  # F/m
+
+
+def trace_capacitance(width: float, stack: Microstrip) -> float:
+    """
+    Farads per millimetre between a microstrip trace and the plane under it.
+
+    Not a second model: a lossless line's capacitance per unit length is
+    sqrt(e_eff) / (c * Z0), so this is the impedance above read the other way
+    round, and the two cannot drift apart. The effective permittivity is
+    IPC-2141's, the same one that equation implies.
+
+    It is what a crystal's load capacitors are sized against. Copper that runs
+    to a crystal terminal is in parallel with that terminal's capacitor, and a
+    few millimetres of it is a few tenths of a picofarad against capacitors of
+    tens - small, and not small enough to leave out when the whole link has
+    fifty parts per million to spend.
+    """
+    effective = 0.475 * stack.epsilon_r + 0.67
+    return math.sqrt(effective) / (LIGHT * single_ended_impedance(width, stack)) * 1e-3
+
+
+def pad_capacitance(area: float, stack: Microstrip) -> float:
+    """
+    Farads between a pad of `area` square millimetres and that same plane.
+
+    Parallel plate, with no fringing term: a pad is wide compared with the
+    dielectric under it, which is exactly the case where the plate term
+    dominates and the edges are a correction. The opposite of a trace, which
+    is why the two are not computed the same way.
+    """
+    return PERMITTIVITY * stack.epsilon_r * (area * 1e-6) / (stack.height * 1e-3)
+
+
 def pair_geometry(target: float, stack: Microstrip, gap: float,
                   minimum: float = 0.1, maximum: float = 1.0) -> float:
     """

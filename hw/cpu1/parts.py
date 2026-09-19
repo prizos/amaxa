@@ -774,9 +774,13 @@ RES_12K1_0402 = PartSpec(
     **_R0402, mpn="0402WGF1212TCE", lcsc="C25852", value="12K1",
     params={"resistance": pm(12.1e3, 0.01), "max_power": exact(0.0625)},
 )
-CAP_33P_0402 = PartSpec(
-    **_C0402, manufacturer="FH", mpn="0402CG330J500NT", lcsc="C1562", value="33pF",
-    params={"capacitance": pm(33e-12, 0.05), "max_voltage": exact(50.0)},
+# One per cent, where every other capacitor on the board is five or ten. These
+# two set the link's clock frequency: the load band is what the crystal is
+# pulled by, and at five per cent the pull is a few parts per million out of
+# the ten the standard leaves once tolerance and drift are paid for.
+CAP_36P_0402 = PartSpec(
+    **_C0402, manufacturer="YAGEO", mpn="CQ0402FRNPO9BN360", lcsc="C3899281", value="36pF",
+    params={"capacitance": pm(36e-12, 0.01), "max_voltage": exact(50.0)},
 )
 CAP_470P_0402 = PartSpec(
     **_C0402, manufacturer="FH", mpn="0402CG471J500NT", lcsc="C75274", value="470pF",

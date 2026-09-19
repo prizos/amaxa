@@ -393,8 +393,8 @@ schematic after the fact.
 | `R92` | `eth.term_rd_p` | 49R9 | 0402WGF499JTCE | C25120 | `R_0402_1005Metric` |
 | `R91` | `eth.term_td_n` | 49R9 | 0402WGF499JTCE | C25120 | `R_0402_1005Metric` |
 | `R90` | `eth.term_td_p` | 49R9 | 0402WGF499JTCE | C25120 | `R_0402_1005Metric` |
-| `C64` | `eth.xtal.c_in` | 33pF | 0402CG330J500NT | C1562 | `C_0402_1005Metric` |
-| `C65` | `eth.xtal.c_out` | 33pF | 0402CG330J500NT | C1562 | `C_0402_1005Metric` |
+| `C64` | `eth.xtal.c_in` | 36pF | CQ0402FRNPO9BN360 | C3899281 | `C_0402_1005Metric` |
+| `C65` | `eth.xtal.c_out` | 36pF | CQ0402FRNPO9BN360 | C3899281 | `C_0402_1005Metric` |
 | `Y3` | `eth.xtal.crystal` | 25MHz | TXM25M0004503LDCDO00T | C362363 | `Crystal_SMD_5032-4Pin_5.0x3.2mm` |
 
 #### Headers
