@@ -119,3 +119,42 @@ decisions, recorded here as decisions:
 
 What remains unconfirmed is only whether Microchip would ask for something
 different, which no document reachable from here says.
+
+## The front end is not Microchip's, and that is a defect
+
+![Figure 3.23, twisted-pair interface, single power supply](evidence/front_end.png)
+
+LAN8742A Revision 1.1, Figure 3.23. Microchip's single-supply front end is a
+ferrite from 3.3 V feeding **VDD1A, VDD2A and four 49.9 Ω resistors**, one to
+each of TXP, TXN, RXP and RXN, with the magnetics' chip-side centre taps going
+to a bypass capacitor to **ground**.
+
+This board has none of the three. There is no 49.9 Ω part in `parts.py` at all,
+both centre taps are tied straight to the 3V3 plane, and VDD1A/VDD2A sit on it
+with no ferrite.
+
+**Why it matters.** The 100BASE-TX driver is current-mode — `cpu1.py` says so
+itself where it sets the bias resistor. In the reference circuit the two
+49.9 Ω appear as ~100 Ω across each pair in parallel with the 100 Ω the 1:1
+transformer reflects from the cable, so the driver works into ≈50 Ω. Remove
+them and the load is 100 Ω, so the output amplitude is about double what Table
+5.8 permits. Separately, the receive pair then has **no chip-side termination
+at all**, so the incoming signal reflects at the PHY: return loss and eye
+closure that get worse with cable length. A board like this usually links on a
+short bench cable and fails conformance and long runs.
+
+**What the fix needs**, so it is ready rather than vague:
+
+| | |
+|---|---|
+| 4 × 49.9 Ω 0402 | `0402WGF499JTCE`, LCSC C25120, 1,640,780 in stock |
+| 1 × ferrite, ≥ 150 mA | `GZ1608D601TF`, LCSC C1002, 0603, 600 Ω @ 100 MHz, 200 mA, 450 mΩ — the 0402 already on this board is rated 100 mA and Table 5.5 puts the PHY at 102 mA with magnetics |
+| new nets | `ETH_VDDA` from the ferrite, and `ETH_TAP` for the two centre taps, bypassed to ground |
+| footprint | `FB0603` has to be added; only `FB0402` exists |
+
+It is not done here because it is four shunts hung on the board's two
+controlled-impedance pairs in its densest corner, and doing that badly is
+worse than leaving it documented. `test_each_pair_runs_from_the_package_to_the_jack_without_meeting_anything`
+used to assert those nets reached *exactly* the PHY and the jack, which would
+have failed the build the moment anyone added the resistors; it now forbids
+only series parts, so the correction is no longer locked out.

@@ -352,16 +352,34 @@ def test_each_pair_runs_from_the_package_to_the_jack_without_meeting_anything(
     the connector.
 
     Between the PHY's line driver and the transformer there is meant to be
-    copper and nothing else: no series part, no test point, no stub. Anything
-    else on the net is a discontinuity in the one place on this board where
-    that word means something.
+    copper and nothing else **in series**: no series part, no test point.
+    Anything in the path is a discontinuity in the one place on this board
+    where that word means something.
+
+    A shunt is a different thing, and the distinction matters because
+    Microchip's own front end is made of them. Figure 3.23 of the LAN8742A
+    datasheet - rendered at `parts/QFN24/evidence/front_end.png` - hangs a
+    49.9 ohm from each of these four nets to a ferrite-fed bias node, which is
+    what makes the current-mode driver work into 50 ohms instead of 100. This
+    board does not have them, and this check used to be written so that adding
+    them would fail the build: it asserted the net reached *exactly* the PHY
+    and the jack. A check that forbids the manufacturer's reference circuit is
+    worse than no check, so it now forbids only what it means to.
     """
+    rails = {"GND", "3V3", "5V", "ETH_VDDA"}
+    pad_net = {tuple(node): net for net, nodes in design["nets"].items() for node in nodes}
     for phy_pin, jack_pin in (("TXP", "TD+"), ("TXN", "TD-"),
                               ("RXP", "RD+"), ("RXN", "RD-")):
         net = net_on(phy_pin)
-        reached = sorted({address for address, _ in design["nets"][net]})
-        assert reached == sorted({PHY, JACK}), (
-            f"{net} reaches {reached}; it should reach the PHY and the jack"
+        reached = {address for address, _ in design["nets"][net]}
+        shunts = set()
+        for address in reached - {PHY, JACK}:
+            far = {pad_net.get((address, pad)) for pad in ("1", "2")} - {net}
+            if far and far <= rails:
+                shunts.add(address)       # one pad here, the other on a rail
+        assert reached - shunts == {PHY, JACK}, (
+            f"{net} reaches {sorted(reached - shunts)} in series; it should "
+            "reach the PHY and the jack"
         )
         assert net in pads_of[JACK].values(), f"{net} does not arrive at the jack"
 
