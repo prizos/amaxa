@@ -1778,7 +1778,11 @@ SENSE_EAST = (-40.4, -39.6)             # step out, and rise into the gap
 SENSE_LANES = (
     ("IA_SENSE", -30.0, ((-44.0, -24.5),), None),
     ("IB_SENSE", -29.2, ((-41.46, -23.7),), None),
-    ("IC_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9)), None),
+    # Two of the three rise west of the column they would have chosen, to
+    # leave the Ethernet a set of columns between them and the threshold
+    # buses: this strip is the only way from the package's west side to the
+    # lane north of the input bank.
+    ("IC_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9)), -22.2),
     # The DC link's line arrives from the east instead. Its tap is the last on
     # the row and its own threshold bus surfaces where it would have risen, so
     # it runs along the empty back layer under the input networks and comes up
@@ -1787,7 +1791,7 @@ SENSE_LANES = (
     # line was a wall across the whole north-west. It now rises as soon as it
     # is clear of the threshold buses, which is what leaves the Ethernet a
     # channel down the west side of the package.
-    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-20.3, -15.65)), -20.3),
+    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-21.6, -15.65)), -21.6),
 )
 
 
@@ -2585,8 +2589,12 @@ def _ethernet() -> None:
     PLACEMENT["eth.core_hf"] = (-57.5, -8.5, 0)
 
     PLACEMENT["eth.bias"] = (-56.5, -22.5, 90)
-    PLACEMENT["eth.r_mdio_pullup"] = (-51.0, -8.5, 0)
-    PLACEMENT["eth.r_reset_pullup"] = (-51.0, -6.0, 0)
+    # Turned so the signal pad faces east. Both nets arrive from that side -
+    # they come the length of the board to get here - and with the resistor
+    # the other way round the line has to pass over the 3V3 pad to reach the
+    # one it wants.
+    PLACEMENT["eth.r_mdio_pullup"] = (-51.0, -8.5, 180)
+    PLACEMENT["eth.r_reset_pullup"] = (-51.0, -6.0, 180)
 
     for address, x in (("eth.tap_bypass1", -47.0), ("eth.tap_bypass2", -44.5)):
         PLACEMENT[address] = (x, -31.0, 0)
@@ -2601,6 +2609,7 @@ def _ethernet() -> None:
 
     _ethernet_pairs()
     _ethernet_local()
+    _ethernet_north()
 
 
 def _ethernet_local() -> None:
@@ -2641,6 +2650,88 @@ def _ethernet_local() -> None:
         (B, [(-57.3, -15.2), (-62.0, -9.8)]),
         (F, [(-62.0, -9.8), "eth.xtal.c_in:1", "eth.xtal.crystal:1"]),
     ])
+
+
+# --- the RMII, from the north edge to the PHY --------------------------------
+#
+# Four of the ten leave the package's north edge in the middle of it, forty
+# millimetres from the part they feed, and everything between is already full:
+# the field bus owns the strip immediately west of them, the analog input bank
+# owns the width of the board south of that, and the analog header is a wall of
+# through-hole pins the whole height of it.
+#
+# What is empty is the back of the package itself. Three of them turn inward
+# rather than outward, drop through inside the supply ring, and run west
+# underneath the die - the only other thing on the back there is the static
+# band, and that is further south. They pass the west pins, climb the strip
+# between the crystal and the input bank's risers, and surface onto a lane
+# north of the bank that runs clear to the far edge of the board.
+#
+# Each entry is the net, the y it drops on beside its pin, the y it runs west
+# on once it is past the corner vias, the column it climbs, the lane it
+# surfaces onto, the column it comes down at the far end, and the pad. The
+# three are ordered so that the net landing furthest north is furthest west at
+# every single turn - that ordering is the whole of why three lines can make
+# eight turns each over forty millimetres without crossing.
+ETH_STEP = (-3.5, -5.0)         # where the inner lanes step north, clear of
+                                # the two supply vias beside pin 131
+ETH_NORTH = (
+    ("ETH_TX_EN", -6.8, -7.8, -21.05, -24.2, -45.9, "eth.phy:16"),
+    ("ETH_TXD0", -7.3, -8.3, -20.4, -24.75, -46.2, "eth.phy:17"),
+    ("ETH_TXD1", -7.8, -8.8, -19.75, -25.3, -46.5, "eth.phy:18"),
+)
+
+# The reset line does not go under the package. It is the one signal here that
+# is not clocked, so the extra millimetres cost nothing, and it takes the
+# channel west of the field bus that the DC-link sense line used to block -
+# out past the boot pad, north beside the threshold DAC, and west on a lane of
+# its own south of the other three.
+ETH_RESET_OUT = -18.3           # the row it leaves on, under the boot test pad
+ETH_RESET_DROP = -5.5           # the column it takes north
+ETH_RESET_LANE = -27.0
+ETH_RESET_WEST = -45.3
+# Its pad is the one south of the other three on the PHY's east side, so it
+# cannot come at it from the north the way they do: it goes on past, down to
+# the pull-up, and reaches the pin from below. On the way it has to get to the
+# far side of their lane, which is the one crossing on this whole block - two
+# vias, taken where the lane is three parallel lines and nothing else.
+ETH_RESET_UNDER = (-26.0, -23.6)
+ETH_RESET_PULL = (-49.3, -6.0, "eth.r_reset_pullup:1")
+
+
+def _ethernet_north() -> None:
+    """The four RMII lines that leave the package pointing the wrong way."""
+    def pin_of(net: str) -> str:
+        return next(pad for address, pad in DESIGN["nets"][net] if address == MCU)
+
+    for net, drop, lane, column, surface, west, target in ETH_NORTH:
+        width = _width_for(net, SIGNAL)
+        pin = pin_of(net)
+        x = _point(f"{MCU}:{pin}")[0]
+        path(net, width, [
+            (F, [f"{MCU}:{pin}", (x, drop)]),
+            (B, [(x, drop), (ETH_STEP[0], drop), (ETH_STEP[1], lane),
+                 (column, lane), (column, surface)]),
+            (F, [(column, surface), (west, surface),
+                 (west, _point(target)[1]), target]),
+        ])
+
+    net = "ETH_PHY_RESET"
+    width = _width_for(net, SIGNAL)
+    pin = pin_of(net)
+    x = _point(f"{MCU}:{pin}")[0]
+    landing = _point("eth.phy:15")[1]
+    over, under = ETH_RESET_UNDER
+    turn, down, pull = ETH_RESET_PULL
+    path(net, width, [
+        (F, [f"{MCU}:{pin}", (x, ETH_RESET_OUT), (ETH_RESET_DROP, ETH_RESET_OUT)]),
+        (B, [(ETH_RESET_DROP, ETH_RESET_OUT), (ETH_RESET_DROP, ETH_RESET_LANE)]),
+        (F, [(ETH_RESET_DROP, ETH_RESET_LANE), (ETH_RESET_WEST, ETH_RESET_LANE),
+             (ETH_RESET_WEST, over)]),
+        (B, [(ETH_RESET_WEST, over), (ETH_RESET_WEST, under)]),
+        (F, [(ETH_RESET_WEST, under), (ETH_RESET_WEST, down), pull]),
+    ])
+    ROUTES.append((net, width, F, [(turn, down), (turn, landing), "eth.phy:15"]))
 
 
 # Where each pair's two halves have to end up, and the fact that forces the
