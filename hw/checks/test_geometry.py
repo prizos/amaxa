@@ -89,3 +89,50 @@ def test_no_two_vias_share_a_hole(pcb_text):
     )
     doubled = [f"  ({x:g}, {y:g}): {n} vias" for (x, y), n in sorted(places.items()) if n > 1]
     assert not doubled, "Vias sharing a hole:\n" + "\n".join(doubled)
+
+
+def test_no_two_designators_are_printed_over_each_other(pcb_text):
+    """
+    Every reference designator can be read.
+
+    Silkscreen is how a board is assembled and how it is debugged, and a
+    designator printed over its neighbour is the same as no designator at all.
+    A fixed offset from each part puts them in exactly that position wherever
+    parts are close together: cpu1 had twenty-six such pairs in the comparator
+    and input-network fields, and the only way to find out was to look.
+
+    The boxes are derived from the board file - each designator's placed
+    position, its text size, and how many characters it has - so this measures
+    the silkscreen that will be printed rather than the offsets that were asked
+    for. A designator over a part's *outline* is untidy and still legible; this
+    is about the ones over other text.
+    """
+    import math
+    import re
+
+    boxes = []
+    for block in pcb_text.split("\n\t(footprint ")[1:]:
+        at = re.search(r"\n\t\t\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
+        field = re.search(
+            r'\(property "Reference" "([^"]+)"\s*\(at ([-\d.]+) ([-\d.]+)(?: [-\d.]+)?\)'
+            r'[\s\S]*?\(size ([\d.]+) ([\d.]+)\)',
+            block,
+        )
+        if not (at and field):
+            continue
+        name, lx, ly, w, h = field.groups()
+        ox, oy = float(at.group(1)), float(at.group(2))
+        turn = math.radians(float(at.group(3) or 0))
+        x = ox + float(lx) * math.cos(turn) + float(ly) * math.sin(turn)
+        y = oy - float(lx) * math.sin(turn) + float(ly) * math.cos(turn)
+        half_w, half_h = len(name) * float(w) * 0.72 / 2, float(h) / 2
+        boxes.append((name, x - half_w, y - half_h, x + half_w, y + half_h))
+
+    assert boxes, "no reference designators on the board"
+    clashes = [
+        f"  {a[0]} and {b[0]}"
+        for i, a in enumerate(boxes)
+        for b in boxes[i + 1:]
+        if a[1] < b[3] and b[1] < a[3] and a[2] < b[4] and b[2] < a[4]
+    ]
+    assert not clashes, "Designators printed over each other:\n" + "\n".join(sorted(clashes))

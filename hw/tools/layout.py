@@ -99,6 +99,7 @@ class Board:
                 continue
             at = re.search(r"\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
             pads: dict[str, tuple[float, float]] = {}
+            boxes: list[tuple[float, float, float, float]] = []
             for pad_start, pad_end in sexp_blocks(block, "pad"):
                 pad = block[pad_start:pad_end]
                 name = re.match(r'\(pad "([^"]*)"', pad).group(1)
@@ -106,12 +107,22 @@ class Board:
                 # Several footprints repeat a pad number (a switch's two poles,
                 # a regulator's tab). The first is the one routes anchor to.
                 pads.setdefault(name, (float(pad_at.group(1)), float(pad_at.group(2))))
+                size = re.search(r"\(size ([\d.]+) ([\d.]+)\)", pad)
+                boxes.append((
+                    float(pad_at.group(1)), float(pad_at.group(2)),
+                    float(size.group(1)) if size else 0.9,
+                    float(size.group(2)) if size else 0.9,
+                ))
             out[address] = {
                 "span": (start, end),
                 "reference": props.get("Reference"),
                 "origin": (float(at.group(1)), float(at.group(2))),
                 "rotation": float(at.group(3) or 0),
                 "pads": pads,
+                # Every pad as (x, y, w, h) in the footprint's own frame,
+                # including the repeats `pads` drops: a label has to dodge a
+                # switch's second pole as much as its first.
+                "pad_boxes": boxes,
             }
         return out
 
@@ -141,20 +152,97 @@ def strip_generated(text: str) -> str:
     return text
 
 
+def _pad_rects(footprints: dict, placement: dict, address: str) -> list:
+    """Every pad of one placed part, as (x0, y0, x1, y1) in board millimetres."""
+    x, y, *rest = placement[address]
+    turn = math.radians(-(rest[0] if rest else 0))
+    out = []
+    for px, py, w, h in footprints[address].get("pad_boxes", ()):
+        ax = x + px * math.cos(turn) - py * math.sin(turn)
+        ay = y + px * math.sin(turn) + py * math.cos(turn)
+        # A turned pad's width and height swap; for anything but a right angle
+        # the bounding box is the safe answer and no board here needs better.
+        wide = abs(w * math.cos(turn)) + abs(h * math.sin(turn))
+        tall = abs(w * math.sin(turn)) + abs(h * math.cos(turn))
+        out.append((ax - wide / 2, ay - tall / 2, ax + wide / 2, ay + tall / 2))
+    return out
+
+
+def _clear(box, obstacles, margin: float) -> bool:
+    x0, y0, x1, y1 = box
+    return not any(
+        x0 - margin < ox1 and ox0 < x1 + margin and y0 - margin < oy1 and oy0 < y1 + margin
+        for ox0, oy0, ox1, oy1 in obstacles
+    )
+
+
+# Where a designator is tried, in order: above, below, either side, then the
+# four corners, each at a growing distance. Above first because that is where a
+# reader looks, and because a board read in one direction is easier than one
+# whose labels are scattered by the search that placed them.
+LABEL_STEPS = (0.0, 0.5, 1.1, 1.8, 2.6, 3.5)
+LABEL_SIDES = ((0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (1, -1), (-1, 1), (1, 1))
+
+
 def label(text: str, footprints: dict, placement: dict, labels: dict, font: dict) -> str:
     """
     Put each reference designator where it can be read.
 
-    A stock footprint puts them on top of the part they name, which puts silkscreen over
-    pads — the fab clips it away and the board comes back with unlabelled
-    parts. Offsets here are in board millimetres and are converted into the
-    footprint's own frame, so a part that is turned around keeps its label
-    upright and on the same side.
+    A stock footprint puts them on top of the part they name, which puts
+    silkscreen over pads - the fab clips it away and the board comes back with
+    unlabelled parts. A fixed offset instead puts them on top of each other:
+    cpu1 had twenty-six pairs of designators printed one over the other and a
+    hundred and eleven over a neighbour's outline, and a silkscreen that cannot
+    be read is the same as no silkscreen at all.
+
+    So the offset is searched for rather than assumed, the way the plane vias
+    are: above the part first, then below, either side, the corners, each at a
+    growing distance, and the first place that clears every pad on the board
+    and every designator already placed is the one it takes.
+
+    A board's own `LABELS` is the first candidate rather than the last word: a
+    hand-chosen side that still works is kept, and one that a later part moved
+    under is replaced instead of being printed over.
+
+    Offsets are in board millimetres and are converted into the footprint's own
+    frame, so a part that is turned around keeps its label upright and on the
+    same side.
     """
+    size = font["size"]
+    pads = [rect for address in placement for rect in _pad_rects(footprints, placement, address)]
+    taken: list = []
+
+    chosen: dict[str, tuple[float, float]] = {}
+    # Biggest parts first: they have the fewest places to put a label and the
+    # most pads of their own to dodge, and a small part beside one has room
+    # left over either way.
+    for address in sorted(placement, key=lambda a: (-len(footprints[a].get("pad_boxes", ())), a)):
+        reference = footprints[address].get("reference") or address
+        half_w = (len(reference) * size * 0.72 + 0.3) / 2
+        half_h = (size + 0.3) / 2
+        own = _pad_rects(footprints, placement, address)
+        x, y, *_ = placement[address]
+        reach_x = max((x1 - x for _, _, x1, _ in own), default=0.4)
+        reach_y = max((y1 - y for _, _, _, y1 in own), default=0.4)
+        fixed = labels.get(address, labels.get("*"))
+        candidates = ([fixed] if fixed is not None else []) + [
+            (sx * (reach_x + half_w + 0.35 + step), sy * (reach_y + half_h + 0.35 + step))
+            for step in LABEL_STEPS
+            for sx, sy in LABEL_SIDES
+        ]
+        chosen[address] = candidates[0]
+        for dx, dy in candidates:
+            box = (x + dx - half_w, y + dy - half_h, x + dx + half_w, y + dy + half_h)
+            if _clear(box, pads, 0.15) and _clear(box, taken, 0.15):
+                chosen[address] = (dx, dy)
+                break
+        dx, dy = chosen[address]
+        taken.append((x + dx - half_w, y + dy - half_h, x + dx + half_w, y + dy + half_h))
+
     for address in sorted(placement, key=lambda a: -footprints[a]["span"][0]):
         start, end = footprints[address]["span"]
         block = text[start:end]
-        dx, dy = labels.get(address, labels.get("*", (0.0, -1.7)))
+        dx, dy = chosen[address]
 
         # Board offset into the footprint's frame: the inverse of the turn
         # absolute_pad() applies. The signs of the sine terms matter only for
