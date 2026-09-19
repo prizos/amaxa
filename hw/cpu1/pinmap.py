@@ -102,21 +102,21 @@ PINS = [
     Pin("PG3", "TIM8_BKIN2", "FAULT2_N", note="gate-driver fault, active low"),
 
     # --- analog ------------------------------------------------------------------
-    Pin("PF11", "ADC1_INP2", "IA", note="simultaneous with IB"),
-    Pin("PF13", "ADC2_INP2", "IB"),
-    Pin("PC2_C", "ADC3_INP0", "IC", note="needs the PC2 analog switch closed"),
-    Pin("PA6", "ADC1_INP3", "VDC", note="simultaneous with VA"),
-    Pin("PB1", "ADC2_INP5", "VA"),
-    Pin("PC3_C", "ADC3_INP1", "VB", note="needs the PC3 analog switch closed"),
-    Pin("PF9", "ADC3_INP2", "VC"),
-    Pin("PF7", "ADC3_INP3", "AUX_FAST"),
+    Pin("PF11", "ADC1_INP2", "FAST1", note="simultaneous with FAST2"),
+    Pin("PF13", "ADC2_INP2", "FAST2"),
+    Pin("PC2_C", "ADC3_INP0", "FAST3", note="needs the PC2 analog switch closed"),
+    Pin("PA6", "ADC1_INP3", "FAST4", note="simultaneous with FAST5"),
+    Pin("PB1", "ADC2_INP5", "FAST5"),
+    Pin("PC3_C", "ADC3_INP1", "FAST6", note="needs the PC3 analog switch closed"),
+    Pin("PF9", "ADC3_INP2", "FAST7"),
+    Pin("PF7", "ADC3_INP3", "FAST8"),
     Pin("PF5", "ADC3_INP4", "SLOW1"),
     Pin("PF3", "ADC3_INP5", "SLOW2"),
     Pin("PC0", "ADC3_INP10", "SLOW3"),
     Pin("PA3", "ADC1_INP15", "SLOW4"),
     Pin("PF10", "ADC3_INP6", "BOARD_ID1", note="resistor divider on the power board"),
     Pin("PF4", "ADC3_INP9", "BOARD_ID2"),
-    Pin("PB2", "COMP1_INP", "OV_COMP", note="optional second over-voltage path"),
+    Pin("PB2", "COMP1_INP", "COMP_FAST4", note="optional second over-voltage path"),
     Pin("PA4", "DAC1_OUT1", "DAC_TEST", note="resolver excitation or analog test"),
 
     # --- position feedback ---------------------------------------------------------
@@ -193,9 +193,9 @@ HEADER_DIGITAL = [
 # order is the point - a filter fast enough for the ADC is far too slow to trip
 # on.
 HEADER_ANALOG = [
-    "IA_SENSE", "IB_SENSE", "IC_SENSE",
-    "VDC_SENSE", "VA_SENSE", "VB_SENSE", "VC_SENSE",
-    "AUX_FAST_SENSE",
+    "FAST1_SENSE", "FAST2_SENSE", "FAST3_SENSE",
+    "FAST4_SENSE", "FAST5_SENSE", "FAST6_SENSE", "FAST7_SENSE",
+    "FAST8_SENSE",
     "SLOW1_SENSE", "SLOW2_SENSE", "SLOW3_SENSE", "SLOW4_SENSE",
     "BOARD_ID1_SENSE", "BOARD_ID2_SENSE",
     "VREF+", "5VA", "5VA",
@@ -229,6 +229,6 @@ def header_pins(signals: list[str], ground: str, count: int) -> dict[int, str]:
 # Pairs converted at the same instant, in dual regular simultaneous mode:
 # (on ADC1, on ADC2).
 SIMULTANEOUS = [
-    ("IA", "IB"),
-    ("VDC", "VA"),
+    ("FAST1", "FAST2"),
+    ("FAST4", "FAST5"),
 ]

@@ -215,7 +215,7 @@ INTENT: dict[str, tuple[float, float]] = {
 _MILESTONES = [
     (r"^(ENC_\w+|HALL_\d)$",
      "M8: the motion-feedback connector, once the encoder type is settled"),
-    (r"^(IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$",
+    (r"^(FAST1|FAST2|FAST3|FAST4|FAST5|FAST6|FAST7|FAST8|SLOW\d|BOARD_ID\d|COMP_FAST4|DAC_TEST)$",
      "M6: the ADC input networks and comparator taps"),
     (r"^\w+_SENSE$",
      "M6: the anti-alias filter between this and the ADC pin it belongs to"),
@@ -230,7 +230,7 @@ _CONNECTED = re.compile(
     r"|PWM\w+|TRIP\w+|FAULT\d_N|GATE_ENABLE|RELAY\d|STO\d_FEEDBACK|ID_STRAP\d"
     r"|\w+_SENSE|DAC_S\w+|CAN_\w+|RS485_\w+|USB_\w+"
     r"|ETH_\w+"
-    r"|IA|IB|IC|VDC|VA|VB|VC|AUX_FAST|SLOW\d|BOARD_ID\d|OV_COMP|DAC_TEST)$"
+    r"|FAST1|FAST2|FAST3|FAST4|FAST5|FAST6|FAST7|FAST8|SLOW\d|BOARD_ID\d|COMP_FAST4|DAC_TEST)$"
 )
 
 
@@ -854,8 +854,8 @@ def trip_comparators(v3v3, gnd, nets) -> None:
         nets[net] += pull_up[2]
 
     thresholds = {}
-    for channel, name in (("A", "I_TRIP_HIGH"), ("B", "I_TRIP_LOW"),
-                          ("C", "VDC_TRIP"), ("D", "DAC_SPARE")):
+    for channel, name in (("A", "TRIP_LEVEL_HIGH"), ("B", "TRIP_LEVEL_LOW"),
+                          ("C", "TRIP_LEVEL_FAST4"), ("D", "DAC_SPARE")):
         thresholds[name] = Net(name)
         thresholds[name] += dac[f"VOUT{channel}"]
     thresholds["DAC_SPARE"] += part(parts.TEST_PAD, "tp_dac_spare", "TP10")[1]
@@ -871,10 +871,10 @@ def trip_comparators(v3v3, gnd, nets) -> None:
     # trip is the signal rising past the threshold, so the signal is on the
     # inverting input and the output falls when it does.
     for index, (signal, threshold, sense) in enumerate((
-        ("IA_SENSE", "I_TRIP_HIGH", "above"), ("IA_SENSE", "I_TRIP_LOW", "below"),
-        ("IB_SENSE", "I_TRIP_HIGH", "above"), ("IB_SENSE", "I_TRIP_LOW", "below"),
-        ("IC_SENSE", "I_TRIP_HIGH", "above"), ("IC_SENSE", "I_TRIP_LOW", "below"),
-        ("VDC_SENSE", "VDC_TRIP", "above"),
+        ("FAST1_SENSE", "TRIP_LEVEL_HIGH", "above"), ("FAST1_SENSE", "TRIP_LEVEL_LOW", "below"),
+        ("FAST2_SENSE", "TRIP_LEVEL_HIGH", "above"), ("FAST2_SENSE", "TRIP_LEVEL_LOW", "below"),
+        ("FAST3_SENSE", "TRIP_LEVEL_HIGH", "above"), ("FAST3_SENSE", "TRIP_LEVEL_LOW", "below"),
+        ("FAST4_SENSE", "TRIP_LEVEL_FAST4", "above"),
     )):
         key = f"{signal.split('_')[0].lower()}_{'high' if sense == 'above' else 'low'}"
         comparator = part(parts.COMPARATOR, f"trip.{key}", f"U{8 + index}")
@@ -938,7 +938,7 @@ def adc_inputs(v3v3, gnd, nets) -> None:
     slow ones are temperatures and housekeeping, and get a corner three decades
     lower because nothing is waiting on them.
     """
-    fast = ("IA", "IB", "IC", "VDC", "VA", "VB", "VC", "AUX_FAST")
+    fast = ("FAST1", "FAST2", "FAST3", "FAST4", "FAST5", "FAST6", "FAST7", "FAST8")
     slow = ("SLOW1", "SLOW2", "SLOW3", "SLOW4", "BOARD_ID1", "BOARD_ID2")
 
     resistor_ref, capacitor_ref = 61, 40
@@ -958,12 +958,12 @@ def adc_inputs(v3v3, gnd, nets) -> None:
     # same fact, taken from the same place the external comparators take it:
     # ahead of everything, so it is fast, and independent of them so a fault in
     # one is not a fault in both.
-    series = part(parts.RES_10R_0402, "adc.ov_comp.series", f"R{resistor_ref}")
-    shunt = part(parts.CAP_10N_0402, "adc.ov_comp.shunt", f"C{capacitor_ref}")
+    series = part(parts.RES_10R_0402, "adc.comp_fast4.series", f"R{resistor_ref}")
+    shunt = part(parts.CAP_10N_0402, "adc.comp_fast4.shunt", f"C{capacitor_ref}")
     resistor_ref += 1
     capacitor_ref += 1
-    nets["VDC_SENSE"] += series[1]
-    nets["OV_COMP"] += series[2], shunt[1]
+    nets["FAST4_SENSE"] += series[1]
+    nets["COMP_FAST4"] += series[2], shunt[1]
     gnd += shunt[2]
 
     # The MCU's own DAC output, on a pad. Reserved for resolver excitation,

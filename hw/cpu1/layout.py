@@ -1482,7 +1482,7 @@ TRIP_SPINE_X, TRIP_SPINE_Y = 36.5, -51.5
 # that watch one phase sit together. Named once: the placement and the supply
 # spine both walk it.
 TRIP_ORDER = (
-    "ia_high", "ia_low", "ib_high", "ib_low", "ic_high", "ic_low", "vdc_high",
+    "fast1_high", "fast1_low", "fast2_high", "fast2_low", "fast3_high", "fast3_low", "fast4_high",
 )
 
 # The three threshold buses: the net, the DAC pad it leaves on, the lane it
@@ -1495,9 +1495,9 @@ TRIP_ORDER = (
 # threshold tap surfaces beside the pin it feeds and goes nowhere else, while a
 # sense line has to reach the input networks as well.
 THRESHOLDS = (
-    ("I_TRIP_HIGH", "6", -31.0, "3", ("ia_high", "ib_high", "ic_high")),
-    ("I_TRIP_LOW", "7", -31.8, "1", ("ia_low", "ib_low", "ic_low")),
-    ("VDC_TRIP", "8", -32.6, "3", ("vdc_high",)),
+    ("TRIP_LEVEL_HIGH", "6", -31.0, "3", ("fast1_high", "fast2_high", "fast3_high")),
+    ("TRIP_LEVEL_LOW", "7", -31.8, "1", ("fast1_low", "fast2_low", "fast3_low")),
+    ("TRIP_LEVEL_FAST4", "8", -32.6, "3", ("fast4_high",)),
 )
 
 
@@ -1778,13 +1778,13 @@ SENSE_EAST = (-40.4, -39.6)             # step out, and rise into the gap
 # the x it rises on. The lanes go south as their taps go east, and each one
 # ends before the next one's first tap, so no lane crosses another's riser.
 SENSE_LANES = (
-    ("IA_SENSE", -30.0, ((-44.0, -24.5),), None),
-    ("IB_SENSE", -29.2, ((-41.46, -23.7),), None),
+    ("FAST1_SENSE", -30.0, ((-44.0, -24.5),), None),
+    ("FAST2_SENSE", -29.2, ((-41.46, -23.7),), None),
     # Two of the three rise west of the column they would have chosen, to
     # leave the Ethernet a set of columns between them and the threshold
     # buses: this strip is the only way from the package's west side to the
     # lane north of the input bank.
-    ("IC_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9)), -22.2),
+    ("FAST3_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9)), -22.2),
     # The DC link's line arrives from the east instead. Its tap is the last on
     # the row and its own threshold bus surfaces where it would have risen, so
     # it runs along the empty back layer under the input networks and comes up
@@ -1793,7 +1793,7 @@ SENSE_LANES = (
     # line was a wall across the whole north-west. It now rises as soon as it
     # is clear of the threshold buses, which is what leaves the Ethernet a
     # channel down the west side of the package.
-    ("VDC_SENSE", -27.6, ((-44.0, -15.65), (-21.6, -15.65)), -21.6),
+    ("FAST4_SENSE", -27.6, ((-44.0, -15.65), (-21.6, -15.65)), -21.6),
 )
 
 
@@ -1956,15 +1956,15 @@ ADC_ESCAPES = (
     ("SLOW4", ((-9.6, 11.7),), (-0.6375, -0.55)),
     ("SLOW2", ((-13.0, -2.75),), (0.0, -1.27)),
     ("SLOW1", ((-14.9, -1.45),), (0.0, -0.64)),
-    ("AUX_FAST", ((-11.9, 0.25),), (0.0, 0.75)),
-    ("VC", ((-13.0, 0.8),), (0.0, -0.75)),
-    ("VA", ((-3.75, 13.5),), (-0.6375, 0.65)),
-    ("VB", ((-11.9, 5.1),), (0.0, -1.27)),
-    ("OV_COMP", ((-3.25, 14.0), (-4.5, 15.9)), (0.0, -0.75)),
-    ("VDC", ((-6.25, 13.0),), (-0.6375, 0.65)),
-    ("IC", ((-12.9, 4.3),), (0.0, -1.27)),
-    ("IB", ((-0.75, 11.7), (0.3, 12.4), (0.3, 16.5)), (0.0, -1.27)),
-    ("IA", ((-2.75, 15.3),), (-0.6375, 0.65)),
+    ("FAST8", ((-11.9, 0.25),), (0.0, 0.75)),
+    ("FAST7", ((-13.0, 0.8),), (0.0, -0.75)),
+    ("FAST5", ((-3.75, 13.5),), (-0.6375, 0.65)),
+    ("FAST6", ((-11.9, 5.1),), (0.0, -1.27)),
+    ("COMP_FAST4", ((-3.25, 14.0), (-4.5, 15.9)), (0.0, -0.75)),
+    ("FAST4", ((-6.25, 13.0),), (-0.6375, 0.65)),
+    ("FAST3", ((-12.9, 4.3),), (0.0, -1.27)),
+    ("FAST2", ((-0.75, 11.7), (0.3, 12.4), (0.3, 16.5)), (0.0, -1.27)),
+    ("FAST1", ((-2.75, 15.3),), (-0.6375, 0.65)),
 )
 
 # The strip the north-south runs use, and how far apart they sit in it. It is

@@ -13,7 +13,7 @@ Stock 15,700, read from JLCPCB's component API on 2026-09-17.
 
 ## Why a reference at all
 
-Everything this board measures — phase currents, DC-link voltage — is a ratio
+Everything this board measures is a ratio
 of VREF+. Deriving it from the 3V3 rail would make every measurement a
 measurement of the switching regulator, and the MCU's own VREFBUF is specified
 in percent, not in parts per million. This part's 0.2 % initial error and

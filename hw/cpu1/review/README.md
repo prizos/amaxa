@@ -264,42 +264,50 @@ schematic after the fact.
 | `U15` | `trip.dac` | MCP4728 | MCP4728T-E/UN | C478093 | `MSOP-10_3x3mm_P0.5mm` |
 | `C30` | `trip.dac.bulk` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
 | `C29` | `trip.dac.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `U8` | `trip.ia_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
-| `C31` | `trip.ia_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `U9` | `trip.ia_low` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
-| `C32` | `trip.ia_low.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `U10` | `trip.ib_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
-| `C33` | `trip.ib_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `U11` | `trip.ib_low` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
-| `C34` | `trip.ib_low.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `U12` | `trip.ic_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
-| `C35` | `trip.ic_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `U13` | `trip.ic_low` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
-| `C36` | `trip.ic_low.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U8` | `trip.fast1_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
+| `C31` | `trip.fast1_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U9` | `trip.fast1_low` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
+| `C32` | `trip.fast1_low.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U10` | `trip.fast2_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
+| `C33` | `trip.fast2_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U11` | `trip.fast2_low` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
+| `C34` | `trip.fast2_low.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U12` | `trip.fast3_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
+| `C35` | `trip.fast3_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U13` | `trip.fast3_low` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
+| `C36` | `trip.fast3_low.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U14` | `trip.fast4_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
+| `C37` | `trip.fast4_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `R59` | `trip.r_scl_pullup` | 4.7k | 0402WGF4701TCE | C25900 | `R_0402_1005Metric` |
 | `R60` | `trip.r_sda_pullup` | 4.7k | 0402WGF4701TCE | C25900 | `R_0402_1005Metric` |
-| `U14` | `trip.vdc_high` | TLV3501 | TLV3501AIDBVR | C193413 | `SOT-23-6` |
-| `C37` | `trip.vdc_high.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 
 #### ADC networks
 
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
-| `R68` | `adc.aux_fast.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C47` | `adc.aux_fast.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
 | `R73` | `adc.board_id1.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `C52` | `adc.board_id1.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `R74` | `adc.board_id2.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `C53` | `adc.board_id2.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `R75` | `adc.comp_fast4.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C54` | `adc.comp_fast4.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
 | `R76` | `adc.dac_test.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
-| `R61` | `adc.ia.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C40` | `adc.ia.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R62` | `adc.ib.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C41` | `adc.ib.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R63` | `adc.ic.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C42` | `adc.ic.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R75` | `adc.ov_comp.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C54` | `adc.ov_comp.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R61` | `adc.fast1.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C40` | `adc.fast1.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R62` | `adc.fast2.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C41` | `adc.fast2.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R63` | `adc.fast3.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C42` | `adc.fast3.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R64` | `adc.fast4.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C43` | `adc.fast4.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R65` | `adc.fast5.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C44` | `adc.fast5.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R66` | `adc.fast6.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C45` | `adc.fast6.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R67` | `adc.fast7.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C46` | `adc.fast7.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R68` | `adc.fast8.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
+| `C47` | `adc.fast8.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
 | `R69` | `adc.slow1.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `C48` | `adc.slow1.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `R70` | `adc.slow2.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
@@ -308,14 +316,6 @@ schematic after the fact.
 | `C50` | `adc.slow3.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `R72` | `adc.slow4.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `C51` | `adc.slow4.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `R65` | `adc.va.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C44` | `adc.va.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R66` | `adc.vb.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C45` | `adc.vb.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R67` | `adc.vc.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C46` | `adc.vc.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R64` | `adc.vdc.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C43` | `adc.vdc.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
 
 #### CAN FD
 
@@ -445,20 +445,19 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `USB_VBUS` | 6 |  |
 | `VREF+` | 6 |  |
 | `5VA` | 5 |  |
+| `FAST1_SENSE` | 4 |  |
+| `FAST2_SENSE` | 4 |  |
+| `FAST3_SENSE` | 4 |  |
+| `FAST4_SENSE` | 4 |  |
 | `FAULT1_N` | 4 |  |
 | `FAULT2_N` | 4 |  |
 | `FB_5V` | 4 |  |
-| `IA_SENSE` | 4 |  |
-| `IB_SENSE` | 4 |  |
-| `IC_SENSE` | 4 |  |
-| `I_TRIP_HIGH` | 4 |  |
-| `I_TRIP_LOW` | 4 |  |
 | `NRST` | 4 |  |
 | `PWM_ENABLE_N` | 4 |  |
 | `SW_5V` | 4 |  |
-| `VDC_SENSE` | 4 |  |
+| `TRIP_LEVEL_HIGH` | 4 |  |
+| `TRIP_LEVEL_LOW` | 4 |  |
 | `VDDA` | 4 |  |
-| `AUX_FAST` | 3 |  |
 | `BOARD_ID1` | 3 |  |
 | `BOARD_ID2` | 3 |  |
 | `BOOT0` | 3 |  |
@@ -466,6 +465,7 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `CAN_H` | 3 |  |
 | `CAN_L` | 3 |  |
 | `CAN_TERM_MID` | 3 |  |
+| `COMP_FAST4` | 3 |  |
 | `DAC_SCL` | 3 |  |
 | `DAC_SDA` | 3 |  |
 | `ETH_MDIO` | 3 |  |
@@ -473,20 +473,24 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `ETH_VDDCR` | 3 |  |
 | `ETH_XTAL1` | 3 |  |
 | `ETH_XTAL2` | 3 |  |
+| `FAST1` | 3 |  |
+| `FAST2` | 3 |  |
+| `FAST3` | 3 |  |
+| `FAST4` | 3 |  |
+| `FAST5` | 3 |  |
+| `FAST6` | 3 |  |
+| `FAST7` | 3 |  |
+| `FAST8` | 3 |  |
 | `FB_3V3` | 3 |  |
 | `GATE_ENABLE_OUT` | 3 |  |
 | `HSE_IN` | 3 |  |
 | `HSE_OUT` | 3 |  |
-| `IA` | 3 |  |
-| `IB` | 3 |  |
-| `IC` | 3 |  |
 | `ID_STRAP0` | 3 |  |
 | `ID_STRAP1` | 3 |  |
 | `ID_STRAP2` | 3 |  |
 | `ID_STRAP3` | 3 |  |
 | `LSE_IN` | 3 |  |
 | `LSE_OUT` | 3 |  |
-| `OV_COMP` | 3 |  |
 | `PGOOD` | 3 |  |
 | `PWM1_A_HIGH_OUT` | 3 |  |
 | `PWM1_A_LOW_OUT` | 3 |  |
@@ -521,11 +525,6 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `USB_DM_CABLE` | 3 |  |
 | `USB_DP_CABLE` | 3 |  |
 | `UVLO` | 3 |  |
-| `VA` | 3 |  |
-| `VB` | 3 |  |
-| `VC` | 3 |  |
-| `VDC` | 3 |  |
-| `AUX_FAST_SENSE` | 2 |  |
 | `BOARD_ID1_SENSE` | 2 |  |
 | `BOARD_ID2_SENSE` | 2 |  |
 | `BST_3V3` | 2 |  |
@@ -553,6 +552,10 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `ETH_TXD0` | 2 |  |
 | `ETH_TXD1` | 2 |  |
 | `ETH_TX_EN` | 2 |  |
+| `FAST5_SENSE` | 2 |  |
+| `FAST6_SENSE` | 2 |  |
+| `FAST7_SENSE` | 2 |  |
+| `FAST8_SENSE` | 2 |  |
 | `GATE_ENABLE` | 2 |  |
 | `GATE_ENABLE_B` | 2 |  |
 | `LED_COMMS` | 2 |  |
@@ -601,23 +604,20 @@ requires that to stay true, so when the block lands the waiver has to go.
 | `SWCLK` | 2 |  |
 | `SWDIO` | 2 |  |
 | `SWO` | 2 |  |
-| `TRIP_IA_HIGH` | 2 |  |
-| `TRIP_IA_LOW` | 2 |  |
-| `TRIP_IB_HIGH` | 2 |  |
-| `TRIP_IB_LOW` | 2 |  |
-| `TRIP_IC_HIGH` | 2 |  |
-| `TRIP_IC_LOW` | 2 |  |
-| `TRIP_VDC_HIGH` | 2 |  |
+| `TRIP_FAST1_HIGH` | 2 |  |
+| `TRIP_FAST1_LOW` | 2 |  |
+| `TRIP_FAST2_HIGH` | 2 |  |
+| `TRIP_FAST2_LOW` | 2 |  |
+| `TRIP_FAST3_HIGH` | 2 |  |
+| `TRIP_FAST3_LOW` | 2 |  |
+| `TRIP_FAST4_HIGH` | 2 |  |
+| `TRIP_LEVEL_FAST4` | 2 |  |
 | `USB_CC1` | 2 |  |
 | `USB_CC2` | 2 |  |
 | `USB_DM` | 2 |  |
 | `USB_DP` | 2 |  |
-| `VA_SENSE` | 2 |  |
-| `VB_SENSE` | 2 |  |
 | `VCAP1` | 2 |  |
 | `VCAP2` | 2 |  |
-| `VC_SENSE` | 2 |  |
-| `VDC_TRIP` | 2 |  |
 | `VIN_FUSED` | 2 |  |
 | `VIN_RAW` | 2 |  |
 | `ENC_A` | 1 | pending |

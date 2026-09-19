@@ -16,8 +16,8 @@
 
 Vin in 0 DC 1
 Rsource in src @header.source_impedance:max@
-Rseries src pin @adc.ia.series.resistance:max@
-Cshunt pin 0 @adc.ia.shunt.capacitance:min@
+Rseries src pin @adc.fast1.series.resistance:max@
+Cshunt pin 0 @adc.fast1.shunt.capacitance:min@
 
 .model sampler SW(vt=0.5 vh=0 ron=1m roff=1g)
 Vgate gate 0 PWL(0 0 0.1n 1)

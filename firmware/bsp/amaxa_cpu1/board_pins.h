@@ -231,53 +231,53 @@
 #define PIN_FAULT2_N_PIN GPIO_PIN_3
 #define PIN_FAULT2_N_AF GPIO_AF3_TIM8
 
-/* IA: ADC1_INP2 on PF11, pin 49. simultaneous with IB */
-#define PIN_IA_PORT GPIOF
-#define PIN_IA_PIN GPIO_PIN_11
-#define PIN_IA_ADC ADC1
-#define PIN_IA_ADC_CHANNEL ADC_CHANNEL_2
+/* FAST1: ADC1_INP2 on PF11, pin 49. simultaneous with FAST2 */
+#define PIN_FAST1_PORT GPIOF
+#define PIN_FAST1_PIN GPIO_PIN_11
+#define PIN_FAST1_ADC ADC1
+#define PIN_FAST1_ADC_CHANNEL ADC_CHANNEL_2
 
-/* IB: ADC2_INP2 on PF13, pin 53 */
-#define PIN_IB_PORT GPIOF
-#define PIN_IB_PIN GPIO_PIN_13
-#define PIN_IB_ADC ADC2
-#define PIN_IB_ADC_CHANNEL ADC_CHANNEL_2
+/* FAST2: ADC2_INP2 on PF13, pin 53 */
+#define PIN_FAST2_PORT GPIOF
+#define PIN_FAST2_PIN GPIO_PIN_13
+#define PIN_FAST2_ADC ADC2
+#define PIN_FAST2_ADC_CHANNEL ADC_CHANNEL_2
 
-/* IC: ADC3_INP0 on PC2_C, pin 28. needs the PC2 analog switch closed */
-#define PIN_IC_PORT GPIOC
-#define PIN_IC_PIN GPIO_PIN_2
-#define PIN_IC_ADC ADC3
-#define PIN_IC_ADC_CHANNEL ADC_CHANNEL_0
+/* FAST3: ADC3_INP0 on PC2_C, pin 28. needs the PC2 analog switch closed */
+#define PIN_FAST3_PORT GPIOC
+#define PIN_FAST3_PIN GPIO_PIN_2
+#define PIN_FAST3_ADC ADC3
+#define PIN_FAST3_ADC_CHANNEL ADC_CHANNEL_0
 
-/* VDC: ADC1_INP3 on PA6, pin 42. simultaneous with VA */
-#define PIN_VDC_PORT GPIOA
-#define PIN_VDC_PIN GPIO_PIN_6
-#define PIN_VDC_ADC ADC1
-#define PIN_VDC_ADC_CHANNEL ADC_CHANNEL_3
+/* FAST4: ADC1_INP3 on PA6, pin 42. simultaneous with FAST5 */
+#define PIN_FAST4_PORT GPIOA
+#define PIN_FAST4_PIN GPIO_PIN_6
+#define PIN_FAST4_ADC ADC1
+#define PIN_FAST4_ADC_CHANNEL ADC_CHANNEL_3
 
-/* VA: ADC2_INP5 on PB1, pin 47 */
-#define PIN_VA_PORT GPIOB
-#define PIN_VA_PIN GPIO_PIN_1
-#define PIN_VA_ADC ADC2
-#define PIN_VA_ADC_CHANNEL ADC_CHANNEL_5
+/* FAST5: ADC2_INP5 on PB1, pin 47 */
+#define PIN_FAST5_PORT GPIOB
+#define PIN_FAST5_PIN GPIO_PIN_1
+#define PIN_FAST5_ADC ADC2
+#define PIN_FAST5_ADC_CHANNEL ADC_CHANNEL_5
 
-/* VB: ADC3_INP1 on PC3_C, pin 29. needs the PC3 analog switch closed */
-#define PIN_VB_PORT GPIOC
-#define PIN_VB_PIN GPIO_PIN_3
-#define PIN_VB_ADC ADC3
-#define PIN_VB_ADC_CHANNEL ADC_CHANNEL_1
+/* FAST6: ADC3_INP1 on PC3_C, pin 29. needs the PC3 analog switch closed */
+#define PIN_FAST6_PORT GPIOC
+#define PIN_FAST6_PIN GPIO_PIN_3
+#define PIN_FAST6_ADC ADC3
+#define PIN_FAST6_ADC_CHANNEL ADC_CHANNEL_1
 
-/* VC: ADC3_INP2 on PF9, pin 21 */
-#define PIN_VC_PORT GPIOF
-#define PIN_VC_PIN GPIO_PIN_9
-#define PIN_VC_ADC ADC3
-#define PIN_VC_ADC_CHANNEL ADC_CHANNEL_2
+/* FAST7: ADC3_INP2 on PF9, pin 21 */
+#define PIN_FAST7_PORT GPIOF
+#define PIN_FAST7_PIN GPIO_PIN_9
+#define PIN_FAST7_ADC ADC3
+#define PIN_FAST7_ADC_CHANNEL ADC_CHANNEL_2
 
-/* AUX_FAST: ADC3_INP3 on PF7, pin 19 */
-#define PIN_AUX_FAST_PORT GPIOF
-#define PIN_AUX_FAST_PIN GPIO_PIN_7
-#define PIN_AUX_FAST_ADC ADC3
-#define PIN_AUX_FAST_ADC_CHANNEL ADC_CHANNEL_3
+/* FAST8: ADC3_INP3 on PF7, pin 19 */
+#define PIN_FAST8_PORT GPIOF
+#define PIN_FAST8_PIN GPIO_PIN_7
+#define PIN_FAST8_ADC ADC3
+#define PIN_FAST8_ADC_CHANNEL ADC_CHANNEL_3
 
 /* SLOW1: ADC3_INP4 on PF5, pin 15 */
 #define PIN_SLOW1_PORT GPIOF
@@ -315,9 +315,9 @@
 #define PIN_BOARD_ID2_ADC ADC3
 #define PIN_BOARD_ID2_ADC_CHANNEL ADC_CHANNEL_9
 
-/* OV_COMP: COMP1_INP on PB2, pin 48. optional second over-voltage path */
-#define PIN_OV_COMP_PORT GPIOB
-#define PIN_OV_COMP_PIN GPIO_PIN_2
+/* COMP_FAST4: COMP1_INP on PB2, pin 48. optional second over-voltage path */
+#define PIN_COMP_FAST4_PORT GPIOB
+#define PIN_COMP_FAST4_PIN GPIO_PIN_2
 
 /* DAC_TEST: DAC1_OUT1 on PA4, pin 40. resolver excitation or analog test */
 #define PIN_DAC_TEST_PORT GPIOA

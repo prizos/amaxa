@@ -96,7 +96,7 @@ def test_every_phase_current_is_watched_in_both_directions(design, pad_net, comp
                 watched.setdefault(signal, []).append(rising)
 
     missing = []
-    for phase in ("IA_SENSE", "IB_SENSE", "IC_SENSE"):
+    for phase in ("FAST1_SENSE", "FAST2_SENSE", "FAST3_SENSE"):
         senses = sorted(watched.get(phase, []))
         if senses != [False, True]:
             missing.append(
@@ -104,8 +104,8 @@ def test_every_phase_current_is_watched_in_both_directions(design, pad_net, comp
                 f"{'both the same way round' if len(senses) == 2 else 'watching one direction'}"
             )
     assert not missing, "Phase currents:\n" + "\n".join(missing)
-    assert watched.get("VDC_SENSE") == [True], (
-        f"the DC link is watched by {watched.get('VDC_SENSE')}, and it needs one "
+    assert watched.get("FAST4_SENSE") == [True], (
+        f"the DC link is watched by {watched.get('FAST4_SENSE')}, and it needs one "
         "comparator that trips when it rises"
     )
 
@@ -275,7 +275,7 @@ def test_the_dac_resolves_finer_than_the_comparator_can_use(spec, pad_net):
     """
     bits, _ = spec(DAC, "resolution_bits")
     _, (_, full_scale) = _supply_of(pad_net, DAC, "1", spec)
-    offset = spec("trip.ia_high", "input_offset_voltage")[0]
+    offset = spec("trip.fast1_high", "input_offset_voltage")[0]
     step = full_scale / 2 ** bits
     assert step < offset, (
         f"a DAC step is {step * 1e3:.2f} mV and the comparator's offset is "

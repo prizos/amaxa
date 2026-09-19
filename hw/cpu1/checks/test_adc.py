@@ -240,7 +240,7 @@ def test_the_comparators_see_the_signal_before_the_filter(design, pad_net, netwo
 
 # The channels the control loop reads every PWM cycle, as the pin map names
 # them. Everything else on the connector is housekeeping.
-_FAST = {"IA", "IB", "IC", "VDC", "VA", "VB", "VC", "AUX_FAST", "OV_COMP"}
+_FAST = {"FAST1", "FAST2", "FAST3", "FAST4", "FAST5", "FAST6", "FAST7", "FAST8", "COMP_FAST4"}
 
 
 @pytest.fixture(scope="module")

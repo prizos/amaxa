@@ -18,9 +18,10 @@ power board to connect to.
 Seventeen signals and thirteen grounds, laid out by the same generator the
 digital header uses — two signals, then a ground, all the way along.
 
-Fourteen of the seventeen come *in*: three phase currents, the DC link, three
-phase voltages, an auxiliary fast channel, four slow ones and two board-identity
-divider taps. Every one of them is **raw**. The comparators watch these nets
+Fourteen of the seventeen come *in*: eight fast channels, four slow ones and
+two board-identity divider taps. What each one measures is the power board's
+business — this board knows only how fast it has to be read and whether a
+comparator watches it. Every one of them is **raw**. The comparators watch these nets
 directly and the anti-alias filter between each one and the MCU's own ADC pin is
 a later block, because a filter slow enough to be worth having on a 1 MSPS ADC
 costs hundreds of nanoseconds and the trip budget is fifty.
