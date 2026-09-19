@@ -136,9 +136,8 @@ CAVEATS = [
 demands every connection: it reports no unconnected items and no violations.
 Every net on this board is drawn.
 
-That is a statement about copper and nothing else. The parts still waiting on a
-person are listed in `checks/config.py`, the silkscreen still overlaps in the
-dense passive fields, and nothing here has been built.
+That is a statement about copper and nothing else. <<WAITING>>; the silkscreen
+still overlaps in the dense passive fields, and nothing here has been built.
 """),
     ("The renders confirm nothing electrical", """
 No 3D model library is installed in the environment these were generated in, so
@@ -146,8 +145,8 @@ parts appear as their bare land patterns. More importantly, a footprint renders
 identically whether or not its pinout is right: the P-FET whose pin order came
 from an LCSC symbol looks correct in a render either way. The renders are good
 for spacing, connector access and silkscreen legibility, and for nothing else.
-The parts still waiting on a person are listed in `checks/config.py`, and not
-one of them can be settled from a picture.
+<<WAITING>> — and nothing of that kind could be settled from a picture
+anyway.
 """),
     ("The silkscreen is placed, not drawn", """
 Every reference designator's position is searched for rather than written

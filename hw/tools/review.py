@@ -97,6 +97,12 @@ def details(summary: str, body: str) -> str:
 def main(board: str) -> None:
     board_dir = HW_DIR / board
     review_dir = board_dir / "review"
+    # A board's prose is what makes its review document worth reading, and a
+    # board without any does not get a generated one. Saying so beats the
+    # traceback `make review BOARD=led12` used to end in.
+    if not (board_dir / "review.py").is_file():
+        print(f"{board} has no review.py, so there is no review document to write")
+        return
     design = json.loads((board_dir / "build" / "design.json").read_text())
     pcb_text = (board_dir / "elec/layout/default/default.kicad_pcb").read_text()
     prose = load_module(board_dir / "review.py", f"{board}_review")
@@ -236,9 +242,33 @@ def main(board: str) -> None:
     ) + "\n")
 
     # --- caveats -------------------------------------------------------------
+    #
+    # The prose says what is still waiting on a person. That is a list in the
+    # board's config, so the sentence is filled from it rather than written:
+    # a caveat that goes on claiming open questions after they close is worse
+    # than no caveat, because a reader believes it and goes looking.
+    config = load_module(board_dir / "checks" / "config.py", f"{board}_review_config")
+    waiting = sorted(
+        {**getattr(config, "NEEDS_A_HUMAN_EYE", {}),
+         **getattr(config, "WAITING_ON_A_DECISION", {})}
+    )
+    if waiting:
+        standing = (
+            "The parts still waiting on a person — "
+            + ", ".join(f"`{name}`" for name in waiting)
+            + " — are listed in `checks/config.py`"
+        )
+    else:
+        standing = (
+            "No part is waiting on a person: `NEEDS_A_HUMAN_EYE` and "
+            "`WAITING_ON_A_DECISION` in `checks/config.py` are both empty, and "
+            "every claim they used to hold is settled by a manufacturer's own "
+            "figure committed under `parts/`"
+        )
+
     out.append("## What these pictures are not\n")
     for heading, text in prose.CAVEATS:
-        out.append(f"**{heading}.** {text.strip()}\n")
+        out.append(f"**{heading}.** {text.strip().replace('<<WAITING>>', standing)}\n")
 
     out.append(
         "---\n\n"
