@@ -21,8 +21,8 @@ will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)); the review lists them.
 
 | | |
 |---|---|
-| Stackup | PCBWay's published regular 4-layer build: 1 oz copper throughout, 7628 prepreg, 1.03 mm core, 1.51 mm finished |
-| Layers | F.Cu signal, In1.Cu solid ground, In2.Cu supply islands, B.Cu signal |
+| Stackup | 6 layers, 1 oz copper throughout. The outer prepreg is PCBWay's published 7628 build, 0.1855 mm — unchanged from the 4-layer spin, so the controlled-impedance pairs are unchanged. The inner cores and middle prepreg are **provisional**: see `layout.py` |
+| Layers | F.Cu signal, In1.Cu ground, In2.Cu supply islands, In3.Cu signal, In4.Cu ground, B.Cu signal |
 | Size | 130 × 110 mm — grown from 100 × 80 to hold the Ethernet jack |
 | MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at JLCPCB** on 2026-09-17; see [its review note](parts/LQFP144/LQFP144.md) |
 
@@ -97,11 +97,9 @@ could not be fetched and has not been read.
 
 ## Still to come
 
-- Silkscreen that clears the crystals and vias — warnings today, not errors.
-- VREF+ and its external 3.0 V reference, with a 9–36 V input and a 100 V-class
-  buck.
-- The hardware trip chain: external comparators, a latch, and PWM buffers that
-  stay off until firmware deliberately enables them.
-- The ADC input networks.
-- USB, CAN FD, RS-485 and Ethernet.
-- 2.54 mm headers to the power board.
+- The eight motion-feedback pins reach the digital connector, which is why this
+  board is six layers; see `docs/research/16-cpu1-motion-feedback.md` for what
+  four could not do.
+- The ordering codes still marked **unverified**, and the pinouts in
+  `checks/config.py` that need a person with a datasheet open.
+- Confirming the inner stackup with PCBWay.

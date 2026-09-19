@@ -11,6 +11,7 @@ Datasheets: ST's *USBLC6-2*, Doc ID 11265 Rev 5 (October 2011), and the
 STM32H743xI pin table for what a `FT_u` pin may see.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -364,14 +365,23 @@ def test_the_pair_arrives_together(spec, stack, lengths, pair_tracks):
     )
 
 
-def test_the_pair_runs_over_the_plane_that_returns_it(board_dir, pair_tracks):
+PAIR_NETS = ("USB_DP", "USB_DM")
+
+
+def test_the_pair_runs_over_the_plane_that_returns_it(board_dir, pcb_text):
     """
-    The layer the pair is on is the one next to the ground plane.
+    The layer every pair is on has an unbroken ground plane next to it.
 
     A differential pair's return current runs under it, and it can only do that
-    where there is an unbroken plane to run in. On this stackup that is F.Cu,
-    with In1.Cu beneath it; the other outer layer faces the supply islands,
-    which are neither unbroken nor at the same potential as the return.
+    where there is a plane to run in. Not any plane: the supply islands are
+    neither unbroken nor at the return's potential, so a pair over those has
+    nowhere for its return to go and radiates the difference.
+
+    Written as "next to some ground plane" rather than "next to the ground
+    plane" because this board has two of them - one under each outer layer -
+    and had one when it was four layers. A check that counts planes reads as a
+    fact about the stackup when it is really an assumption about it, and that
+    assumption expired the moment a layer was added.
     """
     import sys
 
@@ -380,15 +390,33 @@ def test_the_pair_runs_over_the_plane_that_returns_it(board_dir, pair_tracks):
 
     description = load_source(board_dir / "layout.py", "cpu1_layout_plane")
     planes = getattr(description, "PLANES", None) or [description.PLANE]
-    ground = [plane for plane in planes if plane["net"] == GROUND]
-    assert len(ground) == 1, f"{len(ground)} ground planes; this check assumes one"
+    ground = [plane["layer"] for plane in planes if plane["net"] == GROUND]
+    assert ground, "this board has no ground plane for a pair's return to run in"
 
-    layers = description.BOARD["copper_layers"] if "copper_layers" in description.BOARD else None
-    order = ["F.Cu"] + [f"In{n}.Cu" for n in range(1, (layers or 4) - 1)] + ["B.Cu"]
-    beside = order[order.index(ground[0]["layer"]) - 1], order[
-        min(order.index(ground[0]["layer"]) + 1, len(order) - 1)
-    ]
-    assert "F.Cu" in beside, (
-        f"the ground plane is on {ground[0]['layer']}, which is not next to the "
-        f"layer the pair is routed on"
+    count = description.BOARD.get("copper_layers", 4)
+    order = ["F.Cu"] + [f"In{n}.Cu" for n in range(1, count - 1)] + ["B.Cu"]
+
+    def backed(layer: str) -> bool:
+        at = order.index(layer)
+        return any(order[n] in ground for n in (at - 1, at + 1) if 0 <= n < len(order))
+
+    # Which layers the pairs are actually on, read off the board rather than
+    # assumed: a pair that got moved to the other side should fail this, not
+    # pass it because the check was written when it was on top.
+    numbers = {
+        number for number, name in re.findall(r'\n\t\(net (\d+) "([^"]*)"\)', pcb_text)
+        if name in PAIR_NETS
+    }
+    carrying = sorted({
+        re.search(r'\(layer "([^"]+)"\)', block).group(1)
+        for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text)
+        if re.search(r"\(net (\d+)\)", block).group(1) in numbers
+    })
+    assert carrying, "no pair segments on the board"
+
+    unbacked = [layer for layer in carrying if not backed(layer)]
+    assert not unbacked, (
+        f"pairs run on {unbacked}, and no ground plane is next to "
+        f"{'that layer' if len(unbacked) == 1 else 'those layers'}. "
+        f"Ground is on {ground}."
     )

@@ -208,15 +208,38 @@ def test_every_layer_change_has_a_way_back_for_its_return_current(
     )
 
 
-def test_no_track_crosses_the_edge_of_a_supply_island(pcb_text, net_names, plane_outlines):
-    """
-    No signal on the back layer crosses from over one supply island to over
-    another.
+@pytest.fixture(scope="module")
+def plane_layers(board_dir) -> dict:
+    """Which copper layer each plane is on, and the board's layer order."""
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from mcu_pins import load_source
 
-    The back layer's reference is whatever inner copper lies beneath it, and
-    that changes at the island's edge. A track that crosses it hands its return
-    current from the 3V3 pour to the 5 V island halfway along, and those two are
-    only joined where a capacitor joins them.
+    description = load_source(board_dir / "layout.py", "cpu1_layout_layers")
+    planes = getattr(description, "PLANES", None) or [description.PLANE]
+    count = description.BOARD.get("copper_layers", 4)
+    order = ["F.Cu"] + [f"In{n}.Cu" for n in range(1, count - 1)] + ["B.Cu"]
+    return {"order": order, "planes": {plane["layer"] for plane in planes},
+            "island": next(p["layer"] for p in planes if p["net"] == "5V")}
+
+
+def test_no_signal_beside_a_supply_island_crosses_its_edge(
+    pcb_text, net_names, plane_outlines, plane_layers
+):
+    """
+    No signal on a layer the supply islands reference crosses from over one
+    island to over another.
+
+    A signal's return runs in the nearest plane, and at an island's edge that
+    plane changes. A track crossing it hands its return from the 3V3 pour to
+    the 5 V island halfway along, and those two are joined only where a
+    capacitor joins them.
+
+    *Which* layer that is comes from the stackup, not from this file. It used
+    to be B.Cu, because on four layers the back faced the islands. On six it
+    faces solid ground and the layer at risk is the signal layer on the other
+    side of the islands - which is the one the motion feedback runs on. A check
+    that names a layer is a check that silently stops applying when the
+    stackup changes, and this one did.
 
     The plane nets themselves are exempt: a 5 V track leaving the 5 V island is
     the island's own connection to the rest of the board, not a signal losing
@@ -225,13 +248,25 @@ def test_no_track_crosses_the_edge_of_a_supply_island(pcb_text, net_names, plane
     island = plane_outlines.get("5V")
     assert island, "this board is meant to have a 5 V island"
 
+    order, planes = plane_layers["order"], plane_layers["planes"]
+    at = order.index(plane_layers["island"])
+    facing = {
+        order[n] for n in (at - 1, at + 1)
+        if 0 <= n < len(order) and order[n] not in planes
+    }
+    assert facing, (
+        f"the islands are on {plane_layers['island']} with a plane on both "
+        "sides, so no signal references them - which makes this check vacuous "
+        "rather than passing"
+    )
+
     crossing = []
     for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
         layer = re.search(r'\(layer "([^"]+)"\)', block)
         net = re.search(r"\(net (\d+)\)", block)
         start = re.search(r"\(start ([-\d.]+) ([-\d.]+)\)", block)
         end = re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", block)
-        if not (layer and net and start and end) or layer.group(1) != "B.Cu":
+        if not (layer and net and start and end) or layer.group(1) not in facing:
             continue
         name = net_names.get(net.group(1), "")
         if name in PLANES:
@@ -239,10 +274,11 @@ def test_no_track_crosses_the_edge_of_a_supply_island(pcb_text, net_names, plane
         a = (float(start.group(1)), float(start.group(2)))
         b = (float(end.group(1)), float(end.group(2)))
         if _inside(island, a) != _inside(island, b):
-            crossing.append(f"  {name} crosses the island edge between "
-                            f"({a[0]:g}, {a[1]:g}) and ({b[0]:g}, {b[1]:g})")
+            crossing.append(f"  {name} on {layer.group(1)} crosses the island edge "
+                            f"between ({a[0]:g}, {a[1]:g}) and ({b[0]:g}, {b[1]:g})")
     assert not crossing, (
-        "Back-layer tracks changing what they are referenced to:\n" + "\n".join(crossing)
+        f"Tracks on {sorted(facing)} changing what they are referenced to:\n"
+        + "\n".join(crossing)
     )
 
 

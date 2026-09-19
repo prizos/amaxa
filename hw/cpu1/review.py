@@ -83,10 +83,22 @@ LAYERS: dict[str, str] = {
         "drawn to an impedance rather than a width."
     ),
     "In1_Cu": (
-        "One solid ground plane, notched at the top-left corner where the "
-        "Ethernet jack's cable end sits. **No AGND/DGND split anywhere on this "
-        "board** - analog is kept together by placement instead, which is a "
-        "decision recorded in the plan rather than a habit."
+        "Ground, solid, notched at the top-left corner where the Ethernet "
+        "jack's cable end sits. **No AGND/DGND split anywhere on this board** - "
+        "analog is kept together by placement instead, which is a decision "
+        "recorded in the plan rather than a habit. This is the plane the "
+        "impedance-controlled pairs on F.Cu are referenced to."
+    ),
+    "In3_Cu": (
+        "The inner signal layer, and the reason this board is six layers "
+        "rather than four. On four, every crossing was a via and there was "
+        "nowhere left to put one."
+    ),
+    "In4_Cu": (
+        "The second ground plane. B.Cu used to face the supply islands, so a "
+        "track on it that crossed an island's edge handed its return current "
+        "from one plane to another halfway along. Now both outer layers sit "
+        "across a prepreg from solid ground."
     ),
     "In2_Cu": (
         "Power islands. 3V3 fills most of the layer; the 5 V island inside it "

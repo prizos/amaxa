@@ -52,16 +52,48 @@ BOARD = {
     # crowding the analog front end.
     "size": (130.0, 110.0),      # provisional
     "corner_radius": 3.0,
-    "thickness": 1.51,
-    "copper_layers": 4,
+    # Six layers, not four. Four was chosen before this board had an Ethernet
+    # jack, a 144-pin package and 191 nets on it, and it cost: the RMII took
+    # two attempts and ended up crossing under the die, and eight reserved
+    # signals could not be routed at all - four usable via positions where
+    # eight were needed. With one signal layer on top and one underneath,
+    # every crossing is a via, and a via wants 0.65 mm of hole-to-hole room
+    # this board does not have. PCBWay builds 1 to 14 layers on the same
+    # standard process, with the same 0.15 mm drill and 0.1 mm track and
+    # spacing, so nothing in fab/pcbway.kicad_dru changes.
+    #
+    # F.Cu / In1 ground / In2 supply islands / In3 signal / In4 ground / B.Cu.
+    # Both outer layers now sit across a prepreg from solid ground, which is
+    # what the board was missing: B.Cu used to be referenced to the supply
+    # islands, and a track crossing an island's edge changed what its return
+    # current flowed in.
+    #
+    # The outer prepreg is unchanged - PCBWay's published 7628 build, 0.1960
+    # pressed to 0.1855 - and that is deliberate. Every impedance-controlled
+    # track on this board is on F.Cu over In1, so keeping that one dielectric
+    # fixed keeps the USB and Ethernet pair geometry exactly as it was, and
+    # `pair_geometry` solves it from these numbers rather than from a width
+    # someone remembered.
+    #
+    # NEEDS CONFIRMING: the two 0.36 mm cores and the middle prepreg are a
+    # standard construction on the same materials, not PCBWay's published
+    # 6-layer table - that table is behind a page this environment could not
+    # fetch. They set the finished thickness and nothing else: no track on an
+    # inner layer is impedance-controlled, so getting them wrong costs a
+    # tenth of a millimetre of board, not a transmission line. Confirm the
+    # build with PCBWay before ordering.
+    "thickness": 1.49,
+    "copper_layers": 6,
     "copper_thickness": 0.035,
     "inner_copper_thickness": 0.035,
     "stack": [
-        {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},
-        {"type": "core", "thickness": 1.03, "epsilon_r": 4.6},
-        {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},
+        {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},   # F  - In1
+        {"type": "core", "thickness": 0.36, "epsilon_r": 4.6},         # In1 - In2
+        {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},   # In2 - In3
+        {"type": "core", "thickness": 0.36, "epsilon_r": 4.6},         # In3 - In4
+        {"type": "prepreg", "thickness": 0.1855, "epsilon_r": 4.74},   # In4 - B
     ],
-    "core_thickness": 1.03,
+    "core_thickness": 0.36,
     "finish": "ENIG",
     "mask_colour": "Black",
     "pour_inset": 0.5,
@@ -793,6 +825,18 @@ PLANES = [
         "layer": "In2.Cu",
         "outline": _island_outline(),
         "priority": 1,
+        "pad_clearance": 0.3,
+        "min_thickness": 0.25,
+        "thermal_gap": 0.3,
+        "thermal_bridge": 0.4,
+    },
+    # The second ground plane, under B.Cu. This is the layer six buys: the
+    # back was referenced to the supply islands before, and every track on it
+    # that crossed an island's edge handed its return current across.
+    {
+        "net": "GND",
+        "layer": "In4.Cu",
+        "outline": _pour_outline(),
         "pad_clearance": 0.3,
         "min_thickness": 0.25,
         "thermal_gap": 0.3,
