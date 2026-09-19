@@ -880,11 +880,23 @@ def trip_comparators(v3v3, gnd, nets) -> None:
     Schottky of its own - the same arrangement the fault lines use, for the same
     reason: seven sources share one node without sharing a net.
 
-    That polarity is also what makes an unprogrammed board safe. The DAC comes
-    out of reset at zero, so every high-side threshold is zero, so every phase
-    current sitting at its mid-scale idle is already above it and the board
-    trips the moment it powers up. The low-side comparators do not trip at zero,
-    and do not need to: nothing can run while the other three are asserting.
+    That polarity is also what makes an unprogrammed board safe. The DAC
+    **powers up** at zero - its EEPROM ships that way, datasheet Table 4-2,
+    and the crop is committed at parts/MSOP10/evidence/ - so every high-side
+    threshold is zero, every phase current sitting at its mid-scale idle is
+    already above it, and the board trips the moment it powers up. The
+    low-side comparators do not trip at zero and do not need to: nothing can
+    run while the other three are asserting.
+
+    **Power-up, not reset.** The MCP4728 has no reset pin, it sits on 3V3
+    which does not drop when NRST is asserted, and its only other reset path
+    is an I2C general-call that needs the bus working. After a watchdog reset
+    or a debugger halt the thresholds are whatever the firmware that just
+    stopped last wrote them to - possibly a half-finished multi-channel
+    write. The latch is still preset in every one of those cases, so the
+    board still comes up with its outputs off; what does not survive the
+    reset is the *second* layer of the argument. A hung I2C bus leaves the
+    thresholds frozen with nothing on the board able to power-cycle U15.
     """
     dac = part(parts.THRESHOLD_DAC, "trip.dac", "U15")
     v3v3 += dac["VDD"]

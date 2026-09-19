@@ -243,7 +243,7 @@
 #define PIN_FAST2_ADC ADC2
 #define PIN_FAST2_ADC_CHANNEL ADC_CHANNEL_2
 
-/* FAST3: ADC3_INP0 on PC2_C, pin 28. needs the PC2 analog switch closed */
+/* FAST3: ADC3_INP0 on PC2_C, pin 28. ADC3 direct channel; see the docstring on the analog switch */
 #define PIN_FAST3_PORT GPIOC
 #define PIN_FAST3_PIN GPIO_PIN_2
 #define PIN_FAST3_ADC ADC3
@@ -261,7 +261,7 @@
 #define PIN_FAST5_ADC ADC2
 #define PIN_FAST5_ADC_CHANNEL ADC_CHANNEL_5
 
-/* FAST6: ADC3_INP1 on PC3_C, pin 29. needs the PC3 analog switch closed */
+/* FAST6: ADC3_INP1 on PC3_C, pin 29. ADC3 direct channel; see the docstring on the analog switch */
 #define PIN_FAST6_PORT GPIOC
 #define PIN_FAST6_PIN GPIO_PIN_3
 #define PIN_FAST6_ADC ADC3

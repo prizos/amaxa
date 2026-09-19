@@ -23,6 +23,25 @@ Ia and Ib are converted at the same instant, as are Vdc and Va: ADC1 and ADC2
 locked together in dual simultaneous mode. Ic sits on ADC3, which shares the PWM
 trigger but is not locked to it; three phase currents sum to zero, so Ic is the
 one that can be reconstructed from the other two if its skew turns out to matter.
+
+**Two things about ADC3 that firmware has to know, and the vendored data
+states outright.**
+
+*It is in a different power domain.* `STM32H743ZITx.xml` gives ADC1 and ADC2
+`PowerDomain="D2"` and ADC3 `PowerDomain="D3"`. D3 peripherals are served by
+BDMA, which reaches only D3's SRAM4 - so a control loop that arms one DMA
+buffer in AXI SRAM or DTCM for all sixteen results gets ADC1 and ADC2 and
+silently nothing from ADC3. Nine of this board's channels are on ADC3.
+
+*`PC2_C` and `PC3_C` are the only pins bonded in LQFP144* - plain PC2 and PC3
+are not - and each carries `ADC3_INP0`/`INP1` **plus** the PCx cell's digital
+functions, which it reaches through the package's analog switch. Which way
+that switch has to be set to use the direct ADC3 channel is an RM0433 and
+DS12110 question, and neither document is vendored here, so **this table does
+not state it**: it used to say "needs the PC2 analog switch closed", which was
+a load-bearing claim about the silicon with nothing behind it, and it was
+copied verbatim into the firmware header. Read `SYSCFG_PMCR.PC2SO`/`PC3SO` in
+the reference manual before configuring these two.
 """
 
 import sys
@@ -103,10 +122,10 @@ PINS = [
     # --- analog ------------------------------------------------------------------
     Pin("PF11", "ADC1_INP2", "FAST1", note="simultaneous with FAST2"),
     Pin("PF13", "ADC2_INP2", "FAST2"),
-    Pin("PC2_C", "ADC3_INP0", "FAST3", note="needs the PC2 analog switch closed"),
+    Pin("PC2_C", "ADC3_INP0", "FAST3", note="ADC3 direct channel; see the docstring on the analog switch"),
     Pin("PA6", "ADC1_INP3", "FAST4", note="simultaneous with FAST5"),
     Pin("PB1", "ADC2_INP5", "FAST5"),
-    Pin("PC3_C", "ADC3_INP1", "FAST6", note="needs the PC3 analog switch closed"),
+    Pin("PC3_C", "ADC3_INP1", "FAST6", note="ADC3 direct channel; see the docstring on the analog switch"),
     Pin("PF9", "ADC3_INP2", "FAST7"),
     Pin("PF7", "ADC3_INP3", "FAST8"),
     Pin("PF5", "ADC3_INP4", "SLOW1"),
@@ -134,6 +153,14 @@ PINS = [
     Pin("PD12", "TIM4_CH1", "ENC_A"),
     Pin("PD13", "TIM4_CH2", "ENC_B"),
     Pin("PD14", "TIM4_CH3", "ENC_Z"),
+    # PB4 is NJTRST, and it is the only pin in this table that comes out of
+    # reset in a JTAG alternate function without being meant as a debug pin -
+    # PA13, PA14 and PB3 are. So from power-on until firmware selects TIM3_CH1
+    # this pin is NJTRST with its internal pull-up, and HALL_1 reads high
+    # whatever the rotor is doing: firmware must not sample the Hall lines
+    # before it has configured them. Selecting TIM3_CH1 also ends any chance
+    # of debugging this part over JTAG, which costs nothing here because the
+    # board fits a Tag-Connect SWD footprint and no JTAG one.
     Pin("PB4", "TIM3_CH1", "HALL_1"),
     Pin("PB5", "TIM3_CH2", "HALL_2"),
     Pin("PB0", "TIM3_CH3", "HALL_3"),

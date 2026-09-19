@@ -12,6 +12,7 @@ encrypted; `parts/QFN24/QFN24.md` records how it was read.
 """
 
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -447,7 +448,9 @@ def test_the_pairs_arrive_together_enough(spec, stack, lengths, pcb_text):
         )
 
 
-def test_the_centre_taps_sit_where_the_transmitter_can_use_them(spec, pads_of, design):
+def test_the_centre_taps_sit_where_the_transmitter_can_use_them(
+    spec, pads_of, design, pcb_text
+):
     """
     Both transformer centre taps on a rail the magnetics are specified for,
     each with its own bypass.
@@ -457,9 +460,19 @@ def test_the_centre_taps_sit_where_the_transmitter_can_use_them(spec, pads_of, d
     what a voltage-mode PHY wants, give a transmitter with nothing to drive
     against and a link that never comes up.
 
-    Each tap gets its own capacitor because the two windings switch at
-    different moments; one shared bypass puts the transmit return through the
-    receive winding's tap.
+    Each tap needs a capacitor between that rail and ground close to it,
+    because the transmit current comes out of the rail at the tap and has to
+    get back to ground somewhere near, and every millimetre of that loop is
+    common-mode current in the plane.
+
+    **"Its own" used to mean a name.** The check counted parts called
+    `eth.tap_bypass*` on the rail, so two capacitors at the far corner of the
+    board satisfied it and renaming any other decoupling capacitor satisfied
+    it too. Each tap is now matched to a *distinct* capacitor by distance on
+    the placed board, and any rail-to-ground capacitor counts - because on
+    this board the taps sit on the 3V3 plane, and a plane does not care which
+    capacitor is called what. The two dedicated parts are the nearest two;
+    the point of the check is that something is there, not what it is named.
     """
     low, high = spec(PHY, "magnetics_supply_voltage")
     by_name = {}
@@ -476,11 +489,49 @@ def test_the_centre_taps_sit_where_the_transmitter_can_use_them(spec, pads_of, d
         )
 
     rail = sorted(set(taps.values()))[0]
-    bypasses = [
-        address for address, _ in design["nets"][rail]
-        if address.startswith("eth.tap_bypass")
+
+    placement, tap_at = {}, {}
+    for block in pcb_text.split("\n\t(footprint ")[1:]:
+        address = re.search(r'\(property "address" "([^"]+)"', block)
+        at = re.search(r"\n\t\t\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)", block)
+        if not (address and at):
+            continue
+        ox, oy = float(at.group(1)), float(at.group(2))
+        angle = math.radians(float(at.group(3) or 0))
+        placement[address.group(1)] = (ox, oy)
+        if address.group(1) != JACK:
+            continue
+        for m in re.finditer(r'\(pad "([^"]+)"[^\n]*\n\s*\(at ([-\d.]+) ([-\d.]+)', block):
+            px, py = float(m.group(2)), float(m.group(3))
+            tap_at[m.group(1)] = (ox + px * math.cos(angle) + py * math.sin(angle),
+                                  oy - px * math.sin(angle) + py * math.cos(angle))
+
+    candidates = [
+        address for address, part in design["parts"].items()
+        if part["symbol"] == "Device:C"
+        and {rail, GROUND} <= set(pads_of[address].values())
+        and address in placement
     ]
-    assert len(bypasses) == 2, f"{len(bypasses)} bypasses for two centre taps"
+    assert len(candidates) >= 2, (
+        f"{len(candidates)} capacitors tie {rail} to ground near the jack"
+    )
+
+    # Greedy nearest assignment: each tap takes the closest capacitor not
+    # already spoken for. The jack's own body is what sets the distance - its
+    # outline runs from y -55 to -32.7 and the taps are inside it - so this
+    # asks for the nearest two rather than for a figure someone picked.
+    taken, worst = set(), 0.0
+    for pad in sorted(taps):
+        here = tap_at[pad]
+        near = min((a for a in candidates if a not in taken),
+                   key=lambda a: math.dist(here, placement[a]))
+        taken.add(near)
+        worst = max(worst, math.dist(here, placement[near]))
+    assert len(taken) == 2, "the two centre taps share one bypass"
+    assert worst < 10.0, (
+        f"the further centre tap is {worst:.1f} mm from its bypass; the jack "
+        "is 22 mm deep and everything closer than that is inside its outline"
+    )
 
 
 def test_the_screen_and_the_termination_reach_ground(pads_of):
