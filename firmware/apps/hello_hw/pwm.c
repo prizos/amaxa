@@ -67,7 +67,7 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim)
         return;
     }
     __HAL_RCC_TIM1_CLK_ENABLE();
-    __HAL_RCC_GPIOE_CLK_ENABLE();
+    hw_enable_port_clock(BOARD_PWM_PORT);
 
     /* Weak pull-downs hold the gate signals low whenever the pins are not
      * driven (reset, reprogramming). A real power board adds stronger ones. */

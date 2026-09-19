@@ -18,6 +18,18 @@ enum hw_led { HW_LED_GREEN, HW_LED_YELLOW, HW_LED_RED };
  * Returns 0, or a negative step number; on failure the chip keeps running on
  * whatever clock is active (HSI after reset), so the console still works. */
 int hw_init_clocks(void);
+/* Turn on the AHB4 clock for whichever GPIO port this is.
+ *
+ * A gated port is not an error: HAL_GPIO_Init and HAL_GPIO_WritePin simply do
+ * nothing, so the pin stays an input and the board looks alive while the
+ * signal never moves. That is how this firmware drove cpu1's fault and comms
+ * LEDs into GPIOG for a while with the port switched off - the ports enabled
+ * here were the NUCLEO's, and cpu1 does not use the same ones.
+ *
+ * So no caller names a port: they pass the port the *board header* gives them,
+ * and moving a signal to another port cannot leave its clock behind. */
+void hw_enable_port_clock(GPIO_TypeDef *port);
+
 void hw_init_gpio(void);
 void hw_init_console(void);
 void hw_init_cycle_counter(void);

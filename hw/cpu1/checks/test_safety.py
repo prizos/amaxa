@@ -142,7 +142,7 @@ def test_every_buffered_output_has_a_series_resistor_and_a_pull_down(
             continue
         resistor, far = series[0]
         low, high = spec(resistor, "resistance")
-        if not 22 <= low and high <= 47:
+        if not 22 <= low <= high <= 47:
             problems.append(f"  {resistor}: {low:g}-{high:g} ohm, not a damping resistor")
         pull_downs = [
             (a, n) for a, n in _through_resistor(design, pad_net, far) if n == "GND"

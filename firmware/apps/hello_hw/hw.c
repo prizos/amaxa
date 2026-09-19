@@ -55,11 +55,39 @@ uint32_t hw_cycles_to_us(uint32_t cycles)
 /* LEDs and button                                                           */
 /* ------------------------------------------------------------------------- */
 
+void hw_enable_port_clock(GPIO_TypeDef *port)
+{
+    if (port == GPIOA) {
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+    } else if (port == GPIOB) {
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+    } else if (port == GPIOC) {
+        __HAL_RCC_GPIOC_CLK_ENABLE();
+    } else if (port == GPIOD) {
+        __HAL_RCC_GPIOD_CLK_ENABLE();
+    } else if (port == GPIOE) {
+        __HAL_RCC_GPIOE_CLK_ENABLE();
+    } else if (port == GPIOF) {
+        __HAL_RCC_GPIOF_CLK_ENABLE();
+    } else if (port == GPIOG) {
+        __HAL_RCC_GPIOG_CLK_ENABLE();
+    } else if (port == GPIOH) {
+        __HAL_RCC_GPIOH_CLK_ENABLE();
+    } else if (port == GPIOI) {
+        __HAL_RCC_GPIOI_CLK_ENABLE();
+    } else if (port == GPIOJ) {
+        __HAL_RCC_GPIOJ_CLK_ENABLE();
+    } else if (port == GPIOK) {
+        __HAL_RCC_GPIOK_CLK_ENABLE();
+    }
+}
+
 void hw_init_gpio(void)
 {
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    __HAL_RCC_GPIOE_CLK_ENABLE();
+    for (size_t i = 0; i < ARRAY_SIZE(leds); i++) {
+        hw_enable_port_clock(leds[i].port);
+    }
+    hw_enable_port_clock(BOARD_BUTTON_PORT);
 
     for (size_t i = 0; i < ARRAY_SIZE(leds); i++) {
         HAL_GPIO_WritePin(leds[i].port, leds[i].pin, GPIO_PIN_RESET);
@@ -123,7 +151,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
         return;
     }
     __HAL_RCC_USART3_CLK_ENABLE();
-    __HAL_RCC_GPIOD_CLK_ENABLE();
+    hw_enable_port_clock(BOARD_VCP_PORT);
     GPIO_InitTypeDef pins = {
         .Pin = BOARD_VCP_TX_PIN | BOARD_VCP_RX_PIN,
         .Mode = GPIO_MODE_AF_PP,

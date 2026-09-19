@@ -59,21 +59,20 @@ def test_every_design_intent_is_read_by_something(design, board_dir, parameters_
         "or design.json changed shape and this check is now looking at nothing."
     )
 
-    readers = [p for p in HERE.glob("*.py") if p.name != Path(__file__).name]
-    readers += sorted((board_dir / "checks").glob("*.py"))
-    readers += sorted((board_dir / "sim").glob("*.cir.in"))
-    corpus = "\n".join(p.read_text() for p in readers)
+    # Only the simulation decks are matched as text, because a deck names the
+    # whole path in one token (`@rail.power_out.voltage:min@`) and there is no
+    # lookup to record. Checks are matched by `parameters_read`, which is the
+    # record of what `spec` actually handed out while the suite ran.
+    #
+    # This used to search the check files as text too. That made any mention
+    # of a key count as a reader - including one inside a comment saying the
+    # key was *not* checked yet, which is the exact opposite of what this
+    # asserts, and which a mutation test walked straight through.
+    decks = "\n".join(p.read_text() for p in sorted((board_dir / "sim").glob("*.cir.in")))
 
     def is_read(key: str) -> bool:
         owner, _, name = key.rpartition(".")
-        # Decks name the whole path (`@rail.power_out.voltage:min@`); checks
-        # split it across the two arguments of the `spec` fixture, or build
-        # them, which only the record of lookups can see.
-        return (
-            key in corpus
-            or f'"{owner}", "{name}"' in corpus
-            or (owner, name) in parameters_read
-        )
+        return key in decks or (owner, name) in parameters_read
 
     orphaned = [key for key in intent if not is_read(key)]
     assert not orphaned, (
