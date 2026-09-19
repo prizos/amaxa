@@ -2352,6 +2352,11 @@ def _field_buses() -> None:
     PLACEMENT["can.decoupling_vcc"] = (-3.5, -20.5, 0)
     PLACEMENT["can.decoupling_vio"] = (-3.5, -23.5, 0)
     PLACEMENT["rs485.decoupling"] = (-3.5, -41.5, 0)
+    # The driver enable's pull-down, beside the transceiver it holds off.
+    PLACEMENT["rs485.r_de_pulldown"] = (-3.5, -38.0, 180)
+    LABELS["rs485.r_de_pulldown"] = (0.0, -1.6)
+    ROUTES.append(("RS485_DE", _width_for("RS485_DE", SIGNAL), F,
+                   ["rs485.r_de_pulldown:1", "rs485.transceiver:3"]))
 
     # Each chain stacked between its own two lanes, which are a connector pitch
     # apart, so the parts stand on end to fit.
@@ -2520,6 +2525,8 @@ def _usb() -> None:
     # connector than the thing it protects is protecting the wrong end.
     PLACEMENT["usb.receptacle"] = (28.0, -37.0, 180)
     PLACEMENT["usb.protection"] = (28.0, -26.0, 270)
+    PLACEMENT["usb.r_vbus"] = (30.3, -23.0, 270)
+    LABELS["usb.r_vbus"] = (1.6, 0.0)
     # Swapped over: CC1 is the connector's eastern pin and CC2 its western,
     # so the resistors sit on the same sides their pins do and neither route
     # crosses the pair between them.
@@ -2580,12 +2587,18 @@ USB_VBUS_EAST, USB_VBUS_LANE, USB_VBUS_RISE = 30.3, -25.4, (28.0, -25.4)
 
 
 def _usb_bus_voltage() -> None:
-    net = "USB_VBUS"
+    net, feed = "USB_VBUS", "USB_VBUS_IN"
     width = _width_for(net, SIGNAL)
     pin = next(p for a, p in DESIGN["nets"][net] if a == MCU)
-    array = next(f"{a}:{p}" for a, p in DESIGN["nets"][net] if a == "usb.protection")
+    array = next(f"{a}:{p}" for a, p in DESIGN["nets"][feed] if a == "usb.protection")
+    # The series resistor sits on the column the sense line already came down,
+    # so it costs no copper: the MCU's half stops at its north pad and the
+    # connector's half starts at its south one.
     path(net, width, [
-        (F, [f"{MCU}:{pin}", (USB_VBUS_EAST, -5.25), (USB_VBUS_EAST, USB_VBUS_LANE)]),
+        (F, [f"{MCU}:{pin}", (USB_VBUS_EAST, -5.25), "usb.r_vbus:2"]),
+    ])
+    path(feed, width, [
+        (F, ["usb.r_vbus:1", (USB_VBUS_EAST, USB_VBUS_LANE)]),
         (B, [(USB_VBUS_EAST, USB_VBUS_LANE), USB_VBUS_RISE]),
         (F, [USB_VBUS_RISE, array]),
     ])
@@ -2595,6 +2608,7 @@ def _usb_bus_voltage() -> None:
     # ground - and go under the connector's own fan-out on the back. Each steps
     # back onto the front for a millimetre to get past the trip bus, which runs
     # across this corner on the back on its way to the latch.
+    net = feed
     for pad, step, column in (("A4", (30.45, -31.6), 30.3),
                               ("A9", (25.55, -32.4), 24.0)):
         here = (USB_VBUS_EAST, USB_VBUS_LANE) if pad == "A4" else USB_VBUS_RISE
@@ -2692,6 +2706,20 @@ def _ethernet() -> None:
     # one it wants.
     PLACEMENT["eth.r_mdio_pullup"] = (-16.0, 14.0, 0)
     PLACEMENT["eth.r_reset_pullup"] = (-51.0, -6.0, 180)
+    # The capacitor that holds the PHY in reset for the 25 ms its datasheet
+    # asks for, beside the pull-up it works against.
+    PLACEMENT["eth.r_reset_delay"] = (-51.0, -3.5, 180)
+    LABELS["eth.r_reset_delay"] = (0.0, -1.6)
+    ROUTES.append(("ETH_PHY_RESET", _width_for("ETH_PHY_RESET", SIGNAL), F,
+                   ["eth.r_reset_delay:1", "eth.r_reset_pullup:1"]))
+    PLACEMENT["eth.c_reset"] = (-53.6, -3.5, 180)
+    ROUTES.append(("ETH_RESET_RC", _width_for("ETH_RESET_RC", SIGNAL), F,
+                   ["eth.c_reset:1", "eth.r_reset_delay:2"]))
+    LABELS["eth.c_reset"] = (0.0, -1.6)
+    # North of the reset lane rather than beside it: the RMII's west climb
+    # is five back-layer columns between x -49.0 and -47.6, and the analog
+    # header's outline starts at x -46.5, which leaves nothing in between.
+    VIAS.append(("eth.c_reset:2", (-55.6, -3.5), "GND", *VIA, SUPPLY))
 
     for address, x in (("eth.tap_bypass1", -47.0), ("eth.tap_bypass2", -44.5)):
         PLACEMENT[address] = (x, -31.0, 0)

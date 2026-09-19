@@ -166,3 +166,34 @@ transmit swing.
 used to assert those four nets reached *exactly* the PHY and the jack, which
 would have failed the build the moment anyone added these resistors. It now
 forbids only what it means to — anything in *series*.
+
+## The reset had no delay, and the datasheet asks for 25 ms
+
+Section 3.8.6.1: *"A hardware reset (nRST assertion) is required following
+power-up."* Table 5.11 puts **tpurstd**, from the supplies being at level to
+nRST being released, at a **25 ms minimum**.
+
+This board had a 10 kΩ pull-up and nothing else, so nRST tracked the rail up
+in microseconds and the reset was over before it began. That edge is when the
+straps are latched — REF_CLK direction, the PHY address, the interrupt mode —
+so a PHY that latches the wrong one comes up silent with every voltage on the
+board correct, which is the failure
+`test_the_phy_makes_the_reference_clock_rather_than_taking_one` exists to
+prevent and could not see.
+
+There is now **1 kΩ in series with a 4.7 µF to ground**, which gives
+(10 k + 1 k) × 4.7 µF and releases nRST after **40 ms** at the low end of the
+capacitor's tolerance. `test_the_phy_is_held_in_reset_long_enough_after_power_up`
+derives that from the netlist and the part's own threshold, and names it when
+the capacitor shrinks.
+
+**The resistor is in series with the capacitor, not with the pin**, and that
+is the point of it. The MCU asserts this reset by pulling the node down; 4.7 µF
+discharged through an I/O's own ~50 Ω is about 66 mA for a couple of hundred
+microseconds, against a pin rated 20 mA. Through 1 kΩ it is 3.3 mA, and the
+release time is unchanged because the pull-up charges through the same 1 kΩ.
+
+The one term not modelled is the capacitor's DC-bias derating: a 16 V X5R in
+0603 at 3.3 V loses perhaps a fifth, which leaves 36 ms. Halving it would take
+the delay to 22 ms, which is why the part is 16 V and 0603 rather than a
+smaller case at a lower rating.

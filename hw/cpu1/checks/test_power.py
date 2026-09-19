@@ -970,8 +970,16 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
         if not spec_has(transceiver, "bus_fault_voltage"):
             continue
         fault, _ = spec(transceiver, "bus_fault_voltage")
-        driven = {net for (address, _), net in pad_net.items() if address == transceiver}
-        driven |= set(voltages)
+        # The *bus* is what leaves the board: a net the transceiver shares
+        # with a connector. Its logic pins are on the same part and are not
+        # what a fault drives, so a pull-down on a driver enable is not a
+        # termination however the walk below happens to reach it.
+        on_part = {net for (address, _), net in pad_net.items() if address == transceiver}
+        connectors = {a for a, part in design["parts"].items()
+                      if part["symbol"].startswith("Connector")}
+        bus = {net for net in on_part - set(voltages)
+               if any(address in connectors for address, _ in design["nets"][net])}
+        driven = bus | set(voltages)
 
         for address, net_a, net_b in conducting:
             if design["parts"][address]["symbol"] != "Device:R":
@@ -991,8 +999,8 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
                 reach[start] = seen & driven
             if not (reach[net_a] and reach[net_b]):
                 continue                         # no complete path: nothing flows
-            if not (reach[net_a] | reach[net_b]) & (driven - set(voltages)):
-                continue                         # not this transceiver's bus
+            if not ({net_a, net_b} & bus):
+                continue                         # not on this transceiver's bus
             resistance, _ = spec(address, "resistance")
             rated, _ = spec(address, "max_power")
             power = fault**2 / resistance

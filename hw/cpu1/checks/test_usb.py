@@ -78,9 +78,22 @@ def test_vbus_is_sensed_and_goes_nowhere_else(design, pad_net, pads_of, pin_name
     of that is a host that stops being a host. There is no diode here and no
     regulator: the only defence is that the net does not go anywhere, and the
     only way to keep that true is to check it.
+
+    The sense pin is reached through a resistor rather than directly, so the
+    walk steps through exactly one of those: the pin's allowance when the
+    board is *off* is 4.0 V by ST's Table 20, a host holds 5.25 V, and the
+    resistor is what stops the difference being a current. Anything else on
+    the way, or more than one hop, is the net going somewhere.
     """
     vbus = pad_net[(CONNECTOR, "A4")]
-    reached = sorted({address for address, pad in design["nets"][vbus]})
+    reached = {address for address, pad in design["nets"][vbus]}
+    series = {address for address in reached
+              if design["parts"][address]["symbol"] == "Device:R"}
+    for address in series:
+        far = {net for pad in ("1", "2") if (net := pad_net.get((address, pad))) != vbus}
+        for net in far:
+            reached |= {a for a, _ in design["nets"][net]}
+    reached = sorted(reached - series)
     assert reached == sorted({CONNECTOR, PROTECTION, MCU}), (
         f"{vbus} reaches {reached}; it may only reach the connector, the "
         "protection device and the pin that senses it"
@@ -159,18 +172,22 @@ def test_nothing_reaches_the_board_without_passing_the_protection(
     Every signal on the connector meets the array before it meets anything else.
 
     An ESD array downstream of the thing it protects is decoration. Checked by
-    asking whether the connector and the MCU ever share a net: on the pair they
-    must not, because the array is in series and the two sides of it are
-    different nets. On VBUS they do, which is why that one is checked above
-    instead - the array clamps it rather than passing it through.
+    asking whether the connector and the MCU ever share a net: they must not,
+    on any signal. The pair is separated because the array is in series and
+    its two sides are different nets; VBUS is separated because the sense pin
+    is reached through a resistor, which is what keeps a host's 5.25 V out of
+    an FT pin whose allowance with the board off is 4.0 V.
+
+    VBUS used to be the one exception here, and `test_vbus_is_sensed_and_goes_nowhere_else`
+    is where it is still followed through - one hop, and only to the pin.
     """
     connector = set(pads_of[CONNECTOR].values()) - {GROUND, None}
     mcu = {net for (address, _), net in pad_net.items() if address == MCU}
     protection = set(pads_of[PROTECTION].values())
 
     shared = sorted(connector & mcu)
-    assert shared == [pad_net[(CONNECTOR, "A4")]], (
-        f"the connector and the MCU share {shared}; only VBUS may be common, "
+    assert shared == [], (
+        f"the connector and the MCU share {shared}; nothing may be common, "
         "and every other signal has to pass through the array"
     )
     # A signal may skip the array only if there is nothing on it to protect.

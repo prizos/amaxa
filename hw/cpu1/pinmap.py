@@ -49,7 +49,7 @@ PINS = [
     # --- USB, CAN, Ethernet, RS-485, console ----------------------------------
     Pin("PA11", "USB_OTG_FS_DM", "USB_DM"),
     Pin("PA12", "USB_OTG_FS_DP", "USB_DP"),
-    Pin("PA9", "USB_OTG_FS_VBUS", "USB_VBUS", note="through a divider; USB is not a power input"),
+    Pin("PA9", "USB_OTG_FS_VBUS", "USB_VBUS", note="through 1 k; USB is not a power input, and this is not a divider"),
     Pin("PD0", "FDCAN1_RX", "CAN_RX"),
     Pin("PD1", "FDCAN1_TX", "CAN_TX"),
     Pin("PD3", "GPIO", "CAN_STANDBY", "out"),

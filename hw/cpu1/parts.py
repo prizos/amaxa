@@ -729,6 +729,13 @@ ETH_PHY = PartSpec(
         # they exist: that figure is specified into 50 ohm, which is the 100
         # the cable reflects in parallel with the 100 they make.
         "transmit_amplitude_max": exact(1.05),
+        # Table 5.11, tpurstd: supplies at operating level to nRST released,
+        # 25 ms minimum. Section 3.8.6.1 requires a hardware reset after
+        # power-up, and the straps that set REF_CLK direction and the PHY
+        # address are latched on that releasing edge.
+        "reset_release_delay_min": exact(25e-3),
+        # The nRST input's high threshold, Table 5.6.
+        "reset_input_high": exact(2.0),
         "crystal_frequency": exact(25e6),
         "crystal_esr_max": exact(30.0),
         "crystal_load_capacitance": exact(20e-12),

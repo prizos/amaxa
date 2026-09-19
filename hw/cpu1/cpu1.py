@@ -1113,6 +1113,15 @@ def field_buses(v3v3, gnd, nets) -> None:
     nets["RS485_TX"] += rs485["DI"]
     nets["RS485_RX"] += rs485["RO"]
     nets["RS485_DE"] += rs485["DE"]
+    # Held off by a resistor, not by the transceiver's internal 2 Mohm. Every
+    # other "a pin nobody is driving" on this board gets 10 k - the buffer
+    # enable, both relays, every buffered output - and a driver enable earns
+    # it most: a spuriously enabled RS-485 driver holds a multi-drop bus and
+    # blocks every other node on it. At 2 Mohm a microamp of leakage is two
+    # volts, which is above the DE threshold.
+    de_pull_down = part(parts.RES_10K_0402, "rs485.r_de_pulldown", "R94")
+    nets["RS485_DE"] += de_pull_down[1]
+    gnd += de_pull_down[2]
     # The receiver stays on, including while this board is transmitting, which
     # is how a half-duplex node hears its own collisions.
     gnd += rs485["~{RE}"]
@@ -1180,8 +1189,25 @@ def usb(v3v3, gnd, nets) -> None:
     nets["USB_DP"] += protection[4]
     nets["USB_DM"] += protection[6]
 
-    # VBUS: the connector, the array's clamp, and the sense pin. Nothing else.
-    nets["USB_VBUS"] += receptacle["VBUS"], protection["VBUS"]
+    # VBUS: the connector, the array's clamp, and the sense pin through 1 k.
+    #
+    # The resistor is there for the case this board is *designed* for - "a USB
+    # host plugged in beside a 24 V supply must not find itself sourcing any
+    # of it", a few lines up - which is a board whose rails may be at zero
+    # while a host holds 5.25 V on this pin. ST's Table 20 allows an FT pin
+    # Min(VDD, VDDA, VDD33USB, VBAT) + 4.0 V, and VBAT and VDD33USB are both
+    # on 3V3 here, so with the board off that allowance is 4.0 V and the
+    # permitted positive injection is 0 mA. A direct connection puts the
+    # host's supply into a dead rail through the pin's own upper structure
+    # with nothing limiting it; 1 k limits it to about 4.5 mA.
+    #
+    # It costs nothing on the sensing side: the OTG core compares this pin
+    # against its own thresholds and draws microamps, so a kilohm is
+    # millivolts of error. The plan's divider is still refused, for the reason
+    # given above - a divider stops those comparators working.
+    vbus_series = part(parts.RES_1K_0402, "usb.r_vbus", "R95")
+    Net("USB_VBUS_IN").connect(receptacle["VBUS"], protection["VBUS"], vbus_series[1])
+    nets["USB_VBUS"] += vbus_series[2]
 
     for address, pin, ref in (("usb.cc1_pulldown", "CC1", "R79"),
                               ("usb.cc2_pulldown", "CC2", "R80")):
@@ -1272,6 +1298,27 @@ def ethernet(v3v3, gnd, nets) -> None:
     nets["ETH_MDC"] += phy["MDC"]
     nets["ETH_PHY_RESET"] += phy["~{RST}"]
     nets["ETH_REF_CLK"] += phy["~{INT}/REFCLKO"]
+
+    # And nRST gets a capacitor, because the pull-up alone releases the PHY's
+    # reset in microseconds. Section 3.8.6.1 requires a hardware reset after
+    # power-up and Table 5.11 gives tpurstd - supplies at level to nRST
+    # released - a 25 ms *minimum*. With 10 k into 2 pF the pin tracks the
+    # rail up and the reset is over before it has begun, and the straps that
+    # decide REF_CLK direction and the PHY address are latched on that edge:
+    # a PHY that latches the wrong mode comes up silent with every voltage on
+    # the board correct. 4.7 uF gives about 44 ms, and 28 ms even with the
+    # capacitance derated to a third by its own DC bias.
+    # The 1 k is in series with the capacitor rather than with the pin, which
+    # gets the delay without the problem the capacitor alone would create: the
+    # MCU asserts this reset by pulling the node down, and 4.7 uF discharged
+    # through an I/O's own ~50 ohm is about 66 mA for a couple of hundred
+    # microseconds, against a pin rated 20. Through 1 k it is 3.3 mA, and the
+    # release is still (10 k + 1 k) x 4.7 uF.
+    reset_series = part(parts.RES_1K_0402, "eth.r_reset_delay", "R96")
+    reset_delay = part(parts.CAP_4U7_0603, "eth.c_reset", "C81")
+    nets["ETH_PHY_RESET"] += reset_series[1]
+    Net("ETH_RESET_RC").connect(reset_series[2], reset_delay[1])
+    gnd += reset_delay[2]
 
     # MDIO is open-drain at the PHY and idles high; nRST is held out of reset
     # until firmware decides otherwise, so a board that never runs still has a

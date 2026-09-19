@@ -331,16 +331,24 @@ def test_management_and_reset_come_up_in_a_state_that_can_be_talked_to(
     bus with no idle level; nRST floating is a PHY that may or may not be in
     reset. Both are the difference between a board a debugger can talk to and
     one that has to be guessed at.
+
+    Exactly one resistor on each net reaches a rail. nRST also carries the
+    resistor that feeds its delay capacitor, and that one goes to neither
+    rail - which is how the two are told apart here rather than by name.
+    `test_the_phy_is_held_in_reset_long_enough_after_power_up` is what holds
+    the delay itself to the part's 25 ms.
     """
     for name in ("MDIO", "~{RST}"):
         net = net_on(name)
-        pulls = [
+        resistors = [
             address for address in _parts_on(design, net, exclude=(PHY, "mcu"))
             if spec_has(address, "resistance")
         ]
-        assert len(pulls) == 1, f"{name} has {len(pulls)} resistors on it"
-        assert set(pads_of[pulls[0]].values()) & set(RAILS), (
-            f"{pulls[0]} does not pull {name} up to a rail"
+        pulls = [address for address in resistors
+                 if set(pads_of[address].values()) & set(RAILS)]
+        assert len(pulls) == 1, (
+            f"{name} has {len(pulls)} resistors to a rail on it, out of "
+            f"{sorted(resistors)}"
         )
 
 
@@ -646,3 +654,55 @@ def test_the_line_terminations_stay_inside_their_rating(design, pad_net, spec):
             hot.append(f"  {address}: {power * 1e3:.0f} mW at a {swing:g} V swing, "
                        f"rated {rated * 1e3:g} mW")
     assert hot == [], "Line terminations past half their rating:\n" + "\n".join(hot)
+
+
+def test_the_phy_is_held_in_reset_long_enough_after_power_up(design, pad_net, spec):
+    """
+    The RC on nRST keeps the PHY in reset for the 25 ms its datasheet asks for.
+
+    Section 3.8.6.1 requires a hardware reset after power-up and Table 5.11
+    puts a 25 ms minimum on it, from the supplies being at level to nRST being
+    released. A pull-up on its own releases in microseconds - 10 k into the
+    pin's 2 pF - so the reset would be over before it began, and the straps
+    that decide REF_CLK direction and the PHY address are latched on that
+    edge. A PHY that latches the wrong mode comes up silent with every voltage
+    on the board correct.
+
+    Everything is derived: the two resistors and the capacitor are found by
+    walking out from the reset net, the capacitor is taken at the low end of
+    its own tolerance, and the threshold and the 25 ms come from the part.
+    """
+    wanted, _ = spec(PHY, "reset_release_delay_min")
+    threshold, _ = spec(PHY, "reset_input_high")
+    _, rail = spec("rail.3v3", "voltage")
+
+    reset = next(net for net, nodes in design["nets"].items()
+                 if (PHY, "15") in {tuple(n) for n in nodes})
+
+    def through(net, symbol):
+        for address, part in design["parts"].items():
+            if part["symbol"] != symbol:
+                continue
+            a, b = pad_net.get((address, "1")), pad_net.get((address, "2"))
+            if a == net and b:
+                yield address, b
+            elif b == net and a:
+                yield address, a
+
+    pull_up = [a for a, far in through(reset, "Device:R") if far == "3V3"]
+    delaying = [(a, far) for a, far in through(reset, "Device:R") if far != "3V3"]
+    assert len(pull_up) == 1 and len(delaying) == 1, (
+        f"expected one pull-up and one delay resistor on {reset}, found "
+        f"{pull_up} and {delaying}"
+    )
+    series, node = delaying[0]
+    holding = [a for a, far in through(node, "Device:C") if far == "GND"]
+    assert len(holding) == 1, f"expected one capacitor from {node} to ground, found {holding}"
+
+    resistance = spec(pull_up[0], "resistance")[0] + spec(series, "resistance")[0]
+    capacitance = spec(holding[0], "capacitance")[0]
+    delay = resistance * capacitance * math.log(rail / (rail - threshold))
+    assert delay >= wanted, (
+        f"{resistance / 1e3:g} k into {capacitance * 1e6:g} uF releases nRST "
+        f"after {delay * 1e3:.0f} ms, and the part asks for {wanted * 1e3:g} ms"
+    )

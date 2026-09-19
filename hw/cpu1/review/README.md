@@ -9,9 +9,9 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 130 × 110 mm |
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
-| **Footprints** | 258 |
-| **Nets** | 191 |
-| **Routing** | 1280 track segments, 548 vias, 4 zones |
+| **Footprints** | 262 |
+| **Nets** | 193 |
+| **Routing** | 1286 track segments, 550 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -94,15 +94,15 @@ schematic after the fact.
 | Trip comparators | 26 | Seven TLV3501s and the threshold DAC, which powers up at zero - so an unprogrammed board trips as it powers up rather than switching. |
 | ADC networks | 31 | One RC per channel, sized from both ends: low enough to stop the switching node aliasing into the measurement, high enough to recharge inside the sampling window. |
 | CAN FD | 8 | TCAN1044V with split termination on a solder jumper. |
-| RS-485 | 5 | THVD1450, fail-safe biased on-chip, 120 ohm on a jumper. |
-| USB-C | 4 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
-| Ethernet | 20 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
+| RS-485 | 6 | THVD1450, fail-safe biased on-chip, 120 ohm on a jumper. |
+| USB-C | 5 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
+| Ethernet | 22 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
 | Plane stitching | 21 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 258, by block</summary>
+<summary><strong>Every footprint</strong> — all 262, by block</summary>
 
 #### MCU core
 
@@ -355,6 +355,7 @@ schematic after the fact.
 |---|---|---|---|---|---|
 | `C58` | `rs485.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `J6` | `rs485.header` | bus | PZ254-1-03-Z-8.5 | C2894926 | `PinHeader_1x03_P2.54mm_Vertical` |
+| `R94` | `rs485.r_de_pulldown` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R78` | `rs485.termination` | 120R | 0402WGF1200TCE | C25079 | `R_0402_1005Metric` |
 | `JP2` | `rs485.termination_jumper` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
 | `U17` | `rs485.transceiver` | THVD1450 | THVD1450DR | C2671361 | `SOIC-8_3.9x4.9mm_P1.27mm` |
@@ -366,6 +367,7 @@ schematic after the fact.
 | `R79` | `usb.cc1_pulldown` | 5K1 | 0402WGF5101TCE | C25905 | `R_0402_1005Metric` |
 | `R80` | `usb.cc2_pulldown` | 5K1 | 0402WGF5101TCE | C25905 | `R_0402_1005Metric` |
 | `D12` | `usb.protection` | USBLC6-2 | USBLC6-2SC6 | C7519 | `SOT-23-6` |
+| `R95` | `usb.r_vbus` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `J7` | `usb.receptacle` | USB-C | TYPE-C-31-M-12 | C165948 | `USB_C_Receptacle_HRO_TYPE-C-31-M-12` |
 
 #### Ethernet
@@ -373,6 +375,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `R81` | `eth.bias` | 12K1 | 0402WGF1212TCE | C25852 | `R_0402_1005Metric` |
+| `C81` | `eth.c_reset` | 4.7uF | CL10A475KO8NNNC | C19666 | `C_0603_1608Metric` |
 | `C59` | `eth.core_bulk` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
 | `C60` | `eth.core_hf` | 470pF | 0402CG471J500NT | C75274 | `C_0402_1005Metric` |
 | `C62` | `eth.dec_vdd1a` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -382,6 +385,7 @@ schematic after the fact.
 | `U18` | `eth.phy` | LAN8742Ai | LAN8742AI-CZ-TR | C621425 | `QFN-24-1EP_4x4mm_P0.5mm_EP2.5x2.5mm` |
 | `R82` | `eth.r_mdio_pullup` | 4.7k | 0402WGF4701TCE | C25900 | `R_0402_1005Metric` |
 | `R84` | `eth.r_refclk_strap` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R96` | `eth.r_reset_delay` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `R83` | `eth.r_reset_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `C66` | `eth.tap_bypass1` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C67` | `eth.tap_bypass2` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -409,7 +413,7 @@ schematic after the fact.
 | `C78` | `stitch.11` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C79` | `stitch.12` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C80` | `stitch.13` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `C81` | `stitch.14` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C81_1` | `stitch.14` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C82` | `stitch.15` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C83` | `stitch.16` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C84` | `stitch.17` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -448,20 +452,21 @@ schematic after the fact.
 ## Nets
 
 <details>
-<summary><strong>Every net</strong> — all 191, by size</summary>
+<summary><strong>Every net</strong> — all 193, by size</summary>
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 222 |  |
+| `GND` | 224 |  |
 | `3V3` | 102 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
-| `USB_VBUS` | 6 |  |
+| `USB_VBUS_IN` | 6 |  |
 | `VREF+` | 6 |  |
 | `5VA` | 5 |  |
 | `TRIP_LEVEL_HIGH` | 5 |  |
 | `TRIP_LEVEL_LOW` | 5 |  |
+| `ETH_PHY_RESET` | 4 |  |
 | `FAST1_SENSE` | 4 |  |
 | `FAST2_SENSE` | 4 |  |
 | `FAST3_SENSE` | 4 |  |
@@ -486,7 +491,6 @@ schematic after the fact.
 | `DAC_SCL` | 3 |  |
 | `DAC_SDA` | 3 |  |
 | `ETH_MDIO` | 3 |  |
-| `ETH_PHY_RESET` | 3 |  |
 | `ETH_RD_N` | 3 |  |
 | `ETH_RD_P` | 3 |  |
 | `ETH_TD_N` | 3 |  |
@@ -533,6 +537,7 @@ schematic after the fact.
 | `RPP_GATE` | 3 |  |
 | `RS485_A` | 3 |  |
 | `RS485_B` | 3 |  |
+| `RS485_DE` | 3 |  |
 | `SLOW1` | 3 |  |
 | `SLOW2` | 3 |  |
 | `SLOW3` | 3 |  |
@@ -568,6 +573,7 @@ schematic after the fact.
 | `ETH_NINTSEL` | 2 |  |
 | `ETH_RBIAS` | 2 |  |
 | `ETH_REF_CLK` | 2 |  |
+| `ETH_RESET_RC` | 2 |  |
 | `ETH_RXD0` | 2 |  |
 | `ETH_RXD1` | 2 |  |
 | `ETH_TXD0` | 2 |  |
@@ -617,7 +623,6 @@ schematic after the fact.
 | `PWM2_C_LOW` | 2 |  |
 | `PWM2_C_LOW_B` | 2 |  |
 | `RON` | 2 |  |
-| `RS485_DE` | 2 |  |
 | `RS485_RX` | 2 |  |
 | `RS485_TERM` | 2 |  |
 | `RS485_TX` | 2 |  |
@@ -639,6 +644,7 @@ schematic after the fact.
 | `USB_CC2` | 2 |  |
 | `USB_DM` | 2 |  |
 | `USB_DP` | 2 |  |
+| `USB_VBUS` | 2 |  |
 | `VCAP1` | 2 |  |
 | `VCAP2` | 2 |  |
 | `VIN_FUSED` | 2 |  |

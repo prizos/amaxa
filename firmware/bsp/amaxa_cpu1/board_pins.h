@@ -49,7 +49,7 @@
 #define PIN_USB_DP_PIN GPIO_PIN_12
 #define PIN_USB_DP_AF GPIO_AF10_OTG1_FS
 
-/* USB_VBUS: USB_OTG_FS_VBUS on PA9, pin 101. through a divider; USB is not a power input */
+/* USB_VBUS: USB_OTG_FS_VBUS on PA9, pin 101. through 1 k; USB is not a power input, and this is not a divider */
 #define PIN_USB_VBUS_PORT GPIOA
 #define PIN_USB_VBUS_PIN GPIO_PIN_9
 
