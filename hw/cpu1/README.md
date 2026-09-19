@@ -82,7 +82,8 @@ datasheet figures and the parts' own:
 | Every supply pin has its **own** 100 nF within 3 mm, matched one to one | ST pin data, netlist, placed board |
 | Bulk: 4.7 µF on 3V3, 1 µF on 3V3 and on VDDA | Datasheet Figure 13 |
 | One 2.2 µF on each VCAP pin | Datasheet Table 24 |
-| Each crystal sees its specified load, at every corner | Crystal load, capacitor tolerance, declared stray |
+| Each crystal sees its specified load, at every corner | Crystal load, capacitor tolerance, and stray — declared for the MCU's two, **measured off the board file** for the PHY's |
+| No declared stray is smaller than the copper on its own leg | Track widths and pad areas, against the stackup |
 | **Oscillator gain margin at least 5**, both crystals | Datasheet Tables 43–44, crystal ESR and C0 |
 | Indicators visibly lit and inside the LED's and the pin's ratings | LED and resistor tolerances, pin limit |
 | NRST's 100 nF, BOOT0 and button pull-downs, VDDA fed only through a ferrite | Datasheet Figure 21, netlist |
@@ -100,9 +101,10 @@ URL and SHA-256: `CONFIRMED_FROM_A_RENDER` in
 `NEEDS_A_HUMAN_EYE` is empty and still checked, because the next part added
 will land on it.
 
-One question is left and it is not a reading: whether the USB-C shell overhangs
-the board edge depends on an enclosure that does not exist. It is tracked apart,
-in `WAITING_ON_A_DECISION`, so that a five-minute PDF cannot hide behind it.
+`WAITING_ON_A_DECISION` is empty too. It held one entry — whether the USB-C
+shell overhangs the board edge, which depends on an enclosure that does not
+exist — and that port is not exposed, so the question does not arise. The list
+stays, and is still checked, so that a five-minute PDF cannot hide behind it.
 
 ST's AN4938 hardware guide has still not been read, and cannot be from here:
 `www.st.com` resolves but every connection to it returns nothing, so the
@@ -110,6 +112,31 @@ datasheet above came from LCSC's copy instead. **Nothing on this board depends
 on AN4938** — the decoupling is Figure 13 of the datasheet and the VCAP values
 are its Table 24, both read and committed as evidence. It is worth a person's
 eye before a second spin, not before this one.
+
+## Three things a check cannot be written from a table for
+
+**Where the field buses' ESD protection is.** There is none on the board, and
+that is the decision rather than an omission: both transceivers are qualified
+on their bus pins, at ±8 kV powered contact and ±18 kV contact, and a TVS in
+front of a part rated above the TVS is capacitance on a pair whose impedance
+matters. The check walks out from each connector and requires everything a
+cable can reach to be a two-terminal passive or to carry a rating — so a
+cheaper transceiver fails it, and so would an unrated buffer on the pair.
+
+**Why both cable grounds tie straight to the board's.** Industrial practice
+puts 100 Ω there. Each standard states the ground offset a receiver must
+tolerate — −2 to +7 V for CAN, −7 to +12 for RS-485 — and these parts are
+specified to ±12 V and ±15 V, so the offset that breaks either link is one no
+standard requires anybody to survive. A resistor covering more than that has to
+dissipate it: at the ±15 V edge, 100 Ω at each end is over half a watt.
+`parts/SOIC8/SOIC8.md` has the arithmetic and what would change it.
+
+**That pcbnew was correcting the board on the way past.** `LoadBoard`
+re-resolves connectivity as it reads, so a via placed on the wrong net inside a
+pad came out on the pad's net with no DRC violation — the file the layout wrote
+and the file every check reads were not the same file. `tools/fill_zones.py`
+now compares the board's own text either side of the step and refuses it if any
+via or track moved net.
 
 ## Still to come
 
