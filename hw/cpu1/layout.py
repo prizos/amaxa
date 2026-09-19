@@ -1859,7 +1859,7 @@ SENSE_LANES = (
     # leave the Ethernet a set of columns between them and the threshold
     # buses: this strip is the only way from the package's west side to the
     # lane north of the input bank.
-    ("FAST3_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9)), -22.2),
+    ("FAST3_SENSE", -28.4, ((-39.0, -19.46), (-39.0, -22.9)), -24.0),
     # The DC link's line arrives from the east instead. Its tap is the last on
     # the row and its own threshold bus surfaces where it would have risen, so
     # it runs along the empty back layer under the input networks and comes up
@@ -1868,7 +1868,7 @@ SENSE_LANES = (
     # line was a wall across the whole north-west. It now rises as soon as it
     # is clear of the threshold buses, which is what leaves the Ethernet a
     # channel down the west side of the package.
-    ("FAST4_SENSE", -27.6, ((-44.0, -15.65), (-21.6, -15.65)), -21.6),
+    ("FAST4_SENSE", -27.6, ((-44.0, -15.65), (-23.4, -15.65)), -23.4),
 )
 
 

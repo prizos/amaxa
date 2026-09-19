@@ -471,3 +471,89 @@ def test_every_exposed_pad_has_its_thermal_vias(exposed_pads, vias):
         "Exposed pads without their thermal vias:\n" + "\n".join(thin)
         + "\nSee parts/SO8EP/evidence/land_pattern.png."
     )
+
+
+# How far a track that decides a trip has to stay from a track that does not.
+#
+# Three dielectric heights between edges is the usual rule for keeping
+# microstrip-to-microstrip coupling near a percent, and the height is the one
+# this board is actually built with rather than a number typed here. What
+# makes it matter on this board is that the comparator inputs are tapped
+# *ahead* of the ADC filter, so nothing between the connector and the
+# comparator removes anything: the TLV3501 has 6 mV of hysteresis and no
+# external network, and its output latches the drive off through the trip bus.
+SEPARATION_IN_HEIGHTS = 3
+
+
+def _parallel_overlap(a, b):
+    """How far two axis-aligned segments run alongside each other, and how far apart."""
+    for axis in (0, 1):
+        other = 1 - axis
+        if abs(a[0][axis] - a[1][axis]) > 1e-6 or abs(b[0][axis] - b[1][axis]) > 1e-6:
+            continue                       # not both fixed on this axis
+        lo = max(min(a[0][other], a[1][other]), min(b[0][other], b[1][other]))
+        hi = min(max(a[0][other], a[1][other]), max(b[0][other], b[1][other]))
+        if hi > lo:
+            return hi - lo, abs(a[0][axis] - b[0][axis])
+    return 0.0, 0.0
+
+
+def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_dir):
+    """
+    A track that decides a trip keeps its distance from one that does not.
+
+    The comparator taps are deliberately ahead of the ADC's anti-alias filter,
+    so a millivolt coupled onto one of them arrives at the comparator intact.
+    The part has 6 mV of hysteresis, nothing external adds any, and its output
+    sets a latch that only firmware can clear - so crosstalk here is not an
+    error in a reading, it is a drive that stops.
+
+    This found `FAST4_SENSE` running 8.55 mm at 0.55 mm pitch beside the
+    RMII's transmit enable on the back layer, with no ground between them. At
+    a 1 ns edge that is about 12 mV onto a 6 mV threshold, and it would have
+    looked exactly like a real over-current that happened whenever the network
+    was busy.
+    """
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from mcu_pins import load_source
+
+    description = load_source(board_dir / "layout.py", "cpu1_layout_separation")
+    height = description.BOARD["stack"][0]["thickness"]
+    wanted = SEPARATION_IN_HEIGHTS * height
+
+    inputs = {
+        net for net, nodes in design["nets"].items()
+        for address, pad in nodes
+        if design["parts"][address]["symbol"].startswith("Comparator:") and pad in ("1", "3")
+    }
+
+    # An aggressor has to switch. A net that reaches nothing but a DAC output,
+    # a reference, a comparator input or a test pad carries a DC level and
+    # cannot couple anything into anything - which matters here because the
+    # threshold DAC's outputs leave its package on a 0.5 mm pitch, and no
+    # routing rule can separate two pins that are 0.5 mm apart. Anything whose
+    # family is not on this list counts as switching, so a part nobody thought
+    # about is an aggressor rather than an exemption.
+    static = ("Analog_DAC:", "Reference_Voltage:", "Comparator:", "Connector:TestPoint")
+    quiet = {
+        net for net, nodes in design["nets"].items()
+        if all(design["parts"][address]["symbol"].startswith(static) for address, _ in nodes)
+    }
+
+    close = []
+    for a_start, a_end, a_layer, a_net in segments:
+        if a_net not in inputs:
+            continue
+        for b_start, b_end, b_layer, b_net in segments:
+            if (b_layer != a_layer or b_net == a_net or b_net in PLANES
+                    or b_net in inputs or b_net in quiet):
+                continue
+            along, apart = _parallel_overlap((a_start, a_end), (b_start, b_end))
+            if along > 1.0 and 0 < apart < wanted:
+                close.append(f"  {a_net} on {a_layer} runs {along:.2f} mm "
+                             f"alongside {b_net} at {apart:.2f} mm")
+    assert not close, (
+        f"Raw comparator inputs closer than {wanted:.2f} mm "
+        f"({SEPARATION_IN_HEIGHTS} x the {height:g} mm prepreg) to a foreign track:\n"
+        + "\n".join(sorted(set(close)))
+    )
