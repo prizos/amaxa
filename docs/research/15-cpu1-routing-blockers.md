@@ -77,12 +77,25 @@ past the PWM drops, moving the PWM drops, giving the last signal the corner,
 running it on the front - collides with something already there. The work got
 to sixteen DRC violations from a clean board and stopped.
 
-**The decision this needs:** one of three. Move the east-side decoupling row
-out by a millimetre and a half, which frees SWDIO's line and makes the band
-seven deep. Or move the debug port's SWDIO pin, which the pin map allows and
-the firmware does not care about. Or give the escape vias their own smaller
-size - 0.45 mm on a 0.15 mm drill is inside what the fab quotes - which buys
-the 0.025 mm that three of these conflicts are short by.
+Counting it properly, rather than by trying things: in the strip between
+x 11 and x 16, where every one of these has to pass, the vias already there
+forbid four bands of y, and what is left is
+
+| free band | height | lines |
+|---|---|---|
+| -6.73 to -4.73 | 2.00 mm | 5 |
+| -8.28 to -8.23 | 0.05 mm | 0 |
+| -9.23 to -9.92 | 0.69 mm | 1 |
+
+Six lines. Seven static signals and reset need eight. Moving the east-side
+decoupling row out by 0.7 mm was tried and gives back nothing: the vias whose
+y matters belong to supply pins, and a pin's y does not move.
+
+**The decision this needs:** move the four PWM lines that drop behind the
+package. They drop at x 11.9 to 15.2 and run east, and their four vias are what
+closes off 2.45 mm of that strip - the whole band from -4.73 to -2.28. Dropping
+them at x 17 to 20 instead costs them nothing (they are already running east,
+on their own pin lines, on the front) and turns six lines into eleven.
 
 ## The shape of both problems
 
