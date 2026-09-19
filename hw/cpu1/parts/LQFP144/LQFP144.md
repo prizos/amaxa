@@ -46,12 +46,29 @@ ST's hardware development guide for the part — was not read.
 | NRST capacitor | 100 nF, internal pull-up 30–50 kΩ | Figure 21, Table 62 |
 | Supply decoupling | N × 100 nF + 1 × 4.7 µF on VDD; "100 nF + 1 x 1 µF" pairs | Figure 13 |
 
-**Needs a human eye.** Figure 13 is a drawing, and its extracted text gives the
-decoupling values without saying which supply pin each belongs to: "100 nF",
-"100 nF + 1 x 1 µF" and "4.7 µF" appear beside VDDA, VREF+, VDD33USB and VBAT in
-no recoverable order. The board gives every supply pin its 100 nF, and both 3V3
-and VDDA a 1 µF, which covers the likely reading — but read the figure, and
-AN4938, before ordering.
+**Figure 13, read.**
+
+![Figure 13, power supply scheme](evidence/power_supply_scheme.png)
+
+Rendered from ST's own document and read, which settles what the extracted
+text could not — which value belongs to which pin:
+
+| pin | what Figure 13 puts on it | on this board |
+|---|---|---|
+| V_DD, each | 100 nF | one each, matched pin to pin by a check |
+| V_DD, the group | 1 × 4.7 µF (N = the package's VDD count) | yes, on 3V3 |
+| V_CAP ×2 | 2.2 µF each | yes, and Table 24 sets the ESR |
+| V_DDLDO | 4.7 µF | shares the rail's, VDDLDO being on 3V3 here |
+| V_DDA | 100 nF + 1 µF | yes |
+| V_REF+ | 100 nF + 1 µF | yes |
+| V_DD33USB, V_DD50USB | 100 nF each | yes |
+
+The board also carries a 1 µF on 3V3, which the figure does not ask for. It
+stays, and `test_supplies_have_their_bulk_capacitance` now says so rather than
+implying ST require it.
+
+ST's AN4938 has still not been read; this is the datasheet, not the hardware
+guide.
 
 ## Why this part
 

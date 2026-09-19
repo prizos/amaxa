@@ -147,9 +147,11 @@ def test_supplies_have_their_bulk_capacitance(design, two_pad_parts, spec):
     """
     The logic rail carries a 4.7 uF, and it, VDDA and VREF+ each a 1 uF.
 
-    Datasheet Figure 13's "1 x 4.7 uF" on VDD and "100 nF + 1 x 1 uF" pairs. Which
-    supply pins those pairs sit on is not legible in the extracted figure, so
-    this holds both rails to a 1 uF and the review note records the doubt.
+    Datasheet Figure 13, rendered and read at parts/LQFP144/evidence/: the
+    4.7 uF belongs to VDD, and the "100 nF + 1 x 1 uF" pairs to **VDDA and
+    VREF+**. The figure asks for no bulk on VDD beyond that 4.7 uF, so the
+    1 uF this board also puts on 3V3 is surplus rather than required - it is
+    checked for because it is fitted, not because ST ask for it.
     """
     missing = []
     for net, value in (("3V3", 4.7e-6), ("3V3", 1e-6), ("VDDA", 1e-6), ("VREF+", 1e-6)):
@@ -413,4 +415,27 @@ def test_the_debug_pads_are_wired_the_way_the_cable_is(pad_net):
     assert not wrong, (
         "Tag-Connect debug pads:\n" + "\n".join(wrong)
         + "\nSee parts/TC2030/evidence/pad_signals.png."
+    )
+
+
+def test_the_32khz_crystal_leaves_its_case_pads_alone(design, pad_net):
+    """
+    The 32 kHz crystal's pads 2 and 3 go nowhere, because Epson say so.
+
+    The MC-306's two right-hand pads are the case, not terminals, and the
+    datasheet's outline drawing carries the instruction in as many words:
+    *do not connect #2 and #3 to external devices*. Grounding a crystal's can
+    is common enough elsewhere to be a reflex, and a reflex is what this
+    catches - the part would still oscillate on the bench and its frequency
+    would sit outside the tolerance it was chosen for.
+
+    See parts/XTAL_MC306/evidence/internal_connection.png.
+    """
+    crystal = next((a for a, part in design["parts"].items()
+                    if part["symbol"].startswith("Device:Crystal_GND23")), None)
+    assert crystal, "no four-pad crystal on this board"
+    joined = {pad: pad_net.get((crystal, pad)) for pad in ("2", "3")}
+    assert not any(joined.values()), (
+        f"{crystal}: Epson's outline says not to connect #2 and #3, but "
+        f"{ {p: n for p, n in joined.items() if n} } "
     )

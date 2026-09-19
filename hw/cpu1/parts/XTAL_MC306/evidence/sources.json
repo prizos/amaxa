@@ -1,0 +1,13 @@
+{
+  "internal_connection": {
+    "assumes": "",
+    "crop": "80,1060,490,290",
+    "document": "Seiko Epson MC-306 / MC-405 / MC-406 kHz crystal units, served by LCSC for C83979",
+    "dpi": 150,
+    "page": 1,
+    "read": "2026-09-19",
+    "sha256": "588f506fbff6dfa80708fc0135ac8926281885dc5084b97231ed399a0dda759c",
+    "shows": "the MC-306 outline with #4 top-left, #3 top-right, #1 bottom-left, #2 bottom-right, and the internal-connection top view beside it showing the crystal between #1 and #4 - with the caption below: do not connect #2 and #3 to external devices",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/60d5c28ae4f8e3e5f1925006136d85aa.pdf"
+  }
+}

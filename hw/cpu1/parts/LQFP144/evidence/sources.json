@@ -1,0 +1,13 @@
+{
+  "power_supply_scheme": {
+    "assumes": "",
+    "crop": "240,240,800,980",
+    "document": "STMicroelectronics STM32H743xI datasheet, DocID030538 Rev 3 (October 2017), served by LCSC for C114408",
+    "dpi": 140,
+    "page": 95,
+    "read": "2026-09-19",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Figure 13, Power supply scheme, with each decoupling value against the pin it belongs to: VDD gets N x 100 nF plus one 4.7 uF where N is the package's VDD pin count, VCAP 2 x 2.2 uF, VDDLDO 4.7 uF, VDDA 100 nF + 1 uF, VREF+ 100 nF + 1 uF, and VDD33USB and VDD50USB 100 nF each",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  }
+}

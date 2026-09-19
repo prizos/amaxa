@@ -7,7 +7,7 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 161
+EXPECTED_CHECKS = 162
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -101,6 +101,7 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
 CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOT223": ["pinout", "land_pattern"],
     "LED0603": ["polarity"],
+    "LQFP144": ["power_supply_scheme"],
     "MSOP10": ["factory_default"],
     "QFN24": ["package_outline"],
     "SMB": ["cathode"],
@@ -108,6 +109,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOD123": ["cathode"],
     "SOT23": ["bat54a_common_anode"],
     "TC2030": ["pad_signals"],
+    "XTAL_MC306": ["internal_connection"],
 }
 
 NEEDS_A_HUMAN_EYE: dict[str, str] = {
@@ -116,8 +118,6 @@ NEEDS_A_HUMAN_EYE: dict[str, str] = {
         "stock figure on file is the forty-pin part's; the number here "
         "follows the series pattern and has not been looked up"
     ),
-    "LQFP144": "which supply pin each of datasheet Figure 13's decoupling values belongs to",
-    "XTAL_MC306": "that the crystal is between pads 1 and 4, as KiCad's footprint has it",
     "XTAL5032_4P": (
         "the crystal's ESR and ppm figures, which come from LCSC's parametric "
         "data rather than a datasheet nobody here could fetch. They are the "
