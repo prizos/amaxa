@@ -141,10 +141,10 @@ POLARITY = [
     # value buys you.
     ("power.q_rpp", "2", "12V"),        # source, on the protected side
     ("power.q_rpp", "3", "VIN_FUSED"),  # drain, on the supply side
-    ("power.d_gate_clamp", "1", "12V"),       # cathode, to the source
-    ("power.d_gate_clamp", "2", "RPP_GATE"),  # anode, to the gate
-    ("switch.d_gate_clamp", "1", "GATE"),     # cathode, to the gate it clamps
-    ("switch.d_gate_clamp", "2", "GND"),      # anode
+    # Both gate clamps used to be four rows here. They are
+    # test_every_gate_clamp_faces_the_way_its_fet_needs now, which reads the
+    # channel out of the FET's symbol and the cathode out of the Zener's, and
+    # so holds on a board this file was not written for.
     ("switch.q_switch", "1", "GATE"),
     ("switch.q_switch", "2", "GND"),       # source
     ("switch.q_switch", "3", "LED_RETURN"),  # drain

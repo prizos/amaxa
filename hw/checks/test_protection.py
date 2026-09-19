@@ -6,7 +6,12 @@ table could: a reverse-polarity FET fitted backwards. Its expected value is
 derived from the netlist, so it holds on a board it was not written for.
 """
 
+import sys
+from pathlib import Path
+
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 
 # KiCad names a discrete MOSFET's symbol after its pin order, so the letters in
@@ -86,3 +91,91 @@ def test_reverse_polarity_fets_face_the_supply(design, net_of_pad):
                 "touches, so the FET is shorted out."
             )
     assert not wrong, "Reverse-polarity protection wired the wrong way:\n" + "\n".join(wrong)
+
+
+
+# A gate clamp is a Zener across a MOSFET's gate and source. Which way round it
+# goes depends on the channel, and the channel is in the symbol library: the
+# generic symbols spell it into their names, a part-numbered one like 2N7002
+# spells its pins G, S and D and puts "N-Channel MOSFET" in its Description.
+_NMOS = "Transistor_FET:Q_NMOS_"
+
+
+def _fet(symbol: str) -> tuple[dict[str, str], str] | None:
+    """(terminal letter -> pad, channel letter) for a MOSFET, else None."""
+    from symbols import symbol_description, symbol_pin_names
+
+    if symbol.startswith(_PMOS):
+        return _terminals(symbol), "P"
+    if symbol.startswith(_NMOS):
+        return _terminals(symbol), "N"
+    names = symbol_pin_names(symbol)
+    if set(names.values()) < {"G", "S", "D"}:
+        return None
+    described = symbol_description(symbol).upper()
+    if "N-CHANNEL" in described or "N-MOSFET" in described:
+        channel = "N"
+    elif "P-CHANNEL" in described or "P-MOSFET" in described:
+        channel = "P"
+    else:
+        return None
+    return {name: pad for pad, name in names.items()}, channel
+
+
+def test_every_gate_clamp_faces_the_way_its_fet_needs(design, net_of_pad):
+    """
+    A Zener across a gate and a source has its cathode on the positive end.
+
+    The clamp exists to keep V_GS inside the FET's rating while the gate is
+    dragged about by the input. Fitted the other way round it is a forward
+    diode from gate to source: it conducts at 0.7 V, the FET can no longer be
+    held in the state it is meant to be in, and the part that was there to
+    protect the gate is what shorts it.
+
+    Which end is positive depends on the channel. An N-channel FET is turned on
+    by a gate above its source, so the cathode goes to the **gate**; a P-channel
+    one by a gate below its source, so the cathode goes to the **source**. Both
+    come out of the symbol library - the channel from the symbol's name or its
+    Description, the cathode from the Zener's own pin names - so no pad number
+    is written down anywhere here.
+
+    This is the second half of the check above, and for the same reason. led12
+    carried a hand-written table of expected pins for months with the row for
+    its reverse-polarity FET backwards in it, under a comment asserting it was
+    right. These are the rows that table no longer needs.
+    """
+    from symbols import symbol_pin_names
+
+    zeners = {
+        address for address, part in design["parts"].items()
+        if part["symbol"] == "Device:D_Zener"
+    }
+    fets = {
+        address: found
+        for address, part in design["parts"].items()
+        for found in [_fet(part["symbol"])] if found
+    }
+    if not zeners or not fets:
+        pytest.skip("no MOSFET and Zener pair on this board")
+
+    names = {name: pad for pad, name in symbol_pin_names("Device:D_Zener").items()}
+    checked, wrong = 0, []
+    for zener in sorted(zeners):
+        cathode = net_of_pad.get((zener, names["K"]))
+        anode = net_of_pad.get((zener, names["A"]))
+        for fet, (pads, channel) in sorted(fets.items()):
+            gate = net_of_pad.get((fet, pads["G"]))
+            source = net_of_pad.get((fet, pads["S"]))
+            if {cathode, anode} != {gate, source}:
+                continue
+            checked += 1
+            positive = gate if channel == "N" else source
+            if cathode != positive:
+                wrong.append(
+                    f"  {zener} across {fet}, a {channel}-channel part: its "
+                    f"cathode is on {cathode!r} and the positive end of that "
+                    f"gate-source pair is {positive!r}, so it is a forward "
+                    f"diode and not a clamp"
+                )
+    assert checked, "no Zener found across a gate and a source, and this is about them"
+    assert not wrong, "Gate clamps fitted backwards:\n" + "\n".join(wrong)

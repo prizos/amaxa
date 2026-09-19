@@ -138,3 +138,35 @@ def footprint_pads(path: Path) -> set[str]:
 def is_electrical_pad(number: str, kind: str) -> bool:
     """Whether a footprint pad can carry a net: not a mounting or locating hole."""
     return kind != "np_thru_hole" and number != ""
+
+
+def symbol_description(reference: str, library_dir: Path | None = None) -> str:
+    """
+    A symbol's Description property, for a symbol named `Library:Symbol`.
+
+    KiCad writes what a part *is* here - "N-Channel MOSFET", "P-MOSFET
+    transistor" - and for a discrete transistor that sentence is the only
+    machine-readable statement of its channel. A part-numbered symbol like
+    2N7002 spells its pins G, S and D and says nothing else about polarity;
+    the generic `Q_NMOS_GSD` spells the order into its own name and not the
+    pin names. This reads the one field both of them fill in.
+    """
+    library_dir = library_dir or KICAD_SYMBOL_DIR
+    library_name, _, symbol_name = reference.partition(":")
+    path = library_dir / f"{library_name}.kicad_sym"
+    if not path.is_file():
+        raise SymbolNotFound(f"no symbol library {path}")
+
+    text = path.read_text()
+    seen: set[str] = set()
+    while symbol_name not in seen:
+        seen.add(symbol_name)
+        block = _find_symbol(text, symbol_name)
+        found = re.search(r'\(property "Description" "([^"]*)"', block)
+        if found and found.group(1):
+            return found.group(1)
+        parent = re.search(r'\(extends "([^"]+)"', block)
+        if not parent:
+            return ""
+        symbol_name = parent.group(1)
+    raise SymbolNotFound(f"{reference}: extends forms a loop")
