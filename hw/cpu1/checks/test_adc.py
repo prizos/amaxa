@@ -106,8 +106,7 @@ def test_the_fast_channels_roll_off_where_they_were_meant_to(spec, networks, pad
     _, source = spec("header", "source_impedance")
     outside = []
     for channel, (series, shunt) in sorted(networks.items()):
-        pin = pad_net.get((series, "2"))
-        if pin not in _FAST:
+        if _band_of(channel) != "fast":
             continue
         resistance = spec(series, "resistance")
         capacitance = spec(shunt, "capacitance")
@@ -136,8 +135,7 @@ def test_the_slow_channels_roll_off_much_lower(spec, networks, pad_net):
     _, source = spec("header", "source_impedance")
     outside = []
     for channel, (series, shunt) in sorted(networks.items()):
-        pin = pad_net.get((series, "2"))
-        if pin in _FAST or pin is None or channel == "dac_test":
+        if _band_of(channel) != "slow":
             continue
         resistance = spec(series, "resistance")
         capacitance = spec(shunt, "capacitance")
@@ -245,9 +243,32 @@ def test_the_comparators_see_the_signal_before_the_filter(design, pad_net, netwo
     )
 
 
-# The channels the control loop reads every PWM cycle, as the pin map names
-# them. Everything else on the connector is housekeeping.
-_FAST = {"FAST1", "FAST2", "FAST3", "FAST4", "FAST5", "FAST6", "FAST7", "FAST8", "COMP_FAST4"}
+def _is_fast(channel: str) -> bool:
+    """
+    Whether a channel is one the control loop reads every PWM cycle.
+
+    From the channel's own name, which is the address the design builds it
+    under - `adc.fast3`, `adc.slow1`, `adc.comp_fast4`. This used to be a
+    written-out set of net names, and the failure it invited was quiet: a
+    channel added to the pin map and not added to the set fell through to the
+    *slow* check, which a fast network passes by being three decades out of
+    the band it was silently moved into. Nothing would have said so.
+    """
+    return "fast" in channel
+
+
+def _band_of(channel: str) -> str:
+    """Which corner band a channel belongs in, or raises if it belongs in none."""
+    if _is_fast(channel):
+        return "fast"
+    if channel.startswith(("slow", "board_id")):
+        return "slow"
+    if channel == "dac_test":
+        return "neither"                  # an output, and the only one
+    raise AssertionError(
+        f"{channel} is neither fast nor slow by its name, so no corner band "
+        f"claims it. Name it so, or give it a band of its own"
+    )
 
 
 @pytest.fixture(scope="module")

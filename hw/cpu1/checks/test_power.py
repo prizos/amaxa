@@ -287,7 +287,6 @@ def _reflected_current(spec) -> float:
     ask a 1 A converter for 1.36 A and a 1 A fuse for 1.04 A, with every check
     passing: the only place the two were ever added was the copper.
     """
-    v3v3_high, _ = spec("rail.3v3", "voltage"), None
     _, v3v3_high = spec("rail.3v3", "voltage")
     _, i3v3_high = spec("rail.3v3", "current")
     efficiency_low, _ = spec("buck3v3", "efficiency")

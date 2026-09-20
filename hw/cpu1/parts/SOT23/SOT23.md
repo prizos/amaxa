@@ -57,7 +57,7 @@ here.
 
 `LBAT54ALT1G`, [C12743](https://www.lcsc.com/product-detail/C12743.html), a
 BAT54A: two Schottky diodes with their **anodes joined**, 30 V, 200 mA, in the
-same SOT-23. Stock 255,381. Two of them on the board.
+same SOT-23. Stock 255,381. **Six of them on the board** — four on the trip bus, one joining the two gate-driver faults and one the reset. It said two for as long as there were two.
 
 They are what lets three separate things pull the trip bus low without any of
 them being wired to each other. Each fault line reaches the bus through its own

@@ -557,6 +557,14 @@ COMPARATOR = PartSpec(
         "input_hysteresis": exact(6e-3),
         "common_mode_headroom": exact(0.2),      # from either rail
         "output_swing_from_rail": exact(50e-3),  # at 1 mA
+        # The shutdown pin is measured *down from the positive supply*, which
+        # is the trap in it: "within 0.9 V of the most positive supply, the
+        # part is disabled. When it is more than 1.7 V below the most positive
+        # supply, the part is enabled." So SHDN is disable-active-high, ground
+        # enables, and a part left floating near its own rail is a comparator
+        # that is off. All seven here are tied to ground.
+        "shutdown_enable_below_supply": exact(1.7),
+        "shutdown_disable_within_supply": exact(0.9),
     },
 )
 

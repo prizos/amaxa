@@ -30,9 +30,11 @@ Cshunt pin 0 @adc.fast1.shunt.capacitance:max@
 .meas tran t_tau WHEN v(pin)=0.6321206 RISE=1
 .meas tran f_corner PARAM='1/(6.283185307*t_tau)'
 
-* And how long the pin takes to become a faithful copy - four and a half time
-* constants to a tenth of a percent, which is the number that says how soon
-* after a step the converter may be believed.
+* And how long the pin takes to become a faithful copy. The measurement below
+* is to a tenth of a per cent, which is ln(1000) = **6.9** time constants, not
+* the four and a half this used to say - 4.5 leaves 1.1 % and is the figure for
+* a per cent, not a tenth of one. The comment was wrong and the measurement was
+* right, which is the way round that goes unnoticed.
 .meas tran t_settled WHEN v(pin)=0.999 RISE=1
 
 .end

@@ -290,7 +290,7 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(spec, pad_net, compa
     )
 
 
-def test_the_dac_resolves_finer_than_the_comparator_can_use(spec, pad_net):
+def test_the_dac_resolves_finer_than_the_comparator_can_use(spec, pad_net, comparators):
     """
     More bits than the comparator's own offset can make use of, which is the
     right way round.
@@ -301,7 +301,9 @@ def test_the_dac_resolves_finer_than_the_comparator_can_use(spec, pad_net):
     """
     bits, _ = spec(DAC, "resolution_bits")
     _, (_, full_scale) = _supply_of(pad_net, DAC, "1", spec)
-    offset = spec("trip.fast1_high", "input_offset_voltage")[0]
+    # The worst of the seven, not the first one's. Naming an address here made
+    # the check about one comparator; the fixture already has them all.
+    offset = max(spec(address, "input_offset_voltage")[0] for address in comparators)
     step = full_scale / 2 ** bits
     assert step < offset, (
         f"a DAC step is {step * 1e3:.2f} mV and the comparator's offset is "
@@ -555,3 +557,55 @@ def test_the_thresholds_can_reach_the_top_of_the_signal_range(spec, pad_net):
         f"{internal:g} V of a {reference:g} V range, so nothing would have to "
         "select the supply - and this check would be pointless"
     )
+
+
+def test_every_comparator_is_switched_on(design, pad_net, spec, comparators, board_dir):
+    """
+    The shutdown pin is at a level the datasheet calls enabled, on all seven.
+
+    The trap is that the TLV3501 states this pin **relative to its positive
+    supply**, not to ground: "within 0.9 V of the most positive supply, the
+    part is disabled. When it is more than 1.7 V below the most positive
+    supply, the part is enabled." Read as an ordinary active-low enable it
+    comes out backwards, and a comparator that is off has no output, no trip,
+    and nothing anywhere that says so - the latch simply never sets.
+
+    Which pin it is comes from the symbol, and the level from the rails the
+    part is actually on, so this holds if the comparator is ever moved to
+    another supply.
+    """
+    import sys
+
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from symbols import symbol_pin_names
+
+    rails = {"GND": 0.0}
+    for name in ("5V", "3V3"):
+        rails[name] = spec(f"rail.{name.lower()}", "voltage")[0]   # the low corner
+
+    wrong = []
+    for address in sorted(comparators):
+        names = {name: pad for pad, name in
+                 symbol_pin_names(design["parts"][address]["symbol"]).items()}
+        assert "SHDN" in names, f"{address}'s symbol has no SHDN pin"
+        shutdown = pad_net.get((address, names["SHDN"]))
+        supply = pad_net.get((address, names["V+"]))
+        assert supply in rails, f"{address} runs from {supply!r}, which is not a rail"
+        if shutdown not in rails:
+            wrong.append(f"  {address}: SHDN is on {shutdown!r}, which is not a rail")
+            continue
+        enable_below, _ = spec(address, "shutdown_enable_below_supply")
+        disable_within, _ = spec(address, "shutdown_disable_within_supply")
+        headroom = rails[supply] - rails[shutdown]
+        if headroom < enable_below:
+            # Both thresholds, because between them the datasheet promises
+            # nothing: a pin 1.2 V below the supply is neither enabled nor
+            # disabled, and saying which of the two it is makes the difference
+            # between a comparator that is off and one that might be.
+            state = ("disabled" if headroom <= disable_within
+                     else "in the band between the two thresholds")
+            wrong.append(
+                f"  {address}: SHDN sits {headroom:.2f} V below its supply, "
+                f"which is {state} - the part needs {enable_below:g} V"
+            )
+    assert not wrong, "Comparators not switched on:\n" + "\n".join(wrong)
