@@ -1180,11 +1180,15 @@ def _static_routes() -> None:
 # the top, and the one off the east edge is pointing the right way already.
 STATIC_BAND = (
     # net, its line through the band, the column it turns north on
+    # The columns that carry a via at the same height as their neighbour are
+    # 0.75 mm apart, not 0.7: at 0.7 the two holes are 0.5 mm apart, which is
+    # exactly the fabricator's floor and tighter than the diagonal of the
+    # finest pin pitch on this board. DRC passed them on equality.
     ("RELAY1", -6.70, 13.0),
-    ("RELAY2", -6.21, 13.7),
+    ("RELAY2", -6.21, 13.75),
     ("ID_STRAP0", -5.72, 15.0),
-    ("ID_STRAP1", -5.23, 15.7),
-    ("ID_STRAP2", -4.74, 16.4),
+    ("ID_STRAP1", -5.23, 15.75),
+    ("ID_STRAP2", -4.74, 16.5),
     ("ID_STRAP3", -4.25, 16.9),
     ("FAULT1_N", -3.76, 17.2),
 )
@@ -1593,7 +1597,17 @@ TRIP_SUPPLY_LANE = -39.0
 # way. Where it leaves the island the 5 V spine starts.
 TRIP_DAC = (-12.0, -25.0)
 ISLAND_TAP = (-8.5, 25.5)
-TRIP_SPINE_X, TRIP_SPINE_Y = 36.5, -51.5
+# 36.45 and 21.1, not 36.5 and 21.0. On the round numbers this spine passed
+# 0.5 mm from the FAULT2_N via at (37, -8.6) and from the GATE_ENABLE via at
+# (24.3, 20.5), which for a 0.3 mm track and a 0.5 mm via is exactly 0.1 mm of
+# copper between them - the fabricator's floor, passed by DRC on equality.
+#
+# It cannot simply move west either: the static band drops through a column of
+# vias at x 35.9, and 36.4 is the same 0.1 mm from those. The gap between that
+# column and the via at 37.0 is 1.1 mm and this track needs 1.04 of it, so the
+# spine runs down the middle of what is left.
+TRIP_SPINE_X, TRIP_SPINE_Y = 36.45, -51.5
+TRIP_SPINE_TOP = 21.1
 
 
 # The comparators, in the order the analog header presents them, so the two
@@ -1639,8 +1653,8 @@ def _trip_supply() -> None:
     taps = [_point(f"trip.{key}.decoupling:1")[0] for key in TRIP_ORDER]
     spine = [
         ISLAND_TAP,
-        (ISLAND_TAP[0], 21.0),
-        (TRIP_SPINE_X, 21.0),
+        (ISLAND_TAP[0], TRIP_SPINE_TOP),
+        (TRIP_SPINE_X, TRIP_SPINE_TOP),
         # North of the USB receptacle rather than through it, and along the
         # top of the board to the far end of the row, so the lane itself
         # starts where the comparators do.
@@ -3257,6 +3271,14 @@ PLANE_NETS = {"GND": 0.25, "3V3": 0.25, "5V": 0.3}
 STITCH_REACH = 0.85       # how far beyond a pad its via sits
 VIA_TO_PAD = 0.45         # via edge to pad edge, with clearance to spare
 VIA_TO_VIA = 0.95         # centre to centre, which hole-to-hole decides
+# Edge to edge, between anything this board draws and anything else on its
+# layer. The fabricator's floor is 0.1 mm and their own note says a board that
+# only just clears the floor is one they can make rather than one that comes
+# back reliably, so the generator has always worked to twice it. Named here
+# because the checks hold the hand-written copper to the same figure, which
+# nothing did: four pairs of vias sat at exactly 0.5 mm hole to hole and two
+# tracks at exactly 0.1 mm from a via, all of them passing DRC on equality.
+COPPER_MARGIN = 0.2
 STITCH_PITCH = 14      # a twentieth of a wavelength at 500 MHz in FR4
 SHARE_REACH = 1.8         # how far a pad will reach to use a via already there
 
@@ -3517,7 +3539,7 @@ def _plane_stitches() -> None:
         # Copper already drawn. The via meets every layer; the stub only meets
         # the front one.
         for x, y, half, layer in near_copper(at):
-            if math.dist((x, y), at) < half + 0.25 + 0.2:
+            if math.dist((x, y), at) < half + 0.25 + COPPER_MARGIN:
                 return False
         for point in walk:
             for x, y, half, layer in near_copper(point):

@@ -834,3 +834,78 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
         f"Pour edge more than {1.5 * pitch:.0f} mm from a ground via at the "
         f"edge:\n" + "\n".join(sorted(set(bare)))
     )
+
+
+def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, pcb_text):
+    """
+    No copper within a fifth of the fabricator's minimum.
+
+    `fab/pcbway.kicad_dru` says it in as many words: "These are the
+    fabricator's floor, not a design target. A board that only just clears
+    them is one the fab can make, not one that will come back reliably." DRC
+    compares against those floors with `min`, so equality passes and the build
+    is green and nothing anywhere says the board is sitting on them.
+
+    Four pairs of vias sat at exactly **0.500 mm** hole to hole against a
+    0.5 mm floor, and two back-layer tracks at exactly **0.100 mm** from a via
+    of another net against a 0.1 mm floor. None was drawn by the stitching
+    generator, which does this arithmetic properly - `clear()` works to
+    `VIA_TO_VIA` and `COPPER_MARGIN`, both half as generous again. They were
+    hand-written coordinates, which nothing held to anything but DRC.
+
+    Both floors are read out of the fab's own rules file rather than repeated
+    here, so a fabricator with different capabilities moves this check with
+    them.
+    """
+    import re
+
+    floors = (board_dir.parent / "fab" / "pcbway.kicad_dru").read_text()
+    copper = float(re.search(r"\(constraint clearance \(min ([\d.]+)mm\)\)", floors).group(1))
+    hole = float(re.search(r"\(constraint hole_to_hole \(min ([\d.]+)mm\)\)", floors).group(1))
+    over, _ = spec("routing", "clearance_over_floor")
+
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from mcu_pins import load_source
+
+    description = load_source(board_dir / "layout.py", "cpu1_layout_margins")
+    radius, drill = description.VIA[0] / 2, description.VIA[1]
+
+    # Holes get a different figure, and it is not the floor times anything.
+    # Escaping a package on a 0.5 mm pitch puts two vias on that pitch's
+    # diagonal whatever anybody intends, and that diagonal is the tightest
+    # this board can physically be - 0.507 mm hole to hole. Asking for more
+    # would be asking the LQFP-144 to have coarser pins. So the limit is the
+    # diagonal of the finest pitch any footprint here is drawn at, which
+    # KiCad puts in the footprint's own name, and anything tighter than that
+    # is a choice rather than a package.
+    pitches = [float(found) for found in
+               re.findall(r"_P([\d.]+)mm", pcb_text)]
+    assert pitches, "no footprint on this board states a pin pitch"
+    escape = min(pitches) * math.sqrt(2) - drill
+    hole_floor = max(hole, escape)
+
+    tight = []
+    for i, (x1, y1, net1) in enumerate(vias):
+        for x2, y2, net2 in vias[i + 1:]:
+            apart = math.dist((x1, y1), (x2, y2)) - drill
+            if apart < hole_floor - 1e-6:
+                tight.append(
+                    f"  vias on {net1} and {net2} are {apart:.3f} mm hole to "
+                    f"hole at ({x1:g}, {y1:g}), against {hole_floor:.3f} - the "
+                    f"diagonal of this board's finest pitch"
+                )
+
+    for x, y, net in vias:
+        for start, end, _, track, width in segments:
+            if track == net:
+                continue
+            gap = _point_to_segment((x, y), start, end) - radius - width / 2
+            if gap < copper * over - 1e-9:
+                tight.append(
+                    f"  a {track} track passes {gap:.3f} mm from a {net} via at "
+                    f"({x:g}, {y:g}), against a {copper:g} mm floor"
+                )
+    assert not tight, (
+        f"Copper within {over:g} times the fabricator's floor:\n"
+        + "\n".join(sorted(set(tight)))
+    )

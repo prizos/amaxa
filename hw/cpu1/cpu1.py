@@ -260,6 +260,16 @@ INTENT: dict[str, tuple[float, float]] = {
     # laminate is over a metre, so the detour is a hundredth of one - short
     # enough that the loop it makes is the smallest thing in that corner.
     "routing.reference_change_distance": (0.0, 10.0),
+    # How far above the fabricator's floor the board's own copper has to sit.
+    # `fab/pcbway.kicad_dru` says it plainly - "these are the fabricator's
+    # floor, not a design target. A board that only just clears them is one
+    # the fab can make, not one that will come back reliably" - and DRC
+    # compares with `min`, so equality passes and says nothing. A fifth is the
+    # smallest margin that means anything against etch and registration
+    # spread; the routing grid already gives most of this board a quarter to
+    # three quarters more than the floor, so what this catches is the copper
+    # that was placed by hand and never checked against anything but DRC.
+    "routing.clearance_over_floor": (1.2, 2.0),
     # The fastest edge any track on this board carries, for working out what
     # one track couples into another. The buffers' outputs are the quickest
     # thing here at about three nanoseconds and the RMII is slower again, so
