@@ -256,3 +256,49 @@ def pin_map(board_dir):
     sys.path.insert(0, str(board_dir.parent / "tools"))
     from mcu_pins import load_source
     return load_source(board_dir / "pinmap.py", "cpu1_pinmap_adc")
+
+
+def test_no_analog_input_may_be_presented_more_than_its_pin_allows(
+    design, spec, networks, pad_net
+):
+    """
+    What the connector may present, against what the pin is rated for.
+
+    These are TT_xx analog inputs and ST's Table 20 caps them at **4.0 V
+    absolute**. Not VDDA plus a diode drop, which is the number everybody
+    reaches for: Table 21 rates injection current on them at minus five to
+    *plus nought* milliamps, so there is no positive-injection path to be
+    inside of. The limit is a voltage and there is nothing below it.
+
+    And this board hands the sensors that drive those pins **5VA**, which
+    reaches 5.2 V. An op-amp rails to its own supply when the thing it is
+    measuring goes wrong, which is the over-current the trip chain exists for,
+    and the 10 ohm in series is what the ADC's settling window needs rather
+    than anything that limits a fault.
+
+    So the requirement goes to the board that can meet it, and this is the
+    check that it has been stated and that it is inside the pin's rating.
+    `analog.input_voltage_max` is what the power board's sensors may present;
+    if anyone raises it past what the silicon takes, this fails. What it
+    cannot do is verify the far board - only that this one has said what it
+    needs and asked for something possible.
+    """
+    _, presented = spec("analog", "input_voltage_max")
+    limit, _ = spec(MCU, "analog_input_voltage_max")
+    assert presented <= limit, (
+        f"the analog connector may present {presented:g} V and the pins take "
+        f"{limit:g} V"
+    )
+
+    # And the requirement is not vacuous: the rail this board sends out for
+    # those sensors is higher than the pins take, so something on the far side
+    # has to do the limiting. Saying so here is what stops the figure above
+    # being read as "nothing to do".
+    _, analog_rail = spec("rail.5v", "voltage")
+    assert analog_rail > limit, (
+        f"5VA reaches {analog_rail:g} V and the pins take {limit:g} V - if "
+        f"that ever stops being true, this requirement can be dropped"
+    )
+
+    fast = sorted(channel for channel in networks if channel.startswith("fast"))
+    assert len(fast) == 8, f"expected eight fast channels, found {fast}"

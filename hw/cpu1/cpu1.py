@@ -96,6 +96,35 @@ INTENT: dict[str, tuple[float, float]] = {
     # What the analog header is allowed to draw from 5VA, which is what the
     # 5 V rail's budget above carries for it.
     "analog.supply_current": (0.0, 0.05),
+    # The highest voltage a sensor on the far side of the analog connector may
+    # ever present to one of the fast inputs, **including while it is
+    # failing**. It is a requirement this board places on the power board, and
+    # the reason it has to be one is worth setting out.
+    #
+    # These pins are TT_xx analog inputs and ST's Table 20 caps them at 4.0 V
+    # absolute. Not VDDA plus a diode drop: Table 21 rates the injection
+    # current on them at minus five to **plus nought** milliamps, so there is
+    # no positive-injection path at all and the limit is a voltage. Meanwhile
+    # this board hands the sensors 5VA, which reaches 5.2 V, and an op-amp
+    # rails to its own supply when the thing it measures goes wrong - during
+    # the over-current the trip chain exists for.
+    #
+    # `docs/research/07-power-board-interface.md` answers that with "RC corner
+    # ~1-2 MHz **plus clamps**". The RC is built. **The clamps are not, and
+    # they do not fit**: a clamp has to sit on the sense net ahead of the
+    # series resistor - at 10 ohm the resistor is what the settling window
+    # needs and 225 mW at the fault, on a 62.5 mW part - and searching the
+    # whole analog region for somewhere a SOT-363 and its two vias would go
+    # found nothing. Three positions were tried and built: the strip between
+    # the header and the first column is two millimetres wide, the band at
+    # y -25.8 is the channel the RMII crosses the board in, and the band below
+    # the comparators collides with the trip diodes and the jack's mounting
+    # pad. Making room means re-planning the fan's columns.
+    #
+    # So the limit goes where it can be met and where the fault starts: at the
+    # sensor. A 3.3 V output stage, a divider, or a clamp beside the op-amp
+    # all satisfy it, and any of them is cheaper there than here.
+    "analog.input_voltage_max": (0.0, 4.0),
     # The most the bead between 5 V and the analog header may drop. The
     # sensors on the far side are ratiometric to VREF+ so their *reading* does
     # not depend on this, but their own headroom is specified from their

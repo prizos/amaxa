@@ -39,6 +39,13 @@ MCU_H743 = PartSpec(
         "adc_sample_capacitance": exact(4e-12),
         "adc_sample_resistance": exact(50.0),
         "adc_external_impedance_max": exact(50e3),
+        # Table 20: the absolute maximum on a TT_xx pin, which is what every
+        # pure analog input on this part is. Four volts, not VDDA plus a
+        # diode: these pins have no positive injection path at all, which
+        # Table 21 says by rating I_INJ at minus five to **plus nought**
+        # milliamps. There is no current this pin may be driven above its
+        # supply with; the limit is the voltage.
+        "analog_input_voltage_max": exact(4.0),
         # What a 5 V-tolerant pin may see, as the datasheet states it: a
         # headroom above the *lowest* of the part's supplies, not a fixed
         # number. Recorded as the overhead so a check reads the board's own
