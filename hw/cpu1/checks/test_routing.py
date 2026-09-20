@@ -232,7 +232,7 @@ def test_no_via_reaches_for_a_plane_that_is_not_there(stitch_vias, plane_outline
 
 
 def test_every_layer_change_has_a_way_back_for_its_return_current(
-    spec, vias, stitchers, plane_layers
+    spec, vias, segments, stitchers, plane_layers
 ):
     """
     Each signal that changes layer, against the nearest crossing its return has.
@@ -257,35 +257,49 @@ def test_every_layer_change_has_a_way_back_for_its_return_current(
     DRC, or on a working bench.
     """
     _, allowed = spec("routing", "reference_change_distance")
-    order, grounds = plane_layers["order"], plane_layers["grounds"]
+    grounds, planes = plane_layers["grounds"], plane_layers["planes"]
+    apart = plane_layers["apart"]
 
-    def ground_under(layer):
-        """The nearest ground plane to a signal layer, by stackup position."""
-        at = order.index(layer)
-        return min(grounds, key=lambda g: abs(order.index(g) - at))
+    def reference(layer):
+        """The plane a signal on this layer returns through: the nearest one."""
+        return min(planes, key=lambda plane: apart(layer, plane))
 
-    # Every via on this board is a through-hole, so a layer change is F to B.
-    outer = [l for l in plane_layers["signals"] if l in ("F.Cu", "B.Cu")]
-    references = {ground_under(l) for l in outer}
-    if len(references) <= 1:
-        crossings = None                  # one plane serves both: nothing to cross
-    elif all(r in grounds for r in references):
-        crossings = [(x, y) for x, y, net in vias if net == GROUND]
-        what = "ground via"
-    else:
-        crossings = stitchers
-        what = "tie between the planes"
+    # **Which layers the route uses, not which layers the via spans.** Every
+    # via here is a through-hole, and this used to reason from that: a layer
+    # change is F to B, so the reference change is the same for all of them.
+    # It is a property of the via and not of the route. Eight routes on this
+    # board drop from F.Cu to In3.Cu and stop there, and their reference goes
+    # from a ground plane to the supply plane - a change that needs a tie
+    # between the two, not a ground via. They were being measured against 211
+    # ground vias, which are irrelevant to that hop.
+    ground_vias = [(x, y) for x, y, net in vias if net == GROUND]
+    by_net: dict[str, list] = {}
+    for start, end, layer, net, _ in segments:
+        by_net.setdefault(net, []).append((start, end, layer))
 
     far = []
-    if crossings is not None:
+    for x, y, net in vias:
+        if net in PLANES:
+            continue                      # a plane via is the return path
+        here = (x, y)
+        layers = {
+            layer for start, end, layer in by_net.get(net, [])
+            if _point_to_segment(here, start, end) < 1e-3
+        }
+        references = {reference(layer) for layer in layers}
+        if len(references) <= 1:
+            continue                      # one plane serves both ends of the hop
+        if all(r in grounds for r in references):
+            crossings, what = ground_vias, "ground via"
+        else:
+            crossings, what = stitchers, "tie between the planes"
         assert crossings, f"no {what} on this board"
-        for x, y, net in vias:
-            if net in PLANES:
-                continue                  # a plane via is the return path
-            detour = min(math.dist((x, y), c) for c in crossings)
-            if detour > allowed:
-                far.append(f"  {net} changes layer at ({x:g}, {y:g}), "
-                           f"{detour:.1f} mm from the nearest {what}")
+        detour = min(math.dist(here, c) for c in crossings)
+        if detour > allowed:
+            far.append(
+                f"  {net} changes from {sorted(layers)} at ({x:g}, {y:g}), "
+                f"{detour:.1f} mm from the nearest {what}"
+            )
     assert not far, (
         f"Layer changes further than {allowed:g} mm from a way back:\n" + "\n".join(far)
     )
