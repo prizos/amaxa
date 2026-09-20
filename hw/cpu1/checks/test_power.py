@@ -407,14 +407,22 @@ def _ripple_at_feedback(design, two_pad_parts, spec):
     """
     ramp = _parts_on(design, two_pad_parts, "Device:R", "SW_5V", "RAMP")
     assert len(ramp) == 1, f"expected one resistor from the switch node to the ramp, found {ramp}"
-    r_a, _ = spec(ramp[0], "resistance")
-    c_a, _ = _capacitance_on(design, two_pad_parts, spec, "RAMP", "5V")
+    r_low, r_high = spec(ramp[0], "resistance")
+    c_low, c_high = _capacitance_on(design, two_pad_parts, spec, "RAMP", "5V")
     _, frequency, _ = _frequency(design, two_pad_parts, spec)
     v_out = _rail_typical(design, two_pad_parts, spec, "5V", "FB_5V", BUCK_5V)
 
     input_low, input_high = spec("input", "voltage")
-    at = lambda v_in: v_out * (v_in - v_out) / (v_in * frequency * r_a * c_a)  # noqa: E731
-    return at(input_low), at(input_high)
+
+    def at(v_in, r, c):
+        return v_out * (v_in - v_out) / (v_in * frequency * r * c)
+
+    # Ripple falls as R and C rise, so the *smallest* ripple - the one the
+    # floor check below is about - is at the top of both tolerance bands, and
+    # at the lowest input. Both were taken at `[0]`, the bottom of the bands,
+    # which is the corner that makes the ripple look largest: the floor was
+    # being checked against a number 25 % higher than the board can promise.
+    return at(input_low, r_high, c_high), at(input_high, r_low, c_low)
 
 
 def _frequency(design, two_pad_parts, spec):
@@ -550,7 +558,12 @@ def test_the_inductors_are_never_the_first_thing_to_give_way(design, two_pad_par
     v5 = _rail_typical(design, two_pad_parts, spec, "5V", "FB_5V", BUCK_5V)
     v3v3 = _rail_typical(design, two_pad_parts, spec, "3V3", "FB_3V3", BUCK_3V3)
     frequency_3v3, _ = spec(BUCK_3V3, "switching_frequency")
-    _, load_5v = spec("rail.5v", "current")
+    # Everything the 5 V converter delivers, not what the 5 V rail's own
+    # budget is: L1 sits between the switch node and the rail, so the 3V3
+    # buck's input current goes through it too. Budgeting the two separately
+    # is the defect that had a 1 A converter asked for 1.36 A, and it had
+    # survived here.
+    load_5v = _five_volt_current(spec)
     _, load_3v3 = spec("rail.3v3", "current")
 
     cases = [
@@ -597,7 +610,8 @@ def test_the_inductors_do_not_spend_the_efficiency_the_design_assumes(
     """
     efficiency_low, _ = spec("power", "efficiency")
     cases = [
-        ("SW_5V", "5V", spec("rail.5v", "voltage")[1], spec("rail.5v", "current")[1]),
+        # As above: the 5 V winding carries the 3V3 buck's draw as well.
+        ("SW_5V", "5V", spec("rail.5v", "voltage")[1], _five_volt_current(spec)),
         ("SW_3V3", "3V3", spec("rail.3v3", "voltage")[1], spec("rail.3v3", "current")[1]),
     ]
     problems = []
