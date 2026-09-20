@@ -321,5 +321,9 @@ def test_no_analog_input_may_be_presented_more_than_its_pin_allows(
         f"that ever stops being true, this requirement can be dropped"
     )
 
-    fast = sorted(channel for channel in networks if channel.startswith("fast"))
-    assert len(fast) == 8, f"expected eight fast channels, found {fast}"
+    # Every fast channel, however many there are. This used to assert there
+    # were eight, which is a belief about the pin map bolted onto a check
+    # about voltage ratings.
+    assert any(_band_of(channel) == "fast" for channel in networks), (
+        "no fast channel found, and this check is about them"
+    )

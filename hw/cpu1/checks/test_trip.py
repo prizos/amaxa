@@ -282,7 +282,7 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(spec, pad_net, compa
     }
     total = sum(terms.values())
     assert total <= allowed, (
-        f"at a threshold of {threshold:.3f} V, a quarter of full scale, the "
+        f"at a threshold of {threshold:.3f} V, {floor * 100:g} % of full scale, the "
         f"trip point is good to {total * 100:.1f} % against {allowed * 100:g} % "
         f"declared:\n" + "\n".join(
             f"  {share * 100:5.2f} % from {name}"
@@ -579,9 +579,13 @@ def test_every_comparator_is_switched_on(design, pad_net, spec, comparators, boa
     sys.path.insert(0, str(board_dir.parent / "tools"))
     from symbols import symbol_pin_names
 
-    rails = {"GND": 0.0}
+    # Each rail twice: the supply at its lowest and the shutdown net at its
+    # highest is the corner that leaves least headroom. One figure for both
+    # took the optimistic one.
+    low = {"GND": 0.0}
+    high = {"GND": 0.0}
     for name in ("5V", "3V3"):
-        rails[name] = spec(f"rail.{name.lower()}", "voltage")[0]   # the low corner
+        low[name], high[name] = spec(f"rail.{name.lower()}", "voltage")
 
     wrong = []
     for address in sorted(comparators):
@@ -590,13 +594,13 @@ def test_every_comparator_is_switched_on(design, pad_net, spec, comparators, boa
         assert "SHDN" in names, f"{address}'s symbol has no SHDN pin"
         shutdown = pad_net.get((address, names["SHDN"]))
         supply = pad_net.get((address, names["V+"]))
-        assert supply in rails, f"{address} runs from {supply!r}, which is not a rail"
-        if shutdown not in rails:
+        assert supply in low, f"{address} runs from {supply!r}, which is not a rail"
+        if shutdown not in high:
             wrong.append(f"  {address}: SHDN is on {shutdown!r}, which is not a rail")
             continue
         enable_below, _ = spec(address, "shutdown_enable_below_supply")
         disable_within, _ = spec(address, "shutdown_disable_within_supply")
-        headroom = rails[supply] - rails[shutdown]
+        headroom = low[supply] - high[shutdown]
         if headroom < enable_below:
             # Both thresholds, because between them the datasheet promises
             # nothing: a pin 1.2 V below the supply is neither enabled nor

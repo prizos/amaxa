@@ -536,9 +536,11 @@ def test_a_cable_ground_tied_straight_to_the_boards_is_one_the_parts_can_afford(
         low, high = spec(bus, "common_mode_required")
         part_low, _ = spec(transceiver, "common_mode_low")
         _, part_high = spec(transceiver, "common_mode_high")
-        assert part_low < low and part_high > high, (
+        margin, _ = spec("bus", "common_mode_margin")
+        assert (part_high - part_low) >= margin * (high - low), (
             f"{bus}: its connector's ground pin goes straight to the board's, "
             f"and {transceiver} tolerates {part_low:g} to {part_high:g} V of "
-            f"offset against the {low:g} to {high:g} V its standard requires - "
-            f"no margin, so the tie is no longer free"
+            f"offset - {(part_high - part_low) / (high - low):.2f} times the "
+            f"{low:g} to {high:g} V its standard requires, against the "
+            f"{margin:g} the tie is justified by"
         )

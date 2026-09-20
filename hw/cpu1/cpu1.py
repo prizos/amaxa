@@ -305,6 +305,14 @@ INTENT: dict[str, tuple[float, float]] = {
     # specified well past these - and a check is what holds that true.
     "can.common_mode_required": (-2.0, 7.0),
     "rs485.common_mode_required": (-7.0, 12.0),
+    # And how much wider than that a transceiver has to be for the hard tie
+    # to be the right call. The argument is *margin* - "both parts here are
+    # specified well past it" - and a strict inequality states none: a part
+    # at -7.01 V would have passed with ten millivolts and the tie would have
+    # been justified by nothing. Half again is what these two clear
+    # comfortably (2.7x for the CAN part, 1.6x for the RS-485 one) and is
+    # about where "well past" stops being a fair description.
+    "bus.common_mode_margin": (1.5, 4.0),
     # What IEEE 802.3 allows the link's clock to drift by, end to end. The
     # PHY's datasheet then splits it into tolerance, stability and ageing.
     "ethernet.clock_budget": (0.0, 50e-6),

@@ -3292,6 +3292,7 @@ VIA_TO_VIA = 0.95         # centre to centre, which hole-to-hole decides
 # tracks at exactly 0.1 mm from a via, all of them passing DRC on equality.
 COPPER_MARGIN = 0.2
 STITCH_PITCH = 14      # a twentieth of a wavelength at 500 MHz in FR4
+STITCH_INSET = 1.5     # how far in from the pour's edge the ring sits
 SHARE_REACH = 1.8         # how far a pad will reach to use a via already there
 
 
@@ -3643,7 +3644,7 @@ def _plane_stitches() -> None:
     # land on something are skipped rather than nudged: the ring is a
     # statistical measure, not a net, and a gap in it costs a little of the
     # effect where a part already fills the space.
-    inset = 1.5
+    inset = STITCH_INSET
     half_w, half_h = BOARD["size"][0] / 2 - inset, BOARD["size"][1] / 2 - inset
     corner = BOARD["corner_radius"]
     edge: list[tuple[float, float]] = []

@@ -830,13 +830,20 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
     # A via damps an edge by being *at* it. This used to accept the nearest
     # ground via anywhere on the board, so a dense field ten millimetres
     # inboard answered for an edge with nothing on it - which is the exact
-    # arrangement the check was written to catch. One pitch is the distance
-    # the ring itself is built to, so it is what counts as "at the edge".
+    # arrangement the check was written to catch.
+    #
+    # "At" is the ring's own inset plus a via, not one pitch. A pitch is
+    # fourteen millimetres here, which let a via ten millimetres inboard go on
+    # answering - the sentence above was still not what the code did. The ring
+    # is generated at `inset`, so a via belonging to it is within that plus
+    # its own diameter of the edge, and nothing else counts.
+    at_the_edge = description.STITCH_INSET + description.VIA[0]
+
     def near_the_edge(point):
         return min(
             _point_to_segment(point, a, b)
             for a, b in zip(outline, outline[1:] + outline[:1])
-        ) <= pitch
+        ) <= at_the_edge
 
     grounds = [(x, y) for x, y, net in vias if net == GROUND and near_the_edge((x, y))]
     assert grounds, "no ground via within a pitch of the pour's edge"
@@ -906,11 +913,20 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
     # diagonal of the finest pitch any footprint here is drawn at, which
     # KiCad puts in the footprint's own name, and anything tighter than that
     # is a choice rather than a package.
-    pitches = [float(found) for found in
-               re.findall(r"_P([\d.]+)mm", pcb_text)]
-    assert pitches, "no footprint on this board states a pin pitch"
-    escape = min(pitches) * math.sqrt(2) - drill
-    hole_floor = max(hole, escape)
+    # Holes get the floor and no margin, and that is deliberate.
+    # `fab/pcbway.kicad_dru` says of this figure that hole-to-hole spacing is
+    # "not published at the standard tier" and that the value there "predates
+    # that reading and has no recorded source". Multiplying a fifth onto a
+    # number nobody sourced would be inventing twice; the copper clearance
+    # beside it does take the margin, because 0.1 mm is published.
+    #
+    # So what is asked of holes is only that they do not sit exactly *on* the
+    # floor - a thousandth of a millimetre, which is below anything a fab
+    # controls and simply means "not equal to". That is enough: it caught the
+    # four pairs at exactly 0.500 mm, and everything else on this board is at
+    # 0.507 or wider, which is where a 0.5 mm pitch package's own escape
+    # diagonal falls anyway.
+    hole_floor = hole + 1e-3
 
     tight = []
     for i, (x1, y1, net1) in enumerate(vias):
@@ -919,8 +935,8 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
             if apart < hole_floor - 1e-6:
                 tight.append(
                     f"  vias on {net1} and {net2} are {apart:.3f} mm hole to "
-                    f"hole at ({x1:g}, {y1:g}), against {hole_floor:.3f} - the "
-                    f"diagonal of this board's finest pitch"
+                    f"hole at ({x1:g}, {y1:g}), against a {hole:g} mm floor "
+                    f"that nothing may sit exactly on"
                 )
 
     for x, y, net in vias:

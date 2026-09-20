@@ -41,9 +41,16 @@ E24 = (10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30, 33, 36,
 
 
 def _E24_VALUES(near: float) -> list[float]:
-    """Every E24 value in the two decades around `near`, in farads."""
-    decade = 10.0 ** math.floor(math.log10(near / 10.0))
-    return [v * decade * scale for scale in (1, 10) for v in E24]
+    """
+    Every E24 value within a decade either side of `near`, in farads.
+
+    Either side matters. The window used to start at the decade below and run
+    two decades up, so a nominal sitting on a decade boundary had no candidate
+    beneath it and "no value in the series gets closer" was only ever tested
+    upward.
+    """
+    decade = 10.0 ** math.floor(math.log10(near))
+    return [v * decade * scale / 100.0 for scale in (1, 10, 100, 1000) for v in E24]
 
 RAILS = {"5V": "rail.5v", "3V3": "rail.3v3"}
 
@@ -463,8 +470,12 @@ def test_the_rule_that_bounds_the_pairs_admits_only_their_impedance(
 
     gap = load_source(board_dir / "layout.py", "cpu1_layout_eth").ETH_GAP
     text = (board_dir / "rules.kicad_dru").read_text()
+    # Bounded to the rule's own body - `[^(]*` cannot cross into the next
+    # `(rule`, so a rule that loses its own track_width fails here instead of
+    # quietly reporting a later rule's.
     rule = re.search(
-        r"\(rule \"ethernet pairs\".*?\(constraint track_width \(min ([\d.]+)mm\)\)",
+        r'\(rule "ethernet pairs"(?:[^(]|\((?!rule ))*?'
+        r"\(constraint track_width \(min ([\d.]+)mm\)\)",
         text, re.S,
     )
     assert rule, "rules.kicad_dru has no ethernet pairs rule to check"

@@ -110,7 +110,11 @@ def _fet(symbol: str) -> tuple[dict[str, str], str] | None:
     if symbol.startswith(_NMOS):
         return _terminals(symbol), "N"
     names = symbol_pin_names(symbol)
-    if set(names.values()) < {"G", "S", "D"}:
+    # Not `<`. A proper-subset test passes a symbol with *extra* pins and
+    # fails one with exactly these three, which is the opposite of the
+    # question - "are these the three terminals" - and only the Description
+    # filter below was saving it.
+    if set(names.values()) != {"G", "S", "D"}:
         return None
     described = symbol_description(symbol).upper()
     if "N-CHANNEL" in described or "N-MOSFET" in described:
