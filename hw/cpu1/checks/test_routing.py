@@ -117,7 +117,16 @@ def plane_outlines(board_dir) -> dict[str, list]:
 
     description = load_source(board_dir / "layout.py", "cpu1_layout_routing")
     planes = getattr(description, "PLANES", None) or [description.PLANE]
-    return {plane["net"]: plane["outline"] for plane in planes}
+    # Keyed by net *and layer*, because two pours can share a net: this board
+    # grounds In1.Cu and In4.Cu, and keying on the net alone kept whichever
+    # came last, so half the ground on the board was never asked about. The
+    # bare net name still resolves, to the first pour that carries it, for the
+    # checks that want "the 5 V island" and do not care which layer it is on.
+    out: dict[str, list] = {}
+    for plane in planes:
+        out.setdefault(plane["net"], plane["outline"])
+        out[f"{plane['net']} on {plane['layer']}"] = plane["outline"]
+    return out
 
 
 @pytest.fixture(scope="module")
@@ -141,6 +150,16 @@ def stitchers(pcb_text, design) -> list[tuple[float, float]]:
             out.append((float(at.group(1)), float(at.group(2))))
     assert out, "no capacitor ties the ground plane to a supply plane"
     return out
+
+
+def _point_to_segment(point, a, b) -> float:
+    """How close a point comes to a line segment, not to its endpoints."""
+    (px, py), (ax, ay), (bx, by) = point, a, b
+    dx, dy = bx - ax, by - ay
+    if dx == 0.0 and dy == 0.0:
+        return math.dist(point, a)
+    along = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+    return math.dist(point, (ax + along * dx, ay + along * dy))
 
 
 def _edge_crossings(polygon, a, b) -> list[tuple[float, float]]:
@@ -193,10 +212,18 @@ def test_no_via_reaches_for_a_plane_that_is_not_there(stitch_vias, plane_outline
     """
     lost = []
     for x, y, net in stitch_vias:
-        if net not in plane_outlines:
+        # Every pour carrying this net, not one of them. Two layers ground
+        # this board and the outlines were keyed by net alone, so only the
+        # last of the two was ever asked about.
+        pours = [outline for key, outline in plane_outlines.items()
+                 if key.startswith(f"{net} on ")]
+        if not pours:
             continue
-        if not _inside(plane_outlines[net], (x, y)):
-            lost.append(f"  {net} via at ({x:g}, {y:g}) is outside the {net} plane")
+        if not any(_inside(outline, (x, y)) for outline in pours):
+            lost.append(
+                f"  {net} via at ({x:g}, {y:g}) is outside all "
+                f"{len(pours)} {net} pours"
+            )
     assert not lost, (
         "Vias reaching for a plane that is not underneath them:\n" + "\n".join(lost)
     )
@@ -659,30 +686,46 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
     from mcu_pins import load_source
 
     description = load_source(board_dir / "layout.py", "cpu1_layout_stitching")
-    width, height = description.BOARD["size"]
     pitch = description.STITCH_PITCH
     keepout = description.JACK_KEEPOUT
 
-    grounds = [(x, y) for x, y, net in vias if net == GROUND]
-    assert grounds, "no ground vias at all"
+    # The pour's own outline, not the board's. The planes are inset from the
+    # edge and notched around the jack, so walking a rectangle at the board
+    # size asks about copper that is not there and misses the notch.
+    outline = description._pour_outline()
 
+    # A via damps an edge by being *at* it. This used to accept the nearest
+    # ground via anywhere on the board, so a dense field ten millimetres
+    # inboard answered for an edge with nothing on it - which is the exact
+    # arrangement the check was written to catch. One pitch is the distance
+    # the ring itself is built to, so it is what counts as "at the edge".
+    def near_the_edge(point):
+        return min(
+            _point_to_segment(point, a, b)
+            for a, b in zip(outline, outline[1:] + outline[:1])
+        ) <= pitch
+
+    grounds = [(x, y) for x, y, net in vias if net == GROUND and near_the_edge((x, y))]
+    assert grounds, "no ground via within a pitch of the pour's edge"
+
+    # Every edge walked at a fixed step *and* its far end, so the last stretch
+    # of each side is sampled whatever the board measures. The old walk went
+    # in fives from zero and only reached the far corner because 130 and 110
+    # are both multiples of five.
+    step = 5.0
     bare = []
-    for along in range(0, int(width) + 1, 5):
-        for edge_y in (-height / 2, height / 2):
-            here = (-width / 2 + along, edge_y)
+    for a, b in zip(outline, outline[1:] + outline[:1]):
+        length = math.dist(a, b)
+        count = max(1, int(length / step))
+        for i in range(count + 1):
+            fraction = i / count
+            here = (a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction)
             if keepout[0] <= here[0] <= keepout[2] and keepout[1] <= here[1] <= keepout[3]:
                 continue
             if min(math.dist(here, g) for g in grounds) > 1.5 * pitch:
-                bare.append(f"  ({here[0]:.0f}, {here[1]:.0f})")
-    for along in range(0, int(height) + 1, 5):
-        for edge_x in (-width / 2, width / 2):
-            here = (edge_x, -height / 2 + along)
-            if keepout[0] <= here[0] <= keepout[2] and keepout[1] <= here[1] <= keepout[3]:
-                continue
-            if min(math.dist(here, g) for g in grounds) > 1.5 * pitch:
-                bare.append(f"  ({here[0]:.0f}, {here[1]:.0f})")
+                bare.append(f"  ({here[0]:.1f}, {here[1]:.1f})")
 
     assert not bare, (
-        f"Board edge more than {1.5 * pitch:.0f} mm from a ground via:\n"
-        + "\n".join(sorted(set(bare)))
+        f"Pour edge more than {1.5 * pitch:.0f} mm from a ground via at the "
+        f"edge:\n" + "\n".join(sorted(set(bare)))
     )

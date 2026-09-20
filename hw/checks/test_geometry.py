@@ -209,6 +209,16 @@ def test_every_polarised_part_marks_its_cathode_on_the_silkscreen(pcb_text, desi
     )
 
 
+def _point_to_segment(point, a, b) -> float:
+    """How close a point comes to a line segment, not to its endpoints."""
+    (px, py), (ax, ay), (bx, by) = point, a, b
+    dx, dy = bx - ax, by - ay
+    if dx == 0.0 and dy == 0.0:
+        return math.dist(point, a)
+    along = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+    return math.dist(point, (ax + along * dx, ay + along * dy))
+
+
 def test_the_board_has_mounting_holes_and_nothing_is_in_them(pcb_text, board_dir):
     """
     Every declared mounting hole is on the board, with clear copper around it.
@@ -245,8 +255,14 @@ def test_the_board_has_mounting_holes_and_nothing_is_in_them(pcb_text, board_dir
     for hx, hy, diameter in holes:
         keep = max(3.5, diameter)
         for x1, y1, x2, y2 in copper:
-            if min(math.dist((hx, hy), (x1, y1)), math.dist((hx, hy), (x2, y2))) < keep:
-                fouled.append(f"  a track ends {min(math.dist((hx,hy),(x1,y1)), math.dist((hx,hy),(x2,y2))):.1f} mm "
+            # The whole track, not its two ends. A long segment running
+            # straight over a hole has both endpoints well clear of it, and
+            # that is exactly the track this check exists to find - "the only
+            # thing standing between a hole and the track someone routes
+            # through it later", which it could not see.
+            near = _point_to_segment((hx, hy), (x1, y1), (x2, y2))
+            if near < keep:
+                fouled.append(f"  a track passes {near:.1f} mm "
                               f"from the hole at ({hx:g}, {hy:g})")
                 break
         for vx, vy in vias:

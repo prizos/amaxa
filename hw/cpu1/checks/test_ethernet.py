@@ -433,6 +433,46 @@ def test_each_pair_runs_from_the_package_to_the_jack_without_meeting_anything(
         assert net in pads_of[JACK].values(), f"{net} does not arrive at the jack"
 
 
+def test_the_rule_that_bounds_the_pairs_admits_only_their_impedance(
+    spec, stack, board_dir
+):
+    """
+    The narrowest track the DRU would accept still makes 100 ohm.
+
+    The rule's comment said `test_ethernet.py` read this floor back and put it
+    through the solver. **It did not.** One check opened rules.kicad_dru on
+    this board and it was the USB one; the 0.2 mm here was the only
+    impedance-bearing number on the board that nothing derived, sitting under
+    a comment claiming otherwise.
+
+    What it guards is the case the width check above cannot see: DRC passes a
+    board whose pair was redrawn narrower, because the rule's floor is what
+    DRC compares against, and a floor written once goes on saying the same
+    thing after the fab changes the prepreg and `ETH_WIDTH` moves with it.
+    """
+    import re
+    import sys
+
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from layout_lib import differential_impedance
+    from mcu_pins import load_source
+
+    gap = load_source(board_dir / "layout.py", "cpu1_layout_eth").ETH_GAP
+    text = (board_dir / "rules.kicad_dru").read_text()
+    rule = re.search(
+        r"\(rule \"ethernet pairs\".*?\(constraint track_width \(min ([\d.]+)mm\)\)",
+        text, re.S,
+    )
+    assert rule, "rules.kicad_dru has no ethernet pairs rule to check"
+    low, high = spec("ethernet", "differential_impedance")
+    floor = float(rule.group(1))
+    impedance = differential_impedance(floor, gap, stack)
+    assert low <= impedance <= high, (
+        f"the rule admits {floor:g} mm traces, which at {gap:g} mm apart "
+        f"make {impedance:.1f} ohm, outside {low:g} to {high:g}"
+    )
+
+
 def test_the_pairs_present_the_impedance_the_cable_expects(spec, stack, pcb_text):
     """
     The width and separation actually on the board, put back through the
@@ -625,7 +665,20 @@ def test_no_plane_runs_under_the_jacks_cable_end(board_dir, pcb_text):
 
     description = load_source(board_dir / "layout.py", "cpu1_layout_keepout")
     x0, y0, x1, y1 = description.JACK_KEEPOUT
-    middle = ((x0 + x1) / 2, (y0 + y1) / 2)
+    # A grid across the whole keepout, not its centre. The centre alone is one
+    # sample where the defect is an area: a pour covering nine tenths of the
+    # cable end and stopping just short of the middle answered correctly, and
+    # so did one shaped like a ring. The step is a millimetre, which is finer
+    # than any pour feature this board can produce - `min_thickness` on every
+    # zone is 0.25 mm, but a notch narrower than a millimetre in a plane is
+    # not something the generator can draw.
+    step = 1.0
+    samples = [
+        (x, y)
+        for i in range(int((x1 - x0) / step) + 1)
+        for j in range(int((y1 - y0) / step) + 1)
+        for x, y in [(min(x0 + i * step, x1), min(y0 + j * step, y1))]
+    ]
 
     covered = []
     for block in re.findall(r"\n\t\(zone\b.*?\n\t\)", pcb_text, re.S):
@@ -640,11 +693,15 @@ def test_no_plane_runs_under_the_jacks_cable_end(board_dir, pcb_text):
             (float(x), float(y))
             for x, y in re.findall(r"\(xy ([-\d.]+) ([-\d.]+)\)", outline.group(1))
         ]
-        if _inside(points, middle):
-            covered.append(net.group(1) if net else "?")
+        inside = [point for point in samples if _inside(points, point)]
+        if inside:
+            covered.append(
+                f"  {net.group(1) if net else '?'}: {len(inside)} of "
+                f"{len(samples)} sample points, first at "
+                f"({inside[0][0]:g}, {inside[0][1]:g})"
+            )
     assert not covered, (
-        f"Pours reaching under the jack's cable end at {middle}: "
-        + ", ".join(sorted(covered))
+        "Pours reaching under the jack's cable end:\n" + "\n".join(sorted(covered))
     )
 
 
