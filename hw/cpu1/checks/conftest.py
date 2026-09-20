@@ -91,7 +91,7 @@ def board_capacitance(pcb_text, layer_stack):
     pad would, and counting it as though it were a pad would be worse than
     leaving it out.
     """
-    from layout_lib import pad_capacitance, trace_capacitance
+    from layout_lib import microstrip_capacitance, pad_capacitance
 
     names = dict(re.findall(r'\(net (\d+) "([^"]*)"\)', pcb_text))
     totals: dict[str, float] = {}
@@ -109,7 +109,7 @@ def board_capacitance(pcb_text, layer_stack):
             (float(start.group(1)), float(start.group(2))),
             (float(end.group(1)), float(end.group(2))),
         )
-        per_mm = trace_capacitance(float(width.group(1)), layer_stack[layer.group(1)])
+        per_mm = microstrip_capacitance(float(width.group(1)), layer_stack[layer.group(1)])
         totals[net] = totals.get(net, 0.0) + length * per_mm
 
     for block in re.findall(r'\t\t\(pad "[^"]*" \w+ \w+\n(?:\t\t\t[^\n]*\n)+?\t\t\)', pcb_text):
@@ -122,10 +122,14 @@ def board_capacitance(pcb_text, layer_stack):
         # is the copper facing a plane that matters, so each face counts.
         faces = [name for name in ("F.Cu", "B.Cu") if f'"{name}"' in layers.group(1)
                  or '"*.Cu"' in layers.group(1)]
+        # The wider side is the one the microstrip model is asked about: a pad
+        # is a very wide, very short line, and it is the width across the
+        # field that sets the capacitance per unit of the other direction.
+        across = max(float(size.group(1)), float(size.group(2)))
         area = float(size.group(1)) * float(size.group(2))
         for face in faces:
             totals[number.group(1)] = totals.get(number.group(1), 0.0) + pad_capacitance(
-                area, layer_stack[face])
+                area, across, layer_stack[face])
 
     def lookup(net: str) -> float:
         assert net in totals, f"no copper on {net}"

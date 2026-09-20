@@ -195,14 +195,41 @@ LIGHT = 2.99792458e8            # m/s
 PERMITTIVITY = 8.854187817e-12  # F/m
 
 
-def trace_capacitance(width: float, stack: Microstrip) -> float:
-    """
-    Farads per millimetre between a microstrip trace and the plane under it.
+def _effective_permittivity(width: float, stack: Microstrip) -> float:
+    """Hammerstad's e_eff for a microstrip, which depends on how wide it is."""
+    er = stack.epsilon_r
+    return (er + 1) / 2 + ((er - 1) / 2) / math.sqrt(1 + 12.0 * stack.height / width)
 
-    Not a second model: a lossless line's capacitance per unit length is
-    sqrt(e_eff) / (c * Z0), so this is the impedance above read the other way
-    round, and the two cannot drift apart. The effective permittivity is
-    IPC-2141's, the same one that equation implies.
+
+def microstrip_impedance(width: float, stack: Microstrip) -> float:
+    """
+    Hammerstad's microstrip Z0, in ohms, valid either side of w = h.
+
+    A second impedance model in this file, deliberately. `single_ended_impedance`
+    above is IPC-2141's, and the pair widths and the DRU floors are solved with
+    it, so it stays exactly as it is - changing it would move copper that is
+    already drawn. But its logarithm goes negative once `0.8 w + t` exceeds
+    `5.98 h`, which on this stackup is **1.343 mm**, and capacitance derived
+    from it then comes out negative. A pad is several times wider than that.
+
+    Hammerstad has a branch for each side of w = h and neither misbehaves, so
+    it is what anything asking about wide copper uses.
+    """
+    effective = _effective_permittivity(width, stack)
+    ratio = width / stack.height
+    if ratio <= 1.0:
+        return (60.0 / math.sqrt(effective)) * math.log(8.0 / ratio + ratio / 4.0)
+    return (120.0 * math.pi / math.sqrt(effective)) / (
+        ratio + 1.393 + 0.667 * math.log(ratio + 1.444))
+
+
+def microstrip_capacitance(width: float, stack: Microstrip) -> float:
+    """
+    Farads per millimetre between copper of this width and the plane under it.
+
+    A lossless line's capacitance per unit length is sqrt(e_eff) / (c * Z0), so
+    this is the impedance read the other way round and the two cannot drift
+    apart.
 
     It is what a crystal's load capacitors are sized against. Copper that runs
     to a crystal terminal is in parallel with that terminal's capacitor, and a
@@ -210,20 +237,30 @@ def trace_capacitance(width: float, stack: Microstrip) -> float:
     tens - small, and not small enough to leave out when the whole link has
     fifty parts per million to spend.
     """
-    effective = 0.475 * stack.epsilon_r + 0.67
-    return math.sqrt(effective) / (LIGHT * single_ended_impedance(width, stack)) * 1e-3
+    if width <= 0.0:
+        raise ValueError(f"a track cannot be {width:g} mm wide")
+    return math.sqrt(_effective_permittivity(width, stack)) / (
+        LIGHT * microstrip_impedance(width, stack)) * 1e-3
 
 
-def pad_capacitance(area: float, stack: Microstrip) -> float:
+def pad_capacitance(area: float, width: float, stack: Microstrip) -> float:
     """
-    Farads between a pad of `area` square millimetres and that same plane.
+    Farads between a pad and that same plane, fringing included.
 
-    Parallel plate, with no fringing term: a pad is wide compared with the
-    dielectric under it, which is exactly the case where the plate term
-    dominates and the edges are a correction. The opposite of a trace, which
-    is why the two are not computed the same way.
+    **It used to be parallel plate**, on the argument that "a pad is wide
+    compared with the dielectric under it, which is exactly the case where the
+    plate term dominates and the edges are a correction". That is wrong on
+    this stackup, and this module's own trace model says so: at the widths
+    these pads are, fringing is **half again to two and a half times** the
+    plate term, not a correction. The pad term is a third to two thirds of
+    every stray this file computes, so the assumption was setting the answer.
+
+    A pad is a very wide, very short microstrip, so it is one: capacitance per
+    millimetre at the pad's width, times its length.
     """
-    return PERMITTIVITY * stack.epsilon_r * (area * 1e-6) / (stack.height * 1e-3)
+    if width <= 0.0:
+        raise ValueError(f"a pad cannot be {width:g} mm wide")
+    return microstrip_capacitance(width, stack) * (area / width)
 
 
 def pair_geometry(target: float, stack: Microstrip, gap: float,

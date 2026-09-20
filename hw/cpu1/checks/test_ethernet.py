@@ -237,7 +237,7 @@ def test_the_crystal_sees_the_load_it_is_cut_for(
     board file**, per leg, rather than declared: each terminal's copper sits in
     parallel with that terminal's own capacitor, and this board's two legs are
     not the same length - the four-pad crystal puts its terminals on a
-    diagonal, so one track goes the long way round, 1.98 pF against 1.11. A
+    diagonal, so one track goes the long way round, 2.08 pF against 1.22. A
     single declared figure across the pair hides that, and hid a load error of
     more than a picofarad while reading as though it had been thought about.
 

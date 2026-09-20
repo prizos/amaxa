@@ -151,6 +151,17 @@ INTENT: dict[str, tuple[float, float]] = {
     # tracks and pads on each leg are worth, and a check holds each floor above
     # its own copper. The LSE's was 2 pF against 2.23 pF of copper on the
     # longer leg, which is a corner the board could not reach.
+    #
+    # **And the LSE's floor is now thin enough to be worth measuring.** Once
+    # the pad model stopped assuming fringing away, LSE_IN's copper came out
+    # at 2.34 pF, which leaves 0.16 pF of the 2.5 for the MCU's own OSC pin -
+    # and a pin is picofarads, not tenths. Either this floor is too low or the
+    # 6.8 pF load capacitors are too large; raising the floor to a physical
+    # 3.0 pF makes the load check fail at 6.275 pF against a 6 pF cut, which
+    # says the capacitors. What it cannot say is by how much, because the one
+    # number that would settle it - ST's capacitance for the OSC pins - is not
+    # in the datasheet. It is the first thing to measure on the 32 kHz
+    # oscillator at bring-up, and the frequency error is what shows it.
     "hse.stray_capacitance": (3e-12, 5e-12),
     "lse.stray_capacitance": (2.5e-12, 4.5e-12),
     # An indicator LED that can be seen in a lit room, at the least current the
