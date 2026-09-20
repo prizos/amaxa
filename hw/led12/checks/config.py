@@ -12,7 +12,7 @@ COMPLETE = True
 # Checks that must actually run for this board, common and board-specific
 # together. Removing one, skipping one, or losing a whole file fails the suite
 # until this is updated in the same commit.
-EXPECTED_CHECKS = 58
+EXPECTED_CHECKS = 59
 
 # Parameters recorded in parts.py that no check and no deck consumes, each with
 # the reason it is not a hole. Everything not named here must be read by

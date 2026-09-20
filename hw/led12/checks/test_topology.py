@@ -130,7 +130,6 @@ def test_led_returns_go_through_the_switch(net_parts):
 POLARITY = [
     ("power.tvs", "1", "12V"),       # cathode, to the rail it protects
     ("power.tvs", "2", "GND"),       # anode
-    ("power.q_rpp", "1", "RPP_GATE"),
     # A P-MOSFET's body diode has its ANODE on the drain, so for reverse
     # polarity protection the drain faces the supply and the source faces the
     # load. Wired the other way round the part still switches perfectly and
@@ -139,19 +138,24 @@ POLARITY = [
     # round for the whole life of the board, so correcting the design turned
     # this check red rather than green — which is what a hand-written expected
     # value buys you.
-    ("power.q_rpp", "2", "12V"),        # source, on the protected side
-    ("power.q_rpp", "3", "VIN_FUSED"),  # drain, on the supply side
     # Both gate clamps used to be four rows here. They are
     # test_every_gate_clamp_faces_the_way_its_fet_needs now, which reads the
     # channel out of the FET's symbol and the cathode out of the Zener's, and
     # so holds on a board this file was not written for.
-    ("switch.q_switch", "1", "GATE"),
     # Its source and drain were two more rows.
     # test_every_led_faces_the_switch_that_sinks_it reads both off the symbol.
-    ("rail.ldo", "1", "GND"),
-    ("rail.ldo", "2", "3V3"),   # output, and the tab
-    ("rail.ldo", "3", "12V"),   # input
-]  # The four LEDs were here too, and are derived now.
+    # Everything else that was here is derived now: the reverse-polarity
+    # FET's three rows by test_reverse_polarity_fets_face_the_supply, the
+    # switch's and the regulator's by
+    # test_every_part_is_wired_the_way_its_symbol_names_its_pins below, the
+    # four LEDs by test_every_led_faces_the_switch_that_sinks_it, and both
+    # gate clamps by test_every_gate_clamp_faces_the_way_its_fet_needs.
+    #
+    # What is left is the one a symbol cannot answer: a unidirectional TVS on
+    # `Device:D_TVS`, whose pins are named A1 and A2 because that symbol is
+    # drawn bidirectional. Which end is the cathode comes from the band on the
+    # package, in parts/SMB/evidence.
+]
 
 
 def test_polarised_parts_face_the_right_way(net_members):
@@ -237,3 +241,51 @@ def test_every_led_faces_the_switch_that_sinks_it(design, net_members):
     assert not wrong, (
         f"LEDs not facing {switch}:\n" + "\n".join(wrong)
     )
+
+
+# What each named pin of a part must be on, by the name its symbol gives it.
+# Not a table of pads: the symbol says which pin is which, and this says which
+# *role* belongs on which net.
+BY_PIN_NAME = (
+    ("rail.ldo", {"GND": "GND", "VO": "3V3", "VI": "12V"}),
+    ("switch.q_switch", {"G": "GATE", "S": "GND", "D": "LED_RETURN"}),
+)
+
+
+def test_every_part_is_wired_the_way_its_symbol_names_its_pins(
+    design, net_members, board_dir
+):
+    """
+    A regulator's input on the input, a FET's drain on the load, and so on.
+
+    These were pad numbers in POLARITY above - `("rail.ldo", "1", "GND")` -
+    which is a table of what somebody believed about a footprint. The symbol
+    already says which pin is which, so this states the *role* and reads the
+    pad from the symbol. A part swapped for one with the same function and a
+    different pin order passes here and failed there, which is the right way
+    round: that swap is legal and the old table called it an error.
+    """
+    import sys
+
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from symbols import symbol_pin_names
+
+    net_of_pad = {
+        (address, pad): net
+        for net, members in net_members.items()
+        for address, pad in members
+    }
+    wrong = []
+    for address, wanted in BY_PIN_NAME:
+        assert address in design["parts"], f"{address} is not on this board"
+        pads = {name: pad for pad, name
+                in symbol_pin_names(design["parts"][address]["symbol"]).items()}
+        for role, net in sorted(wanted.items()):
+            assert role in pads, f"{address}'s symbol has no pin called {role!r}"
+            found = net_of_pad.get((address, pads[role]))
+            if found != net:
+                wrong.append(
+                    f"  {address} {role} (pad {pads[role]}): on {found!r}, "
+                    f"expected {net!r}"
+                )
+    assert not wrong, "Parts wired against their symbols:\n" + "\n".join(wrong)
