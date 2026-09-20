@@ -772,16 +772,23 @@ def _phy_lines(design) -> set:
 
 
 def _net_voltages(spec) -> dict[str, float]:
-    """The highest each named net reaches, and what to assume for the rest.
+    """
+    The rails, and what to assume a node is driven from.
 
-    The named ones are the rails and the nodes that swing with them. The
-    default matters more: an unnamed net used to come back as 0 V, so a
-    resistor that touched nothing on this list dissipated nothing and could
-    not fail its rating however small it was. Sixty-five of the eighty-five
-    resistors on this board took that path. Unknown now means *the highest
-    voltage on the board*, so a net nobody has thought about is the worst
-    case rather than the best one, and the way to make a check pass is to
-    name the net rather than to leave it out.
+    Returns both, because the default is the half that mattered. An unnamed
+    net used to come back as 0 V through the caller's `.get(net, 0.0)`, so a
+    resistor touching nothing on this list dissipated nothing and could not
+    fail its rating however small it was. **This docstring claimed that was
+    fixed and it was not**; the sentence was written, the `return` was not
+    changed, and thirty-two resistors went on being evaluated at zero volts -
+    every safety pull-down, both trip-threshold pulls, both feedback-divider
+    bottoms and both USB CC pull-downs among them.
+
+    The default is the logic rail. Every signal net on this board is driven
+    from it - the MCU, the buffers, the latch, the comparators through their
+    pull-ups - and the two nets that break that, the field buses, are checked
+    against their transceivers' own declared fault voltage instead by
+    `test_a_bus_termination_survives_the_fault_its_transceiver_declares`.
     """
     _, input_high = spec("input", "voltage")
     _, v5 = spec("rail.5v", "voltage")
@@ -803,17 +810,58 @@ def _net_voltages(spec) -> dict[str, float]:
     # break it - the field buses, which a fault drives to tens of volts - are
     # checked against their transceivers' own declared fault voltage by
     # `test_a_bus_termination_survives_the_fault_its_transceiver_declares`.
-    return named
+    return named, v3v3
+
+
+def _through_resistor(design, pad_net, net):
+    """Every (address, far net) reachable from `net` through one resistor."""
+    found = []
+    for address, part in design["parts"].items():
+        if part["symbol"] != "Device:R":
+            continue
+        a, b = pad_net.get((address, "1")), pad_net.get((address, "2"))
+        if a == net and b is not None:
+            found.append((address, b))
+        elif b == net and a is not None:
+            found.append((address, a))
+    return found
+
+
+def _sources(design, pad_net, spec, voltages, default, net, exclude):
+    """
+    What holds `net`, as (volts, series resistance between here and it).
+
+    A named net is a rail: it holds itself, through nothing. An unnamed net is
+    a node, and what holds it is whatever is on the far side of the resistors
+    that reach it - the pull-down below a damping resistor, the lower leg of a
+    divider. A node with no other resistor on it is driven directly by
+    whatever part sits there, which on this board means the logic rail.
+
+    One hop, deliberately. Every path on this board is a rail, one or two
+    resistors, and a rail; a walker that recursed would follow ground into
+    every resistor on the board and report a current through none of them.
+    """
+    if net in voltages:
+        return [(voltages[net], 0.0)]
+    onward = [(a, far) for a, far in _through_resistor(design, pad_net, net) if a != exclude]
+    if not onward:
+        return [(default, 0.0)]
+    return [(voltages.get(far, default), spec(a, "resistance")[0]) for a, far in onward]
 
 
 def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
     """
     Every resistor **between two nets whose voltage is known**, derated by half.
 
-    Half is what a 0402 in still air is worth. Where one end is a node with no
-    declared voltage - a divider tap, a feedback pin - the check takes the
-    known end against ground, which is the most that can appear across it, and
-    the same current flows in the leg below anyway.
+    Half is what a 0402 in still air is worth. **Both** ends must be named:
+    this is the V^2/R case, and V^2/R only means anything when something holds
+    each end. A resistor with one end on a node - a divider tap, a damping
+    resistor's far side, a pull-down below a signal - belongs to the series
+    check below, which derives the current instead.
+
+    It used to take either end, and then read `max(known, unknown-as-zero)`.
+    A pull-down from a signal to ground has a named end, ground, so it came
+    here and was evaluated at nought volts across it.
 
     **What it does not cover, and why.** A resistor in series with a signal
     dissipates the load current squared times its resistance, and nothing here
@@ -826,16 +874,21 @@ def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
     including both field buses' terminations. Those are now checked against
     their transceivers' own fault voltage, which is the case that mattered.
     """
-    voltages = _net_voltages(spec)
+    voltages, _ = _net_voltages(spec)
     hot = []
     for address, (net_a, net_b) in sorted(two_pad_parts.items()):
         if design["parts"][address]["symbol"] != "Device:R":
             continue
-        if net_a not in voltages and net_b not in voltages:
-            continue                      # a signal in series with a signal
+        # **Both** ends, not either. With `or` here, a pull-down from a signal
+        # to ground was taken by this check - ground is a named net - and then
+        # evaluated at max(0, unknown) = 0 V, which passes any rating. Thirty
+        # two resistors went through that door, including every safety
+        # pull-down and both trip-threshold pulls.
+        if net_a not in voltages or net_b not in voltages:
+            continue                      # the series check below owns these
         if {net_a, net_b} & _phy_lines(design):
             continue                      # biased to the rail; see test_ethernet.py
-        across = max(voltages.get(net_a, 0.0), voltages.get(net_b, 0.0))
+        across = abs(voltages[net_a] - voltages[net_b])
         resistance, _ = spec(address, "resistance")
         rated, _ = spec(address, "max_power")
         power = across**2 / resistance
@@ -905,25 +958,38 @@ def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pa
     have covered them: it would have put the whole logic rail across 33 ohms
     and called 0.36 W on a 62.5 mW part a failure, when the real figure is
     four microwatts.
+
+    **The first version of this check could not fail.** It selected resistors
+    with neither end on a named net and then, inside the loop, required one
+    end to be on a named net - so the body never ran, `worst` stayed zero, and
+    every resistor passed. It would have raised `NameError` if it had ever got
+    there, because the helper it called lives in another file and was never
+    imported. It was written, read, and committed looking correct.
+
+    What it does now is walk outward one hop from each end to whatever holds
+    it - a rail directly, or the far side of the one other resistor on that
+    node - and take the largest current any of those pairs implies. That
+    covers a divider, a damping resistor into its pull-down, and a lone
+    pull-down off a driven node, which is every shape on this board. Swapping
+    one 10 k pull-down for a 33 ohm now reports 367.5 mW on a 62.5 mW part.
     """
-    voltages = _net_voltages(spec)
+    voltages, default = _net_voltages(spec)
     hot = []
     for address, (net_a, net_b) in sorted(two_pad_parts.items()):
         if design["parts"][address]["symbol"] != "Device:R":
             continue
-        if net_a in voltages or net_b in voltages:
+        if net_a in voltages and net_b in voltages:
             continue                      # the check above owns these
+        if {net_a, net_b} & _phy_lines(design):
+            continue                      # biased to the rail; see test_ethernet.py
         series, _ = spec(address, "resistance")
         rated, _ = spec(address, "max_power")
         worst = 0.0
-        for near, far in ((net_a, net_b), (net_b, net_a)):
-            if near not in voltages:
-                continue
-            for other, beyond in _through_resistor(design, pad_net, far):
-                if other == address or beyond not in voltages:
-                    continue
-                load, _ = spec(other, "resistance")
-                current = abs(voltages[near] - voltages[beyond]) / (series + load)
+        near_side = _sources(design, pad_net, spec, voltages, default, net_a, address)
+        far_side = _sources(design, pad_net, spec, voltages, default, net_b, address)
+        for v_near, r_near in near_side:
+            for v_far, r_far in far_side:
+                current = abs(v_near - v_far) / (series + r_near + r_far)
                 worst = max(worst, current**2 * series)
         if worst > rated * POWER_DERATING:
             hot.append(f"  {address}: {worst * 1e3:.1f} mW, rated {rated * 1e3:g} mW")
@@ -957,7 +1023,7 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
     a thing to know before closing a jumper, and `parts/R0402/R0402.md` now
     says it.
     """
-    voltages = _net_voltages(spec)
+    voltages, _ = _net_voltages(spec)
 
     # What a direct current can actually flow through: a resistor or a bridged
     # jumper. Not a capacitor, and not a jumper that is open as fabricated.
