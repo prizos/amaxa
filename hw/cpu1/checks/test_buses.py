@@ -13,8 +13,13 @@ June 2017).
 """
 
 import itertools
+import sys
+from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+from symbols import symbol_pin_names  # noqa: E402
 
 # Which declared rail each supply net is, as in test_trip.py: a check that names
 # a rail reads the same number whatever the board does.
@@ -486,7 +491,16 @@ def test_nothing_unrated_for_a_strike_sits_on_a_bus_terminal(
                 # Two terminals and no supply pin is a passive: a termination
                 # resistor, a jumper, a capacitor. It has no junction to punch
                 # through and no datasheet figure to hold it to.
-                if len(pads_of[address]) <= 2:
+                #
+                # The supply half of that sentence was not implemented - pad
+                # count alone was - so a two-pin part with a rating to state,
+                # a TVS or a clamp diode, was skipped by being small rather
+                # than by being passive. A part that declares no supply pin
+                # *and* has two pads is what the comment always meant.
+                pins = symbol_pin_names(design["parts"][address]["symbol"])
+                powered = {name for name in pins.values()
+                           if name in ("VCC", "VDD", "V+", "V-", "VEE", "GND", "VSS")}
+                if len(pads_of[address]) <= 2 and not powered:
                     continue
                 assert spec_has(address, "esd_contact_discharge"), (
                     f"{bus}: {address} sits on {net}, which leaves the board, "

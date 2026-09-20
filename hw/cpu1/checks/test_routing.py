@@ -21,6 +21,7 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "tools"))
 from layout_lib import point_to_segment  # noqa: E402
+from symbols import symbol_pin_names  # noqa: E402
 
 GROUND = "GND"
 PLANES = ("GND", "3V3", "5V")
@@ -716,7 +717,8 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
     inputs = {
         net for net, nodes in design["nets"].items()
         for address, pad in nodes
-        if design["parts"][address]["symbol"].startswith("Comparator:") and pad in ("1", "3")
+        if design["parts"][address]["symbol"].startswith("Comparator:")
+        and symbol_pin_names(design["parts"][address]["symbol"]).get(pad) in ("+", "-")
     }
 
     # An aggressor has to switch. A net that reaches nothing but a DAC output,

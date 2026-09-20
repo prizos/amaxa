@@ -74,18 +74,26 @@ hand, near the pins they serve.
 
 ## Where it stands
 
-`checks/config.py` says `COMPLETE = True`. That means: DRC reports no
-violations and no unconnected items, the gerbers, drill and IPC-D-356 net list
-build, `make reproducible` regenerates the same board, `make offline` builds
-with every network call refused, both firmware BSPs compile, and
-`NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` are empty. It does not mean
-anybody has built one.
+Everything on this board is drawn, routed and checked: 188 checks, DRC with
+no violations and no unconnected items, gerbers for all six copper layers plus
+drill and IPC-D-356, `make reproducible` regenerating the same board, `make
+offline` building with every network call refused, both firmware BSPs
+compiling, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` empty.
 
-The flag used to say `False` under a comment naming pending nets the board no
-longer had. `test_a_board_declaring_itself_unfinished_says_what_is_unfinished`
-is what stops that happening again: a board claiming to be incomplete has to
-point at the thing that is. A stale "not finished yet" is worse than a stale
-"finished", because it is the sentence that excuses everything else.
+**It is not ready to order, and `checks/config.py` says why.** One entry in
+`BLOCKING`: the analog inputs have no over-voltage protection. This board
+hands the power board's sensors 5VA, which reaches 5.2 V, and takes their
+outputs into pins ST caps at **4.0 V absolute** with no positive-injection
+allowance at all. An op-amp rails to its own supply during exactly the
+over-current the trip chain exists for. `docs/research/07` called for clamps;
+they are not fitted and do not fit, and the requirement now sits on a board
+that does not exist yet. See `parts/HDR2X15` and the interface note.
+
+`COMPLETE` was True for a while and that was wrong - not because the board is
+bad, but because the gate behind it tested two things and the flag was read as
+a claim about six. It runs both ways now: a board that says it is unfinished
+has to name what is unfinished, and a board that says it is finished has to
+have nothing left in `BLOCKING`.
 
 ## What the checks establish
 

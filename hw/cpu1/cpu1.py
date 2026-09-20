@@ -217,6 +217,13 @@ INTENT: dict[str, tuple[float, float]] = {
     # here rather than worked out from the parts: the parts are chosen to fit
     # inside it. Two check files used to carry their own copy of the number.
     "trip.budget": (0.0, 50e-9),
+    # How much of that budget is kept back for a filter this board has not
+    # drawn. The comparators tap the sense nets raw - nothing sits between the
+    # connector and their inputs - and a tap network with a corner worth
+    # having will cost tens of nanoseconds when it lands. Four tenths is what
+    # the parts already chosen leave over, and saying so here makes it a
+    # reservation somebody owns rather than a fraction inside a check.
+    "trip.reserved_share": (0.0, 0.4),
     # How much of a part's own rating this board will use. Half is what a
     # 0402 in still air is worth, and it applies to every rating that is a
     # thermal one - a resistor's power, a ferrite's current. It was written

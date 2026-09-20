@@ -237,12 +237,19 @@ def test_a_board_declaring_itself_unfinished_says_what_is_unfinished(
     A stale "not finished yet" is worse than a stale "finished": it is the
     sentence that makes every other unfinished-looking thing forgivable.
     """
+    blocking = getattr(board_config, "BLOCKING", {})
     if board_config.COMPLETE:
+        assert not blocking, (
+            f"{board_dir.name} declares itself complete and still lists "
+            f"{sorted(blocking)} as blocking"
+        )
         return
     board_mk = board_dir / "board.mk"
     routing = board_mk.is_file() and "ROUTING := incomplete" in board_mk.read_text()
-    assert design.get("pending") or routing, (
-        f"{board_dir.name} declares COMPLETE = False and has no pending nets "
-        f"and no incomplete routing. Either something is unfinished and is not "
-        f"saying so, or the flag is out of date"
+    assert design.get("pending") or routing or blocking, (
+        f"{board_dir.name} declares COMPLETE = False and has no pending nets, "
+        f"no incomplete routing and nothing in BLOCKING. Either something is "
+        f"unfinished and is not saying so, or the flag is out of date"
     )
+    for what, why in sorted(blocking.items()):
+        assert why.strip(), f"{board_dir.name}: {what!r} blocks the board and gives no reason"

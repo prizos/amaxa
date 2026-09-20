@@ -2,18 +2,32 @@
 What the common checks in hw/checks/ need to know that is specific to cpu1.
 """
 
-# Drawn, routed and checked. Both reasons this used to be False have gone:
-# design.json has no `pending` nets, and board.mk says ROUTING := complete.
-# `test_a_board_declaring_itself_unfinished_says_what_is_unfinished` is what
-# stops this lagging the board again - a board that claims to be incomplete
-# now has to point at the thing that is.
+# What is finished and what is not.
 #
-# What it means: DRC reports no violations and no unconnected items, the
-# outputs and the IPC-D-356 net list build, `make reproducible` regenerates
-# the same board, `make offline` builds with the network refusing every call,
-# both BSPs compile, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` are
-# empty. What it does not mean is that anybody has built one.
-COMPLETE = True
+# `COMPLETE` was True for a while and that was wrong - not because the board
+# is bad, but because the gate behind it tested two things ("no pending nets",
+# "routing not marked incomplete") while the flag was read as a claim about
+# six. Both of its original reasons had gone, which is why it moved; neither
+# of them was the reason that mattered.
+#
+# BLOCKING is what mattered. A board that says it is unfinished now has to say
+# what is unfinished, and a board that says it is finished has to have this
+# empty, so neither statement can drift from the board again.
+COMPLETE = False
+
+BLOCKING: dict[str, str] = {
+    "analog inputs have no over-voltage protection": (
+        "This board hands the power board's sensors 5VA, which reaches 5.2 V, "
+        "and takes their outputs into TT_xx analog pins that ST's Table 20 "
+        "caps at 4.0 V absolute - with no positive-injection allowance at all "
+        "(Table 21 rates it at -5 to +0 mA). An op-amp rails to its own "
+        "supply during exactly the over-current the trip chain exists for. "
+        "`docs/research/07` called for clamps; they are not fitted and do not "
+        "fit, and the requirement now sits on a board that does not exist "
+        "yet. Everything else here is drawn, routed, checked and reproducible; "
+        "this is the one thing between that and ordering."
+    ),
+}
 
 # Checks that must actually run for this board, common and board-specific.
 EXPECTED_CHECKS = 188

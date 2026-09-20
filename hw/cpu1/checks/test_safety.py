@@ -330,7 +330,7 @@ def test_both_timers_see_the_trip_on_one_piece_of_copper(design, pad_net, pin_ma
     )
 
 
-def test_a_trip_stops_the_outputs_inside_the_budget(spec):
+def test_a_trip_stops_the_outputs_inside_the_budget(design, spec):
     """
     Latch plus buffer, worst case, against the time a bridge can survive.
 
@@ -347,10 +347,17 @@ def test_a_trip_stops_the_outputs_inside_the_budget(spec):
         f"the latch and the buffer take {spent * 1e9:.1f} ns of a "
         f"{trip_budget * 1e9:g} ns budget"
     )
-    assert spent < trip_budget / 2, (
-        f"{spent * 1e9:.1f} ns leaves the comparators only "
-        f"{(trip_budget - spent) * 1e9:.1f} ns, which no comparator this board "
-        "can afford will meet"
+    # What is left has to cover the comparators, and they are on the board
+    # now, so it is their own figure rather than half the budget. The fraction
+    # was written when this block existed and the trip block did not.
+    comparators = [address for address, part in design["parts"].items()
+                   if part["symbol"].startswith("Comparator:")]
+    assert comparators, "no comparator on this board, and the budget assumes one"
+    slowest = max(spec(address, "propagation_delay_max")[0] for address in comparators)
+    assert spent + slowest < trip_budget, (
+        f"{spent * 1e9:.1f} ns leaves the comparators "
+        f"{(trip_budget - spent) * 1e9:.1f} ns and the slowest of them takes "
+        f"{slowest * 1e9:g}"
     )
 
 

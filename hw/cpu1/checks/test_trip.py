@@ -200,9 +200,16 @@ def test_the_whole_trip_path_fits_the_budget(spec, comparators):
         f"{spent * 1e9:.1f} ns of a {trip_budget * 1e9:g} ns budget before the "
         "signal has even been filtered"
     )
-    assert spent < trip_budget * 0.6, (
+    # And the rest is kept for a filter that is not drawn yet. The comparators
+    # tap the sense nets raw on this board - nothing sits between the
+    # connector and their inputs - so this is reserved headroom rather than a
+    # measurement, and `trip.reserved_share` is where that is owned. It used
+    # to be a bare 0.6 here.
+    _, reserved = spec("trip", "reserved_share")
+    assert spent < trip_budget * (1.0 - reserved), (
         f"{spent * 1e9:.1f} ns leaves only {(trip_budget - spent) * 1e9:.1f} ns "
-        "for the tap network, which is not enough to filter anything"
+        f"of the {trip_budget * 1e9:g}, and {reserved * 100:g}% is reserved for "
+        f"the tap filter the comparators will need"
     )
 
 
