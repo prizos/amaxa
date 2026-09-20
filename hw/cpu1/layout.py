@@ -3184,7 +3184,15 @@ def _mcu_pad(net: str) -> str:
 # feature firmware can switch off" are not what a physical layer should rest
 # on, so the crossing is drawn instead - on the back layer, above the point
 # where the pair starts running parallel, where it costs two vias and a
-# millimetre and a half of copper facing the wrong plane.
+# stretch of copper facing the wrong plane: **3.20 mm on the transmit pair and
+# 4.96 on the receive one**, not the millimetre and a half this used to claim.
+# Nothing measured it, because the pair measurement looked at F.Cu only.
+#
+# Counting the fan out of the package and the spread to the jack's pads with
+# it, these pairs are coupled for 45 % and 37 % of their length. Lengthening
+# the parallel run was tried at 10 and 11.5 mm and collides with the jack;
+# what is left is package and connector pitch. What bounds it is the edge, and
+# test_each_pair_runs_as_a_pair_for_most_of_its_length holds that.
 
 def _ethernet_pairs() -> None:
     phy_x, phy_y = PLACEMENT["eth.phy"][0], PLACEMENT["eth.phy"][1]

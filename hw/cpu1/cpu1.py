@@ -235,6 +235,14 @@ INTENT: dict[str, tuple[float, float]] = {
     # receiver equalises far worse - it is how much of the signal is allowed to
     # become common mode, which is what leaves on the cable.
     "ethernet.rise_time": (3e-9, 5e-9),
+    # How much of an edge the parts of a pair that are *not* a pair may spend.
+    # A pair fans out of the package, spreads to the connector's pads and, on
+    # this board, sends one half under the other to swap them over; none of
+    # that is coupled, and each stretch of it is two single tracks presenting
+    # about twice the differential impedance. What decides whether that
+    # matters is how long it is against the edge travelling through it, and a
+    # tenth is the same share the USB pair's protection is held to.
+    "ethernet.uncoupled_edge_share": (0.0, 0.10),
     "ethernet.skew_share": (0.0, 0.03),
     # What has to stand between the cable and the rest of the machine. IEEE
     # 802.3 asks 1500 V rms, and the jack's magnetics are the only barrier.

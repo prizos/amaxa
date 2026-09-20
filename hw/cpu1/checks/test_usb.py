@@ -376,7 +376,7 @@ def test_the_pair_arrives_together(spec, stack, lengths, pair_tracks):
     """
     edge, _ = spec("usb", "rise_time")
     _, allowed = spec("usb", "skew_share")
-    width = max(w for segments in pair_tracks.values() for *_, w in segments)
+    width = max(seg[2] for segments in pair_tracks.values() for seg in segments)
     mismatch = abs(lengths["USB_DP"] - lengths["USB_DM"])
     skew = mismatch * pairs.delay_per_mm(stack, width)
     assert skew <= allowed * edge, (

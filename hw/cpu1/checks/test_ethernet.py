@@ -504,6 +504,60 @@ def test_the_pairs_present_the_impedance_the_cable_expects(spec, stack, pcb_text
         )
 
 
+def test_each_pair_runs_as_a_pair_for_most_of_its_length(
+    spec, stack, pcb_text
+):
+    """
+    How much of each pair is actually coupled, and what the rest costs.
+
+    A differential pair is a pair where its two halves are close enough to
+    couple. Everything else - the fan out of the package, the spread to the
+    jack's pads, and on this board the excursion one half takes to the back
+    layer to cross over its partner - is two single tracks carrying a
+    differential signal between them, presenting about twice the single-ended
+    impedance instead of the hundred ohms the cable expects.
+
+    **Nothing measured this.** `tracks_of` looked at F.Cu only, so the back
+    layer excursion was invisible, and `separation` reports the distance of
+    the single longest parallel overlap - which certified five millimetres of
+    a twenty-five millimetre route. The comment in layout.py put the crossing's
+    cost at "a millimetre and a half of copper facing the wrong plane"; it is
+    3.20 mm on the transmit pair and 4.96 on the receive one.
+
+    What bounds it is the edge, not a fraction of the route: a discontinuity
+    much shorter than the distance an edge travels while it rises is
+    electrically short. At 100BASE-TX's 3 ns these pairs' uncoupled stretches
+    are about three per cent of one, against the tenth `ethernet.rise_time`
+    and `ethernet.uncoupled_edge_share` together allow.
+
+    The pairs are 45 % and 37 % coupled and that is as good as this placement
+    gets: lengthening the parallel run collides with the jack's own pads,
+    which was tried. What is left is package and connector pitch.
+    """
+    rise, _ = spec("ethernet", "rise_time")          # the fastest, so the worst
+    _, share = spec("ethernet", "uncoupled_edge_share")
+
+    loose = []
+    for pair in ("ETH_TD", "ETH_RD"):
+        tracks = pairs.tracks_of(pcb_text, (f"{pair}_P", f"{pair}_N"))
+        assert set(tracks) == {f"{pair}_P", f"{pair}_N"}, f"{pair} is not both halves"
+        width = pairs.controlled_width(tracks)
+        for net, partner in ((f"{pair}_P", f"{pair}_N"), (f"{pair}_N", f"{pair}_P")):
+            coupled, total = pairs.coupled_length(tracks[net], tracks[partner], width)
+            uncoupled = total - coupled
+            edge = rise / pairs.delay_per_mm(stack, width)
+            if uncoupled > share * edge:
+                loose.append(
+                    f"  {net}: {uncoupled:.2f} mm of {total:.2f} runs alone, "
+                    f"which is {uncoupled / edge * 100:.1f}% of the {edge:.0f} mm "
+                    f"a {rise * 1e9:g} ns edge occupies"
+                )
+    assert not loose, (
+        f"Pairs uncoupled for more than {share * 100:g}% of an edge:\n"
+        + "\n".join(loose)
+    )
+
+
 def test_the_pairs_arrive_together_enough(spec, stack, lengths, pcb_text):
     """
     How far apart in time the two halves of each pair arrive.
