@@ -575,6 +575,13 @@ THRESHOLD_DAC = PartSpec(
         # Not the one this board uses - firmware selects the supply instead -
         # but it is what the thresholds are worth until it does.
         "internal_reference": exact(2.048),
+        # Its own DC accuracy, from the electrical table - every one of these
+        # a maximum. They were not in this file at all, so the trip point's
+        # error budget was the rail's tolerance and the comparator's offset
+        # and nothing from the part that actually sets the threshold.
+        "offset_error": exact(20e-3),            # at code 000h
+        "gain_error": exact(0.0125),             # fraction of full scale
+        "integral_nonlinearity": exact(13),      # LSB
     },
 )
 

@@ -17,6 +17,9 @@ LATCH = "safety.latch"
 BUFFER = "safety.buffer1"
 HEADER = "header.analog"
 
+# The same half every other check on this board derates to.
+POWER_DERATING = 0.5
+
 
 def _pin_count(pad_net) -> int:
     """How many pins the connector has, counted on the board rather than said."""
@@ -252,16 +255,38 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(spec, pad_net, compa
         f"the DAC runs from {rail} at {rail_low:g} to {rail_high:g} V and takes "
         f"{supply_low:g} to {supply_high:g} V"
     )
-    nominal = (rail_low + rail_high) / 2
-    from_rail = (rail_high - rail_low) / 2 / nominal
-    # At the least useful end: a threshold near the bottom of the range, where a
-    # fixed offset is the largest fraction of it.
-    from_comparator = (offset + hysteresis) / nominal
-    total = from_rail + from_comparator
+    full_scale = (rail_low + rail_high) / 2
+    floor, _ = spec("trip", "threshold_floor")
+    # **The threshold the errors are worst at, not full scale.** The comment
+    # here said "at the least useful end: a threshold near the bottom of the
+    # range, where a fixed offset is the largest fraction of it" and then
+    # divided by full scale, which is the other end. At a quarter of full
+    # scale every millivolt term is four times the share it was being given.
+    threshold = floor * full_scale
+
+    bits, _ = spec(DAC, "resolution_bits")
+    dac_offset, _ = spec(DAC, "offset_error")
+    dac_gain, _ = spec(DAC, "gain_error")
+    dac_inl, _ = spec(DAC, "integral_nonlinearity")
+
+    terms = {
+        # The DAC's full scale *is* the supply, so the rail's spread lands on
+        # every threshold in proportion.
+        "the rail the DAC uses as its reference":
+            (rail_high - rail_low) / 2 / full_scale,
+        "the comparator": (offset + hysteresis) / threshold,
+        # And the three the part itself declares, which were not summed at all.
+        "the DAC's offset": dac_offset / threshold,
+        "the DAC's gain error": dac_gain,
+        "the DAC's nonlinearity": dac_inl * full_scale / 2 ** bits / threshold,
+    }
+    total = sum(terms.values())
     assert total <= allowed, (
-        f"the trip point is good to {total * 100:.1f} % - {from_rail * 100:.1f} % "
-        f"from the rail the DAC uses as its reference and {from_comparator * 100:.1f} % "
-        f"from the comparator - against {allowed * 100:g} % declared"
+        f"at a threshold of {threshold:.3f} V, a quarter of full scale, the "
+        f"trip point is good to {total * 100:.1f} % against {allowed * 100:g} % "
+        f"declared:\n" + "\n".join(
+            f"  {share * 100:5.2f} % from {name}"
+            for name, share in sorted(terms.items(), key=lambda kv: -kv[1]))
     )
 
 
@@ -380,12 +405,32 @@ def test_the_board_sends_out_its_reference_and_an_analog_supply(design, pad_net,
     assert {"VREF+", "5VA"} <= on_connector, (
         f"the connector carries {sorted(on_connector)}"
     )
+    # What the far end may draw is the bead's rating, derated like everything
+    # else here, and what it costs is the drop across it.
+    #
+    # This used to assert `bead < contact` - 0.1 A against 3 A - which is true
+    # of every ferrite ever made, independent of this design, and was what
+    # kept `analog.bead.max_current` off the unread list while nothing
+    # compared it to anything. The connector is still not the limit, and that
+    # is now said by comparing the budget with both.
     bead, _ = spec("analog.bead", "max_current")
+    resistance, _ = spec("analog.bead", "dc_resistance")
     contact, _ = spec(HEADER, "current_rating")
-    assert bead < contact, (
-        f"the bead passes {bead * 1e3:g} mA and a contact {contact:g} A: the "
-        "connector is not what limits this, and the check is here to notice if "
-        "that ever changes"
+    _, budget = spec("analog", "supply_current")
+    _, allowed = spec("analog", "supply_drop")
+
+    assert budget <= bead * POWER_DERATING, (
+        f"5VA is budgeted {budget * 1e3:g} mA against a bead rated "
+        f"{bead * 1e3:g} mA, which is past the half this board derates to"
+    )
+    assert budget <= contact, (
+        f"5VA is budgeted {budget * 1e3:g} mA and a contact carries "
+        f"{contact:g} A"
+    )
+    drop = budget * resistance
+    assert drop <= allowed, (
+        f"{drop * 1e3:.0f} mV across the bead at {budget * 1e3:g} mA, against "
+        f"the {allowed * 1e3:g} mV the analog supply may lose"
     )
 
 

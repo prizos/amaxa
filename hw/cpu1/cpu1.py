@@ -85,10 +85,23 @@ INTENT: dict[str, tuple[float, float]] = {
     #   comparators   35 mA  seven TLV3501 at their 5 mA maximum
     #   CAN           80 mA  TCAN1044V dominant into 50 ohm, maximum
     #   reference     25 mA  the REF3030's whole output capability
-    #   5VA          100 mA  what the ferrite to the analog header allows
+    #   5VA           50 mA  half the ferrite's 100 mA rating, like every
+    #                         other part on this board. It was budgeted at the
+    #                         whole of it - no derating at all, on a figure
+    #                         that is a temperature rise and an impedance
+    #                         collapse rather than a limit.
     #   ------------------
-    #   total        240 mA, and the budget is 250.
-    "rail.5v.current": (0.0, 0.25),
+    #   total        190 mA, and the budget is 200.
+    "rail.5v.current": (0.0, 0.20),
+    # What the analog header is allowed to draw from 5VA, which is what the
+    # 5 V rail's budget above carries for it.
+    "analog.supply_current": (0.0, 0.05),
+    # The most the bead between 5 V and the analog header may drop. The
+    # sensors on the far side are ratiometric to VREF+ so their *reading* does
+    # not depend on this, but their own headroom is specified from their
+    # supply, and a tenth of a volt is the most this board will take out of
+    # it. At 50 mA through 0.9 ohm the drop is 45 mV.
+    "analog.supply_drop": (0.0, 0.1),
     # What each conversion is assumed to manage, end to end. Nothing on the
     # board measures it either; it is what the fuse, the FET and the inductors
     # are sized against, and it is the first thing to measure at bring-up.
@@ -126,10 +139,38 @@ INTENT: dict[str, tuple[float, float]] = {
     "pwm.dead_time": (0.5e-6, 5e-6),
     # How well a trip point has to be known. It is a protective limit, not a
     # measurement - you set it above the working maximum and what matters is
-    # that it is above it and below what breaks. Ten percent is what the parts
-    # chosen here manage, and saying so is what makes the DAC's reference
-    # choice a decision rather than an oversight.
-    "trip.threshold_tolerance": (0.0, 0.10),
+    # that it is above it and below what breaks. Saying so is what makes the
+    # DAC's reference choice a decision rather than an oversight.
+    #
+    # **Twelve per cent, and it read ten while three terms were missing.** At
+    # a quarter of full scale, which is the lowest threshold this board is
+    # designed to set, the budget is 5.0 % from the 3V3 rail the DAC uses as
+    # its reference, 2.4 % from the DAC's own offset, 1.5 % from the
+    # comparator's offset and hysteresis, 1.3 % from the DAC's nonlinearity
+    # and 1.25 % from its gain error - 11.5 % in all. Only the first and third
+    # were being added; the MCP4728's own accuracy was not in parts.py.
+    #
+    # What the power board has to do with that: set each trip at least an
+    # eighth below what breaks and an eighth above the working maximum.
+    #
+    # The rail term is the one worth attacking and neither obvious answer
+    # works. The rail's *achieved* static band is ±2.45 %, but the declared
+    # ±5 % is deliberate headroom for load steps and ripple, so tightening the
+    # declaration would be spending margin that is doing a job. The DAC's
+    # internal 2.048 V reference removes the rail term and makes every
+    # millivolt term a larger share of a smaller full scale, which is worse.
+    # Referencing the thresholds to VREF+, so a trip is ratiometric with the
+    # measurement the way the ADC channels are, would do it - and the MCP4728
+    # cannot take an external reference. That is a part change, not a tweak.
+    "trip.threshold_tolerance": (0.0, 0.12),
+    # The lowest threshold this board is designed to be able to set, as a
+    # fraction of the DAC's full scale. It matters because the fixed errors -
+    # the comparator's offset, the DAC's offset, its nonlinearity - are
+    # millivolts, and a millivolt is a larger share of a small threshold. A
+    # trip point sits above the working maximum of whatever it watches, so a
+    # board wanting one below a quarter of full scale has a sense gain that is
+    # wrong by four, not a threshold problem.
+    "trip.threshold_floor": (0.25, 1.0),
     # How long a trip may take, from the current leaving its sensor to the
     # buffer letting go. It is set by how long a half bridge survives a
     # shoot-through and by nothing on this board, which is why it is stated
@@ -615,7 +656,14 @@ def power_block(v3v3, gnd, nets) -> None:
     fb5.connect(r_fb_top[2], r_fb_bottom[1], buck5["FB"])
     gnd += r_fb_bottom[2]
 
-    r_ramp = part(parts.RES_121K_0402, "buck5.r_ramp", "R12")
+    # 100 k, not the 121 k this had. The injected ripple is inversely
+    # proportional to R and C, so the *smallest* ripple is at the top of both
+    # tolerance bands - and the check read the bottom of both, which is the
+    # corner that makes it look largest. At 121 k the board could only promise
+    # 12.80 mV against the LM5164's 12 mV minimum, a seven per cent margin
+    # reported as thirty-three. At 100 k it promises 15.48 mV, which is 29 %,
+    # and puts the nominal nearer the datasheet's 20 mV than it was.
+    r_ramp = part(parts.RES_100K_0402, "buck5.r_ramp", "R12")
     c_ramp = part(parts.CAP_3N3_0402, "buck5.c_ramp", "C16")
     c_couple = part(parts.CAP_220P_0402, "buck5.c_couple", "C17")
     sw5 += r_ramp[1]

@@ -93,11 +93,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
     ("safety.buffer2", "output_skew_max"): "as buffer1's, and the same part",
     ("safety.buffer2", "output_current_max"): "as buffer1's, and the same part",
     ("safety.buffer2", "total_output_current_max"): "as buffer1's, and the same part",
-    ("analog.bead", "dc_resistance"): (
-        "0.9 ohm against what the power board's sensors draw from 5VA, which is "
-        "a property of a board that does not exist yet. The same gap as VDDA's "
-        "bead, and the same answer: measure it at bring-up"
-    ),
     ("usb.receptacle", "current_rating"): (
         "5 A per contact against a port that draws none: VBUS reaches a sense "
         "pin and a clamp and stops there, which is the whole design of it. "

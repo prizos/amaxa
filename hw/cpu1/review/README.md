@@ -180,7 +180,7 @@ schematic after the fact.
 | `R10` | `buck5.r_fb_top` | 158k | 0402WGF1583TCE | C99856 | `R_0402_1005Metric` |
 | `R9` | `buck5.r_on` | 31.6k | 0402WGF3162TCE | C11463 | `R_0402_1005Metric` |
 | `R13` | `buck5.r_pgood` | 49.9k | 0402WGF4992TCE | C25897 | `R_0402_1005Metric` |
-| `R12` | `buck5.r_ramp` | 121k | 0402WGF1213TCE | C11693 | `R_0402_1005Metric` |
+| `R12` | `buck5.r_ramp` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
 | `R8` | `buck5.r_uvlo_bottom` | 49.9k | 0402WGF4992TCE | C25897 | `R_0402_1005Metric` |
 | `R7` | `buck5.r_uvlo_top` | 226k | 0402WGF2263TCE | C26999 | `R_0402_1005Metric` |
 
