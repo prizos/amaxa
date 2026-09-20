@@ -33,8 +33,11 @@ neither talks nor stops listening.
 
 ## Figures used from the datasheets
 
-TI's *TCAN1044V*, SLLSFG2 (December 2019), and *THVD1410, THVD1450, THVD1451,
-THVD1452*, SLLSEY3E (May 2018, revised May 2019).
+TI's *TCAN1044V*, SLLSFG2 (December 2019), and *THVD1410, THVD1450,
+THVD1451, THVD1452* — the edition actually fetched and hashed is the
+Chinese one, **ZHCSI82E** (May 2018, revised May 2019), which is what LCSC
+serves for C2671361 and what `evidence/sources.json` records. The English
+SLLSEY3E is the same document and is not the one the crops came from.
 
 | Figure | Value | Where |
 |---|---|---|
@@ -100,10 +103,12 @@ CAN for −2 to +7 V, TIA-485 asks RS-485 for −7 to +12. These are specified t
 requires anybody to survive.
 
 **And a resistor sized to cover more than that cannot be an 0402.** Two 100 Ω,
-one at each end of the cable, carry ΔV/200 between them; at the ±15 V edge of
-the THVD1450's range that is a ground difference of 30 V and 560 mW in each
-resistor — nine times what an 0402 is rated for, and more than a 1206 with any
-derating. Sizing the part honestly means choosing the offset it is allowed to
+one at each end of the cable, carry ΔV/200 between them; at the ±15 V edge
+of the THVD1450's range that is a ground difference of 30 V, 150 mA, and
+**2.25 W in each resistor** — thirty-six times what an 0402 is rated for and
+nine times a 1206. (This said 560 mW, which is the figure for a 15 V
+difference rather than a 30 V one; the conclusion was right and the
+arithmetic was not.) Sizing the part honestly means choosing the offset it is allowed to
 fail at, which is a property of the installation and not of this board.
 
 `test_a_cable_ground_tied_straight_to_the_boards_is_one_the_parts_can_afford`

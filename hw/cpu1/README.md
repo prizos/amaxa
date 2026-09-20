@@ -50,7 +50,7 @@ sampled simultaneously is not on ADC1 and ADC2, ST's data and KiCad's symbol
 disagree about the part, or the committed header is not what the table
 generates.
 
-87 of the package's 114 I/O pins are used — the count `make pins-write` prints, not one written here. Three conflicts shaped the layout,
+87 of the package's 114 I/O pins are used. Both figures are written here and nothing regenerates them — `make pins-write` prints the first and not the second, and no check compares either. This sentence used to claim it was immune to going stale; it is not, unlike [`review/README.md`](review/README.md), which is. Three conflicts shaped the layout,
 and the table's docstring records them: Ethernet's CRS_DV and TIM8_CH1N want the
 same pin, no 32-bit timer is free for the encoder, and keeping TIM1 where the
 NUCLEO has it costs COMP2's external inputs.
@@ -115,7 +115,7 @@ The gain-margin check chose the crystals. Every in-stock 8 MHz part in 3225 or
 HC-49S, and the common 12.5 pF 32 kHz parts, fail it — the latter at a margin of
 1.8. Each would start on the bench and might not start cold.
 
-**Nothing is now waiting on an unread datasheet.** Fourteen part libraries
+**Nothing is now waiting on an unread datasheet.** Thirteen part libraries
 carried a "needs a human eye" marker — a pin-out, a cathode, an exposed pad,
 all drawn rather than written. Each document has been fetched, the figure that
 settles it rendered, and the crop committed beside the note with the source's
@@ -123,6 +123,14 @@ URL and SHA-256: `CONFIRMED_FROM_A_RENDER` in
 [`checks/config.py`](checks/config.py), and `tools/datasheet.py` is how.
 `NEEDS_A_HUMAN_EYE` is empty and still checked, because the next part added
 will land on it.
+
+**Two libraries left that list another way.** `HDR2X26` and `USBC16` carried
+the marker and have no `evidence/` directory: their questions were answered by
+deciding rather than by reading - the 2×26 header's pin numbering by generating
+it from the pin map, and the USB-C shell's overhang by the port not being
+exposed. "Each document has been fetched" is true of the thirteen in
+`CONFIRMED_FROM_A_RENDER` and was never true of these two, and this paragraph
+said fourteen for a while, which was neither number.
 
 `WAITING_ON_A_DECISION` is empty too. It held one entry — whether the USB-C
 shell overhangs the board edge, which depends on an enclosure that does not
@@ -151,7 +159,7 @@ puts 100 Ω there. Each standard states the ground offset a receiver must
 tolerate — −2 to +7 V for CAN, −7 to +12 for RS-485 — and these parts are
 specified to ±12 V and ±15 V, so the offset that breaks either link is one no
 standard requires anybody to survive. A resistor covering more than that has to
-dissipate it: at the ±15 V edge, 100 Ω at each end is over half a watt.
+dissipate it: at the ±15 V edge, 100 Ω at each end is **2.25 W**.
 `parts/SOIC8/SOIC8.md` has the arithmetic and what would change it.
 
 **That pcbnew was correcting the board on the way past.** `LoadBoard`
@@ -161,7 +169,7 @@ and the file every check reads were not the same file. `tools/fill_zones.py`
 now compares the board's own text either side of the step and refuses it if any
 via or track moved net.
 
-## Still to come
+## Two deviations from Microchip's reference, both by choice
 
 The Ethernet line terminations are now fitted — four 49.9 Ω, which is what
 gives the current-mode driver its specified 50 Ω load and the receive pair a

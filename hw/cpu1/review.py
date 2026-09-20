@@ -110,7 +110,8 @@ LAYERS: dict[str, str] = {
     "In4_Cu": (
         "The second ground plane, and what both outer layers return to. With "
         "ground under B.Cu as well as under F.Cu, every through-hole via is a "
-        "ground-to-ground layer change and any of the board's 176 ground vias "
+        "ground-to-ground layer change and any of the board's <<GROUND_VIAS>> "
+        "ground vias "
         "will carry the return across."
     ),
     "B_Cu": (
@@ -157,9 +158,15 @@ down: above the part, then below, either side, the corners, taking the first
 place that clears every pad and every designator already placed. No two are
 printed over each other, which a check enforces.
 
-Six still cross an outline, and four of those are a part's own reference over
-its own outline - which is where a designator belongs. One crosses a
-neighbour's. A designator over an outline is untidy and still legible; a
-designator over another designator is not, and there are none.
+Designators do cross outlines. Over a part's own outline is where a designator
+belongs; over a neighbour's it is untidy and still legible. Over another
+designator it is neither, and there are none - that is the part a check
+enforces, and it is the only part stated here as a number.
+
+This paragraph used to count them: "six, four of those a part's own, one a
+neighbour's", which is five. It was written before the board went from four
+layers to six and nothing re-measured it. A count that cannot be derived from
+the board on every build does not belong in a document that claims it cannot
+go stale.
 """),
 ]

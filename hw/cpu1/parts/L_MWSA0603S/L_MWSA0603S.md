@@ -43,12 +43,15 @@ the winding, from both ends:
 
 - The peak is load plus half the ripple, and the load is 0.887 A of the
   1.095. Twenty per cent of margin needs the ripple down from 0.416 A to
-  0.226, which is **76 µH** — more than twice this part.
+  0.226, which is **61 µH** nominal — nearly twice this part. (It said 76,
+  which applies the ±20 % band upward from nominal as well as taking the low
+  corner, counting the same tolerance twice.)
 - Winding loss is `I² × DCR`, and the loss budget is what the declared
   efficiency leaves over: 0.887 W for the whole conversion, of which
   `test_the_inductors_do_not_spend_the_efficiency_the_design_assumes` allows
-  an inductor a third. At 270 mΩ this part spends 212 mW of that 296. A 76 µH
-  part in this footprint runs 600 mΩ or more and spends 470 mW, which fails.
+  an inductor a third. At 270 mΩ this part spends 212 mW of that 296. A 61 µH
+  part in this footprint runs 500 mΩ or more and spends 390 mW against that
+  296 mW, which fails.
 
 Raising the switching frequency instead — halving the on-time resistor — would
 halve the ripple current and buy the same margin. It also halves the ripple

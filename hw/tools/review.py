@@ -67,7 +67,19 @@ def board_facts(pcb_text: str) -> dict:
         "tracks": len(re.findall(r"\n\t\(segment", pcb_text)),
         "vias": len(re.findall(r"\n\t\(via", pcb_text)),
         "zones": len(re.findall(r"\n\t\(zone", pcb_text)),
+        "ground_vias": _vias_on(pcb_text, "GND"),
     }
+
+
+def _vias_on(pcb_text: str, net: str) -> int:
+    """How many vias carry a given net, counted off the board."""
+    names = dict(re.findall(r'\(net (\d+) "([^"]*)"\)', pcb_text))
+    wanted = {number for number, name in names.items() if name == net}
+    return sum(
+        1 for block in re.findall(r"\n\t\(via\n(?:\t\t[^\n]*\n)+\t\)", pcb_text)
+        for found in [re.search(r"\(net (\d+)\)", block)]
+        if found and found.group(1) in wanted
+    )
 
 
 def zone_fills(pcb_text: str) -> list[tuple[str, str]]:
@@ -160,7 +172,8 @@ def main(board: str) -> None:
             continue
         on_it = [net for net, where in fills if where == layer]
         out.append(f"### `{layer}`\n")
-        out.append(prose.LAYERS.get(stem, "") + "\n")
+        out.append(prose.LAYERS.get(stem, "").replace(
+            "<<GROUND_VIAS>>", str(facts["ground_vias"])) + "\n")
         if on_it:
             out.append("Zones on this layer: " + ", ".join(f"`{n}`" for n in on_it) + "\n")
         out.append(f"![{layer} plot]({stem}.svg)\n")

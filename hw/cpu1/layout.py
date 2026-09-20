@@ -147,7 +147,10 @@ BOARD = {
 }
 
 F, B, MID = "F.Cu", "B.Cu", "In3.Cu"
-VIA = (0.5, 0.2)          # PCBWay: 0.15 mm drill, 0.15 mm annular ring, minimum
+# 0.5 mm pad, 0.2 mm drill - a 0.15 mm annular ring, which is PCBWay's
+# minimum. The drill is not theirs: they will go to 0.15 mm, and this sits
+# above that. The comment used to read as though 0.15 described this via.
+VIA = (0.5, 0.2)
 STUB = 0.2                # between 0.5 mm-pitch pads
 SUPPLY = 0.25             # pin to its capacitor
 
