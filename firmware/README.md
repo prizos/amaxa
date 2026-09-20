@@ -11,6 +11,7 @@ Needs Linux (x86_64 or aarch64) with `make`, `curl`, `tar` and `sha256sum`.
 ```sh
 make              # fetch tools on first run, build hello_hw into out/
 make sim          # run it in the Renode emulator, no board needed
+make sim-check    # run it and assert how it behaved
 make flash        # program a board over its ST-LINK
 make monitor      # console, 115200 8N1 (PORT=/dev/ttyACM0)
 make help         # all targets and variables
@@ -120,6 +121,26 @@ make sim SIM_SECONDS=3 SIM_KEYS="+ + s b s w"
 ```
 
 On this setup that run shows the banner and status lines, the replies to `+`, `s` and `b`, and then `w` starving the watchdog. Renode's IWDG model resets the machine and the firmware boots again. `l` goes through HardFault into lockup and is also recovered by the watchdog.
+
+### `make sim-check`, and what it is for
+
+`make sim` prints a console; `make sim-check` reads one and holds it to what
+the safety story claims. CI built both board support packages and stopped
+there, so every property the hardware is designed around - "an unprogrammed
+board is inert", the trip latch, the buffers - was firmware behaviour that
+nothing checked, on a repository where the board next door carries 188 derived
+checks.
+
+It asserts that the firmware got far enough to configure TIM1 as a three-phase
+centre-aligned timer with a dead-time, that the main loop reported more than
+once, that the break input sits where its pull-up puts it, and - the one that
+matters - that **the outputs never drove without being asked**. Re-arming is
+not asking: `r` on the console re-arms after a break and the outputs stay off.
+
+It is a smoke test and not a proof. Renode models the STM32, not the board
+around it, so what it can see is the firmware's own account of itself: the
+timer it set up, whether it is driving, what it believes the break input is
+doing. It cannot see a buffer, a latch, or a gate driver.
 
 ### What the Renode model covers
 

@@ -122,6 +122,10 @@ sim: build $(RENODE) ## Emulate $(APP) in Renode for SIM_SECONDS, typing SIM_KEY
 		| sed -uE 's/\x1b\[[0-9;]*m//g' \
 		| sed -unE 's/^.*usart3: \[host[^]]*\] ?//p; /\[(ERROR|WARNING)\] (watchdog|cpu)|error executing|Exception/p'
 
+sim-check: $(RENODE) ## Run $(APP) in Renode and assert how it behaves
+	@$(MAKE) --no-print-directory sim SIM_SECONDS=3 > $(OUT_DIR)/sim.log 2>&1 || true
+	@python3 tools/sim_check.py $(OUT_DIR)/sim.log $(BOARD)
+
 clean: ## Remove build outputs
 	-@[ -x $(BAZELISK) ] && $(BAZEL) clean
 	rm -rf $(OUT_DIR)

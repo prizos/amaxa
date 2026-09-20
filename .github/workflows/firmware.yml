@@ -50,6 +50,15 @@ jobs:
           key: firmware-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('firmware/.bazelversion', 'firmware/MODULE.bazel', 'firmware/MODULE.bazel.lock') }}
           restore-keys: firmware-${{ runner.os }}-${{ runner.arch }}-
 
+      # Renode is a 200 MB download and the Makefile checks its sha256, so the
+      # version in the key is what decides whether the cached copy is the
+      # right one.
+      - name: Cache Renode
+        uses: actions/cache@v6
+        with:
+          path: firmware/.tools
+          key: renode-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('firmware/Makefile') }}
+
       - name: Configure Bazel for CI
         run: |
           # Ubuntu 24.04 restricts unprivileged user namespaces, which Bazel's
@@ -66,6 +75,9 @@ jobs:
 
       - name: Build (release, -O2)
         run: make build MODE=opt
+
+      - name: Emulate and assert how it behaves
+        run: make sim-check MODE=opt
 
       - name: Size report
         run: |
