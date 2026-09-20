@@ -138,8 +138,8 @@ schematic after the fact.
 | `R3` | `core.led.fault.resistor` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `D1` | `core.led.status.led` | yellow-green | KT-0603YG | C2289 | `LED_0603_1608Metric` |
 | `R2` | `core.led.status.resistor` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
-| `C8` | `core.lse.c_in` | 6.8pF | 0402CG6R8C500NT | C1576 | `C_0402_1005Metric` |
-| `C9` | `core.lse.c_out` | 6.8pF | 0402CG6R8C500NT | C1576 | `C_0402_1005Metric` |
+| `C8` | `core.lse.c_in` | 5.1pF | 0402CG5R1C500NT | C60220 | `C_0402_1005Metric` |
+| `C9` | `core.lse.c_out` | 5.1pF | 0402CG5R1C500NT | C60220 | `C_0402_1005Metric` |
 | `Y2` | `core.lse.crystal` | 32.768kHz | Q13MC30620006 | C83979 | `Crystal_SMD_SeikoEpson_MC306-4Pin_8.0x3.2mm` |
 | `C10` | `core.nrst.cap` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `J1` | `core.swd` | SWD | TC2030-IDC-NL | — | `Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical` |

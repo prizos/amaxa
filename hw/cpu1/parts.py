@@ -77,9 +77,13 @@ CAP_8P2_0402 = PartSpec(
     **_C0402, manufacturer="FH", mpn="0402CG8R2C500NT", lcsc="C1579", value="8.2pF",
     params={"capacitance": between(7.95e-12, 8.45e-12), "max_voltage": exact(50.0)},
 )
-CAP_6P8_0402 = PartSpec(
-    **_C0402, manufacturer="FH", mpn="0402CG6R8C500NT", lcsc="C1576", value="6.8pF",
-    params={"capacitance": between(6.55e-12, 7.05e-12), "max_voltage": exact(50.0)},
+# The 32 kHz oscillator's load. 5.1 pF, not the 6.8 this board carried: with
+# the stray the design declares, 6.8 presents the crystal 6.9 pF against a
+# 6 pF cut, and 5.1 presents 6.05. No value in the E24 series gets closer, and
+# `test_crystal_sees_its_load_capacitance` picks it rather than being told.
+CAP_5P1_0402 = PartSpec(
+    **_C0402, manufacturer="FH", mpn="0402CG5R1C500NT", lcsc="C60220", value="5.1pF",
+    params={"capacitance": between(4.85e-12, 5.35e-12), "max_voltage": exact(50.0)},
 )
 CAP_4U7_0603 = PartSpec(
     symbol="Device:C", footprint="C0603:C_0603_1608Metric", prefix="C",

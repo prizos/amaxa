@@ -567,7 +567,7 @@ def mcu_core(silicon, mcu, by_number, v3v3, gnd, nets) -> None:
     lse[2] += NC  # noqa: F821
     lse[3] += NC  # noqa: F821
     for address, net, ref in (("core.lse.c_in", "LSE_IN", "C8"), ("core.lse.c_out", "LSE_OUT", "C9")):
-        cap = part(parts.CAP_6P8_0402, address, ref)
+        cap = part(parts.CAP_5P1_0402, address, ref)
         nets[net] += cap[1]
         gnd += cap[2]
 

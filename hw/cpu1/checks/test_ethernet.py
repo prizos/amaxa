@@ -22,6 +22,7 @@ import pytest
 # sys.path and the helper beside them has to be found deliberately.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pairs  # noqa: E402
+from series import closest  # noqa: E402
 
 # The same three dielectric heights the comparator separation is derived from:
 # past that, two microstrips have largely stopped coupling.
@@ -31,26 +32,6 @@ PHY = "eth.phy"
 JACK = "eth.jack"
 CRYSTAL = "eth.xtal.crystal"
 GROUND = "GND"
-
-# IEC 60063's E24 series, the one every 0402 C0G capacitor is stocked against.
-# A load capacitor cannot be any value wanted, so "the right value" means the
-# closest one this series offers, and that is a published standard rather than
-# a belief about this board.
-E24 = (10, 11, 12, 13, 15, 16, 18, 20, 22, 24, 27, 30, 33, 36,
-       39, 43, 47, 51, 56, 62, 68, 75, 82, 91)
-
-
-def _E24_VALUES(near: float) -> list[float]:
-    """
-    Every E24 value within a decade either side of `near`, in farads.
-
-    Either side matters. The window used to start at the decade below and run
-    two decades up, so a nominal sitting on a decade boundary had no candidate
-    beneath it and "no value in the series gets closer" was only ever tested
-    upward.
-    """
-    decade = 10.0 ** math.floor(math.log10(near))
-    return [v * decade * scale / 100.0 for scale in (1, 10, 100, 1000) for v in E24]
 
 RAILS = {"5V": "rail.5v", "3V3": "rail.3v3"}
 
@@ -282,7 +263,7 @@ def test_the_crystal_sees_the_load_it_is_cut_for(
 
     wanted, _ = spec(CRYSTAL, "load_capacitance")
     nominal = (c1_low + c1_high) / 2
-    best = min(_E24_VALUES(nominal), key=lambda v: abs(load(v) - wanted))
+    best = closest(nominal, lambda v: abs(load(v) - wanted))
     assert abs(best - nominal) < 1e-15, (
         f"the crystal is cut for {wanted * 1e12:.1f} pF; a pair of "
         f"{nominal * 1e12:g} pF presents {load(nominal) * 1e12:.2f} pF and a "

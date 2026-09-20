@@ -20,6 +20,7 @@ HW_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HW_DIR / "tools"))
 
 from layout_lib import footprint_pads  # noqa: E402
+from series import closest  # noqa: E402
 from stm32 import Silicon  # noqa: E402
 
 MCU = "mcu"
@@ -269,6 +270,26 @@ def test_crystal_sees_its_load_capacitance(oscillator, design, two_pad_parts, pa
     assert load_low <= wanted <= load_high, (
         f"{crystal} is cut for {wanted * 1e12:.1f} pF but sees "
         f"{load_low * 1e12:.2f} to {load_high * 1e12:.2f} pF"
+    )
+
+    # And the value is the best the series offers, not merely one whose band
+    # happens to straddle the cut. A wide declared stray makes that band wide
+    # too, and 6.8 pF satisfied it on the 32 kHz oscillator while presenting
+    # 6.9 pF against a 6 pF cut - fifteen per cent out, and invisible.
+    assert (c1_low, c1_high) == (c2_low, c2_high), (
+        f"{crystal}'s two load capacitors are different values"
+    )
+    nominal = (c1_low + c1_high) / 2
+    middle = (stray_low + stray_high) / 2
+
+    def presents(value: float) -> float:
+        return value / 2 + middle
+
+    best = closest(nominal, lambda v: abs(presents(v) - wanted))
+    assert abs(best - nominal) < 1e-15, (
+        f"{crystal} is cut for {wanted * 1e12:.1f} pF; a pair of "
+        f"{nominal * 1e12:g} pF presents {presents(nominal) * 1e12:.2f} pF and "
+        f"a pair of {best * 1e12:g} would present {presents(best) * 1e12:.2f}"
     )
     if oscillator == "hse":
         range_low, range_high = spec(MCU, "hse_load_capacitor")
