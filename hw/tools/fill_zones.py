@@ -88,10 +88,15 @@ def main() -> int:
     if not filler.Fill(board.Zones()):
         sys.exit("zone fill failed")
 
-    pcbnew.SaveBoard(str(path), board)
+    # Written beside the board and only moved into place once the nets have
+    # been compared, so a refusal leaves the layout's own file untouched
+    # rather than the rewritten one it is refusing.
+    staged = path.with_suffix(path.suffix + ".filled")
+    pcbnew.SaveBoard(str(staged), board)
 
-    moved = _moved(before, _nets_in(path.read_text()))
+    moved = _moved(before, _nets_in(staged.read_text()))
     if moved:
+        staged.unlink()
         sys.exit(
             "the zone fill changed what net some copper is on, which it must "
             "never do:\n" + "\n".join(moved) + "\n"
@@ -99,6 +104,7 @@ def main() -> int:
             "so a net pcbnew rewrites here is a net nothing downstream can "
             "disagree with. Fix the layout instead."
         )
+    staged.replace(path)
 
     for zone in zones:
         print(
