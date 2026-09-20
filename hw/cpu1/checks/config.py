@@ -11,6 +11,38 @@ EXPECTED_CHECKS = 181
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
+    ("buck5.c_out1", "capacitance"): (
+        "the 5 V buck's output bulk. The LM5164's datasheet gives an input "
+        "capacitance minimum and no output figure, so there is nothing to "
+        "compare these against: the value follows from the ripple wanted, and "
+        "this board states no ripple target for the 5 V rail. Worth one before "
+        "a second spin - it is a loop-stability number as well as a ripple one"
+    ),
+    ("buck5.c_out2", "capacitance"): "the second half of buck5.c_out1, and the same gap",
+    ("can.decoupling_vcc", "capacitance"): (
+        "a 100 nF bypass at a supply pin. That it exists, and sits beside its own pin, is checked; its *value* is convention and neither this part's datasheet nor anything else on this board states a figure to hold it to. It became visible when the converters' input-capacitance checks stopped summing the whole 5 V net - which is how these were being 'read' before, as part of an answer to a different question"
+    ),
+    ("trip.fast1_high.decoupling", "capacitance"): (
+        "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
+    ),
+    ("trip.fast1_low.decoupling", "capacitance"): (
+        "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
+    ),
+    ("trip.fast2_high.decoupling", "capacitance"): (
+        "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
+    ),
+    ("trip.fast2_low.decoupling", "capacitance"): (
+        "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
+    ),
+    ("trip.fast3_high.decoupling", "capacitance"): (
+        "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
+    ),
+    ("trip.fast3_low.decoupling", "capacitance"): (
+        "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
+    ),
+    ("trip.fast4_high.decoupling", "capacitance"): (
+        "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
+    ),
     ("core.vdda.bead", "dc_resistance"): (
         "its drop is VDDA's current times 0.9 ohm, and VDDA's current is not in "
         "the datasheet pages read for this board, so there is nothing to bound "

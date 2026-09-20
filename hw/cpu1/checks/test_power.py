@@ -85,10 +85,23 @@ def _divider(design, two_pad_parts, spec, high_net, tap_net, low_net):
     return spec(top[0], "resistance"), spec(bottom[0], "resistance")
 
 
-def _capacitance_on(design, two_pad_parts, spec, net_a, net_b):
-    """(low, high) total capacitance between two nets."""
+def _capacitance_on(design, two_pad_parts, spec, net_a, net_b, block=None):
+    """
+    (low, high) total capacitance between two nets, optionally one block's.
+
+    `block` matters wherever a datasheet asks for capacitance *at a pin*
+    rather than on a rail. Without it, the 3V3 buck's "input capacitance"
+    was every capacitor on the 5 V net - the 5 V buck's own output bulk and
+    all seven comparator bypasses included, 25.7 uF of it - so the part
+    actually fitted at its VIN pin could have been deleted and the check
+    would still have passed. The design says which capacitor belongs to which
+    converter in the addresses it builds them under, so that is what this
+    reads.
+    """
     low = high = 0.0
     for address in _parts_on(design, two_pad_parts, "Device:C", net_a, net_b):
+        if block is not None and not address.startswith(f"{block}."):
+            continue
         a, b = spec(address, "capacitance")
         low, high = low + a, high + b
     return low, high
@@ -707,11 +720,13 @@ def test_each_converter_has_its_bootstrap_and_input_capacitance(design, two_pad_
                 f"of bootstrap, outside {wanted[0] * 1e9:g} to {wanted[1] * 1e9:g} nF"
             )
         minimum, _ = spec(regulator, "input_capacitance_min")
-        input_low, _ = _capacitance_on(design, two_pad_parts, spec, supply, "GND")
+        block = regulator.rpartition(".")[0]
+        input_low, _ = _capacitance_on(
+            design, two_pad_parts, spec, supply, "GND", block=block)
         if input_low < minimum:
             problems.append(
-                f"  {regulator}: {input_low * 1e6:.1f} uF on {supply}, against "
-                f"{minimum * 1e6:g} uF asked for"
+                f"  {regulator}: {input_low * 1e6:.1f} uF of its own on "
+                f"{supply}, against {minimum * 1e6:g} uF asked for"
             )
     assert not problems, "Converter capacitors:\n" + "\n".join(problems)
 
@@ -755,7 +770,10 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, spe
         f"the 5 V rail reaches {rail_high:g} V and the reference takes {limit:g} V"
     )
     wanted, _ = spec(REFERENCE, "supply_bypass")
-    found_low, _ = _capacitance_on(design, two_pad_parts, spec, "5V", "GND")
+    # The reference's own, not the rail's: same scope error as the converters'
+    # input capacitance, and the same answer.
+    found_low, _ = _capacitance_on(
+        design, two_pad_parts, spec, "5V", "GND", block=REFERENCE.rpartition(".")[0])
     assert found_low >= wanted, (
         f"{found_low * 1e6:.2f} uF on the reference's supply, against "
         f"{wanted * 1e6:g} uF asked for"

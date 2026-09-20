@@ -189,7 +189,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `C22` | `buck3v3.c_bst` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `C20` | `buck3v3.c_in` | 10uF | CL21A106KAYNNNE | C15850 | `C_0805_2012Metric` |
+| `C20` | `buck3v3.c_in` | 22uF | CGA0805X7R226M100MT | C23692981 | `C_0805_2012Metric` |
 | `C21` | `buck3v3.c_in_hf` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C23` | `buck3v3.c_out1` | 22uF | CGA0805X7R226M100MT | C23692981 | `C_0805_2012Metric` |
 | `C24` | `buck3v3.c_out2` | 22uF | CGA0805X7R226M100MT | C23692981 | `C_0805_2012Metric` |

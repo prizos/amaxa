@@ -618,8 +618,13 @@ def power_block(v3v3, gnd, nets) -> None:
     gnd += buck3["GND"]
     v5 += buck3["VIN"], buck3["EN"]
 
+    # 22 uF, not the 10 uF this had. The TPS562200 asks for 10 uF at its VIN
+    # pin, and a 10 uF part's own tolerance is 8 uF at the corner - it never
+    # met the figure. It passed because the check summed every capacitor on
+    # the 5 V net, the 5 V buck's output bulk included, so the part actually
+    # fitted here could have been deleted without anything noticing.
     for address, spec, ref in (
-        ("buck3v3.c_in", parts.CAP_10U_0805, "C20"),
+        ("buck3v3.c_in", parts.CAP_22U_0805, "C20"),
         ("buck3v3.c_in_hf", parts.CAP_100N_0402, "C21"),
     ):
         cap = part(spec, address, ref)
