@@ -735,20 +735,48 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
         if all(design["parts"][address]["symbol"].startswith(static) for address, _ in nodes)
     }
 
+    # A net is not a foreign aggressor if it is the *same signal* on the other
+    # side of that channel's own series resistor. FAST4_SENSE runs 12.4 mm
+    # beside FAST4 on the back layer, and FAST4 is what FAST4_SENSE becomes
+    # after its 10 ohm: the two carry one waveform, and coupling between them
+    # is the signal arriving twice, not a disturbance. Read from the netlist,
+    # so it covers every channel rather than naming one.
+    same_signal: dict[str, set[str]] = {}
+    for address, part in design["parts"].items():
+        if part["symbol"] != "Device:R":
+            continue
+        ends = [net for net, nodes in design["nets"].items()
+                if any(a == address for a, _ in nodes)]
+        if len(ends) == 2:
+            same_signal.setdefault(ends[0], set()).add(ends[1])
+            same_signal.setdefault(ends[1], set()).add(ends[0])
+
     close = []
     for a_start, a_end, a_layer, a_net, a_width in segments:
         if a_net not in inputs:
             continue
         for b_start, b_end, b_layer, b_net, b_width in segments:
             if (b_layer != a_layer or b_net == a_net or b_net in PLANES
-                    or b_net in inputs or b_net in quiet):
+                    or b_net in inputs or b_net in quiet
+                    or b_net in same_signal.get(a_net, ())):
                 continue
             # Cheap reject before sampling: two segments whose bounding boxes
             # are further apart than the limit cannot be within it.
-            if (min(a_start[0], a_end[0]) - max(b_start[0], b_end[0]) > wanted
-                    or min(b_start[0], b_end[0]) - max(a_start[0], a_end[0]) > wanted
-                    or min(a_start[1], a_end[1]) - max(b_start[1], b_end[1]) > wanted
-                    or min(b_start[1], b_end[1]) - max(a_start[1], a_end[1]) > wanted):
+            #
+            # **In the same units the limit is in.** `wanted` is edge to edge
+            # and `_run_alongside` subtracts half of both widths before
+            # comparing, so a reject measured centre to centre threw away
+            # every pair whose copper edges were inside the limit while their
+            # centrelines were outside it - which is every violation drawn
+            # with normal-width tracks. It hid a 12.5 mm run at 0.425 mm from
+            # a comparator input, worth 10.8 mV onto a 6 mV threshold, and it
+            # discarded the *longest* runs preferentially, because coupling
+            # grows with length while the reject keys on separation.
+            reach = wanted + (a_width + b_width) / 2
+            if (min(a_start[0], a_end[0]) - max(b_start[0], b_end[0]) > reach
+                    or min(b_start[0], b_end[0]) - max(a_start[0], a_end[0]) > reach
+                    or min(a_start[1], a_end[1]) - max(b_start[1], b_end[1]) > reach
+                    or min(b_start[1], b_end[1]) - max(a_start[1], a_end[1]) > reach):
                 continue
             along, apart = _run_alongside(
                 (a_start, a_end), (b_start, b_end), a_width, b_width, wanted)

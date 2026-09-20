@@ -313,6 +313,21 @@ INTENT: dict[str, tuple[float, float]] = {
     # matters is how long it is against the edge travelling through it, and a
     # tenth is the same share the USB pair's protection is held to.
     "ethernet.uncoupled_edge_share": (0.0, 0.10),
+    # And how much of each half has to be beside its partner at all.
+    #
+    # The share above is the physics - a discontinuity much shorter than the
+    # distance an edge travels while it rises is electrically short - and on
+    # these routes it is **slack by a factor of two**: a tenth of a 3 ns edge
+    # is 48.7 mm and the longest half of either pair is 24.7 mm, so nothing
+    # a pair could do would breach it. A pair with the two halves on opposite
+    # corners of the board would pass. It is worth keeping and it cannot fail.
+    #
+    # This one can. It is a ratchet rather than a derivation: 35 % is just
+    # under what this placement achieves - 50.9 % and 39.7 % on the longer
+    # half of each pair, limited by the jack's pad pitch and the crossing -
+    # so any change that makes a pair less of a pair fails here and has to be
+    # argued for.
+    "ethernet.coupled_fraction": (0.35, 1.0),
     "ethernet.skew_share": (0.0, 0.03),
     # What has to stand between the cable and the rest of the machine. IEEE
     # 802.3 asks 1500 V rms, and the jack's magnetics are the only barrier.

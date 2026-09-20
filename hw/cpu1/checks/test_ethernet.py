@@ -23,6 +23,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pairs  # noqa: E402
 
+# The same three dielectric heights the comparator separation is derived from:
+# past that, two microstrips have largely stopped coupling.
+SEPARATION_IN_HEIGHTS = 3
+
 PHY = "eth.phy"
 JACK = "eth.jack"
 CRYSTAL = "eth.xtal.crystal"
@@ -530,12 +534,21 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
     are about three per cent of one, against the tenth `ethernet.rise_time`
     and `ethernet.uncoupled_edge_share` together allow.
 
-    The pairs are 45 % and 37 % coupled and that is as good as this placement
-    gets: lengthening the parallel run collides with the jack's own pads,
-    which was tried. What is left is package and connector pitch.
+    The pairs are 51 % and 40 % coupled on their longer halves, and that is as
+    good as this placement gets: lengthening the parallel run collides with
+    the jack's own pads, which was tried. What is left is package and
+    connector pitch.
+
+    **Two bounds, and only the second can fail.** The edge one is the physics
+    and on these routes it is slack by a factor of two - a tenth of a 3 ns
+    edge is 48.7 mm against a 24.7 mm route, so a pair with its halves on
+    opposite corners of the board would pass it. The fraction is a ratchet set
+    just under what this placement achieves, and it is what would catch a
+    regression.
     """
     rise, _ = spec("ethernet", "rise_time")          # the fastest, so the worst
     _, share = spec("ethernet", "uncoupled_edge_share")
+    wanted, _ = spec("ethernet", "coupled_fraction")
 
     loose = []
     for pair in ("ETH_TD", "ETH_RD"):
@@ -543,7 +556,8 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
         assert set(tracks) == {f"{pair}_P", f"{pair}_N"}, f"{pair} is not both halves"
         width = pairs.controlled_width(tracks)
         for net, partner in ((f"{pair}_P", f"{pair}_N"), (f"{pair}_N", f"{pair}_P")):
-            coupled, total = pairs.coupled_length(tracks[net], tracks[partner], width)
+            coupled, total = pairs.coupled_length(
+                tracks[net], tracks[partner], width, SEPARATION_IN_HEIGHTS * stack.height)
             uncoupled = total - coupled
             edge = rise / pairs.delay_per_mm(stack, width)
             if uncoupled > share * edge:
@@ -552,10 +566,13 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
                     f"which is {uncoupled / edge * 100:.1f}% of the {edge:.0f} mm "
                     f"a {rise * 1e9:g} ns edge occupies"
                 )
-    assert not loose, (
-        f"Pairs uncoupled for more than {share * 100:g}% of an edge:\n"
-        + "\n".join(loose)
-    )
+            if coupled / total < wanted:
+                loose.append(
+                    f"  {net}: only {coupled / total * 100:.1f}% of its "
+                    f"{total:.2f} mm runs beside its partner, against "
+                    f"{wanted * 100:g}% this placement achieves"
+                )
+    assert not loose, "Pairs that are not pairs for enough of their length:\n" + "\n".join(loose)
 
 
 def test_the_pairs_arrive_together_enough(spec, stack, lengths, pcb_text):

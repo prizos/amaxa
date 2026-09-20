@@ -3030,7 +3030,19 @@ ETH_NORTH = (
 # its own south of the other three.
 ETH_RESET_OUT = -18.3           # the row it leaves on, under the boot test pad
 ETH_RESET_DROP = -5.5           # the column it takes north
-ETH_RESET_LANE = -27.0
+# -26.5, and it was -27.0. At -27.0 this line ran 12.5 mm at 0.6 mm from
+# FAST4_SENSE's lane at -27.6 - the DC-link over-voltage trip's input - and
+# coupled about **10.8 mV onto a 6 mV hysteresis**. The MCU drives this pin,
+# so the edge is a real one, and the trip it would have caused is a drive that
+# stops whenever firmware resets the PHY. It is the defect
+# `test_nothing_runs_alongside_a_raw_comparator_input` exists to find, and the
+# check could not see it: its bounding-box reject was measured centre to
+# centre against a limit stated edge to edge.
+#
+# North is where the room is - 1.7 mm of empty front between here and the
+# RMII's ETH_TXD1 at -25.3 - but not as far as -26.4, where a TRIP_LEVEL_HIGH
+# via at (-16.81, -26.0) leaves 0.075 mm. At -26.5 the coupling is 3.4 mV.
+ETH_RESET_LANE = -26.5
 ETH_RESET_WEST = -45.3
 # Its pad is the one south of the other three on the PHY's east side, so it
 # cannot come at it from the north the way they do: it goes on past, down to
@@ -3203,7 +3215,7 @@ def _mcu_pad(net: str) -> str:
 # Nothing measured it, because the pair measurement looked at F.Cu only.
 #
 # Counting the fan out of the package and the spread to the jack's pads with
-# it, these pairs are coupled for 45 % and 37 % of their length. Lengthening
+# it, these pairs are coupled for 51 % and 40 % of their length. Lengthening
 # the parallel run was tried at 10 and 11.5 mm and collides with the jack;
 # what is left is package and connector pitch. What bounds it is the edge, and
 # test_each_pair_runs_as_a_pair_for_most_of_its_length holds that.

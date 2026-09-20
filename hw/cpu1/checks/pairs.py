@@ -125,21 +125,27 @@ def delay_per_mm(stack, width: float) -> float:
     return math.sqrt(effective) / LIGHT
 
 
-def coupled_length(one: list, other: list, width: float, reach: float = 3.0
+def coupled_length(one: list, other: list, width: float, gap: float
                    ) -> tuple[float, float]:
     """
     (how much of `one` runs beside `other`, how long `one` is altogether).
 
-    "Beside" means on the same layer and within `reach` track widths, which is
-    the distance past which the coupling that makes a pair a pair has mostly
-    gone. Everything else - the fan out of the package, the spread to the
+    "Beside" means on the same layer with no more than `gap` between their
+    copper **edges**. The caller passes that distance rather than this file
+    inventing one: it is the same three dielectric heights the comparator
+    separation is derived from, past which coupling between two microstrips
+    has largely gone.
+
+    It used to be three track widths, measured centre to centre - a number
+    from nowhere, in the units nothing else on this board states pair geometry
+    in. Everything else - the fan out of the package, the spread to the
     connector's pads, the excursion to the other layer to cross over - is two
     single tracks that happen to carry a differential signal.
 
     Sampled rather than solved, so it does not care about orientation and
     counts a converging pair for the part that is actually close.
     """
-    limit = reach * width
+    limit = gap + width
     total = coupled = 0.0
     for start, end, _, layer in one:
         length = math.dist(start, end)
