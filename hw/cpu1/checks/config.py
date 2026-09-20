@@ -2,12 +2,21 @@
 What the common checks in hw/checks/ need to know that is specific to cpu1.
 """
 
-# Still being built: some nets wait for blocks not drawn yet (design.json's
-# `pending`), and board.mk says ROUTING := incomplete.
-COMPLETE = False
+# Drawn, routed and checked. Both reasons this used to be False have gone:
+# design.json has no `pending` nets, and board.mk says ROUTING := complete.
+# `test_a_board_declaring_itself_unfinished_says_what_is_unfinished` is what
+# stops this lagging the board again - a board that claims to be incomplete
+# now has to point at the thing that is.
+#
+# What it means: DRC reports no violations and no unconnected items, the
+# outputs and the IPC-D-356 net list build, `make reproducible` regenerates
+# the same board, `make offline` builds with the network refusing every call,
+# both BSPs compile, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` are
+# empty. What it does not mean is that anybody has built one.
+COMPLETE = True
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 186
+EXPECTED_CHECKS = 187
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {

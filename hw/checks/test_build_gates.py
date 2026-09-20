@@ -219,3 +219,30 @@ def test_pending_nets_are_still_pending(design, board_config, board_dir):
         "Pending nets that are no longer single-ended. Remove them from the board's "
         "pending list; the block they waited for has landed:\n" + "\n".join(outdated)
     )
+
+
+def test_a_board_declaring_itself_unfinished_says_what_is_unfinished(
+    design, board_config, board_dir
+):
+    """
+    `COMPLETE = False` has to point at something.
+
+    The flag is a claim about the board, and the check above enforces it in
+    one direction: a board that says it is complete may have no pending nets
+    and no incomplete routing. Nothing enforced the other, so the flag could
+    go on saying "still being built" after both of its reasons had gone - and
+    on cpu1 it did, under a comment naming pending nets it no longer had and
+    a `ROUTING := incomplete` that said complete.
+
+    A stale "not finished yet" is worse than a stale "finished": it is the
+    sentence that makes every other unfinished-looking thing forgivable.
+    """
+    if board_config.COMPLETE:
+        return
+    board_mk = board_dir / "board.mk"
+    routing = board_mk.is_file() and "ROUTING := incomplete" in board_mk.read_text()
+    assert design.get("pending") or routing, (
+        f"{board_dir.name} declares COMPLETE = False and has no pending nets "
+        f"and no incomplete routing. Either something is unfinished and is not "
+        f"saying so, or the flag is out of date"
+    )

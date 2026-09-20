@@ -72,6 +72,21 @@ coordinates ([`layout.py`](layout.py), with helpers in
 VDDA's filter, both crystals, debug, the indicators and the button are placed by
 hand, near the pins they serve.
 
+## Where it stands
+
+`checks/config.py` says `COMPLETE = True`. That means: DRC reports no
+violations and no unconnected items, the gerbers, drill and IPC-D-356 net list
+build, `make reproducible` regenerates the same board, `make offline` builds
+with every network call refused, both firmware BSPs compile, and
+`NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` are empty. It does not mean
+anybody has built one.
+
+The flag used to say `False` under a comment naming pending nets the board no
+longer had. `test_a_board_declaring_itself_unfinished_says_what_is_unfinished`
+is what stops that happening again: a board claiming to be incomplete has to
+point at the thing that is. A stale "not finished yet" is worse than a stale
+"finished", because it is the sentence that excuses everything else.
+
 ## What the checks establish
 
 [`checks/test_core.py`](checks/test_core.py) derives everything from ST's
