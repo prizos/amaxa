@@ -42,17 +42,19 @@ def vias(pcb_text, net_names) -> list[tuple[float, float, str]]:
 
 @pytest.fixture(scope="module")
 def segments(pcb_text, net_names) -> list:
-    """Every track as ((x1, y1), (x2, y2), layer, net)."""
+    """Every track as ((x1, y1), (x2, y2), layer, net, width)."""
     out = []
     for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
         start = re.search(r"\(start ([-\d.]+) ([-\d.]+)\)", block)
         end = re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", block)
         layer = re.search(r'\(layer "([^"]+)"\)', block)
         net = re.search(r"\(net (\d+)\)", block)
-        if start and end and layer and net:
+        width = re.search(r"\(width ([\d.]+)\)", block)
+        if start and end and layer and net and width:
             out.append(((float(start.group(1)), float(start.group(2))),
                         (float(end.group(1)), float(end.group(2))),
-                        layer.group(1), net_names.get(net.group(1), "")))
+                        layer.group(1), net_names.get(net.group(1), ""),
+                        float(width.group(1))))
     return out
 
 
@@ -68,7 +70,7 @@ def stitch_vias(vias, segments) -> list:
     the plane is not underneath it. What separates them is exactly that - a
     track on the back layer.
     """
-    back = [(a, b) for a, b, layer, _ in segments if layer == "B.Cu"]
+    back = [(a, b) for a, b, layer, _, _ in segments if layer == "B.Cu"]
 
     def on_the_back(point) -> bool:
         # Anywhere along a track, not only at its ends: a route that runs
@@ -481,7 +483,7 @@ def test_every_stub_is_short_enough_to_be_a_stub(
     reaching = {(round(x, 3), round(y, 3)) for x, y, _ in stitch_vias}
 
     long_ones = []
-    for a, b, _, net in segments:
+    for a, b, _, net, _ in segments:
         if net not in PLANES:
             continue
         ends = [(round(p[0], 3), round(p[1], 3)) for p in (a, b)]
@@ -590,20 +592,76 @@ def test_every_exposed_pad_has_its_thermal_vias(exposed_pads, vias):
 SEPARATION_IN_HEIGHTS = 3
 
 
-def _parallel_overlap(a, b):
-    """How far two axis-aligned segments run alongside each other, and how far apart."""
-    for axis in (0, 1):
-        other = 1 - axis
-        if abs(a[0][axis] - a[1][axis]) > 1e-6 or abs(b[0][axis] - b[1][axis]) > 1e-6:
-            continue                       # not both fixed on this axis
-        lo = max(min(a[0][other], a[1][other]), min(b[0][other], b[1][other]))
-        hi = min(max(a[0][other], a[1][other]), max(b[0][other], b[1][other]))
-        if hi > lo:
-            return hi - lo, abs(a[0][axis] - b[0][axis])
-    return 0.0, 0.0
+# How finely the run below is sampled. It has to be small against the
+# separation being measured - a few tenths of a millimetre - and 0.05 mm is a
+# third of the narrowest track this board draws.
+SAMPLE = 0.05
 
 
-def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_dir):
+def _run_alongside(a, b, a_width, b_width, within):
+    """
+    How far two tracks run within `within` of each other, edge to edge.
+
+    Two changes from the axis-aligned version this replaces, both of which it
+    got wrong rather than approximately right.
+
+    It measured **centre to centre** while the limit is stated edge to edge -
+    "three dielectric heights between edges" - so it admitted a pair whose
+    copper was half of both widths closer than the derivation asks for. And it
+    gave up unless both segments were axis-aligned, returning zero, which is
+    never a violation: 249 of this board's 1286 segments run on a diagonal,
+    including six of the sixty comparator-input ones, and every pair involving
+    one of them was unmeasurable.
+
+    Sampling handles any orientation, including two tracks that converge - the
+    length reported is the length actually within the distance, which for a
+    crossing is short and for a parallel run is the whole of it.
+    """
+    length = math.dist(a[0], a[1])
+    if length == 0.0:
+        return 0.0, float("inf")
+    gap = (a_width + b_width) / 2
+    steps = max(1, int(length / SAMPLE))
+    run = best = 0.0
+    closest = float("inf")
+    for i in range(steps + 1):
+        fraction = i / steps
+        point = (a[0][0] + (a[1][0] - a[0][0]) * fraction,
+                 a[0][1] + (a[1][1] - a[0][1]) * fraction)
+        apart = _point_to_segment(point, b[0], b[1]) - gap
+        if 0 < apart < within:
+            run += length / steps
+            if run >= best:
+                best, closest = run, min(closest, apart)
+        else:
+            run = 0.0
+    return best, closest
+
+
+def _backward_crosstalk(length, centres, height, swing, edge, velocity):
+    """
+    Roughly what an aggressor couples backward into a track beside it, in volts.
+
+    The standard microstrip estimate: a coupling coefficient set by how far
+    apart the two are compared with their height above the plane,
+
+        Kb = 1 / 4 / (1 + (D / H) ** 2)
+
+    and, for a run shorter than the critical length, a share of it in
+    proportion to how much of the edge the run is - `2 * length` against the
+    distance the edge travels while it rises.
+
+    Approximate, and it reproduces the one case this board has measured: the
+    8.55 mm of FAST4_SENSE that ran 0.55 mm from the RMII's transmit enable
+    comes out at about 8 mV against a 6 mV threshold, which is the defect that
+    was found and moved.
+    """
+    coefficient = 0.25 / (1.0 + (centres / height) ** 2)
+    share = min(1.0, 2.0 * length / (edge * 1e9 * velocity))
+    return coefficient * swing * share
+
+
+def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_dir, spec):
     """
     A track that decides a trip keeps its distance from one that does not.
 
@@ -626,6 +684,24 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
     height = description.BOARD["stack"][0]["thickness"]
     wanted = SEPARATION_IN_HEIGHTS * height
 
+    # What decides it is millivolts, not millimetres. Three dielectric heights
+    # is the geometry worth *looking* at; whether a particular run matters is
+    # what it couples against what the comparator can tell apart, and a
+    # package whose pins are half a millimetre apart forces a millimetre of
+    # close running that no rule can remove and that couples a tenth of the
+    # hysteresis. The old check compared the length against 1.0 mm, which was
+    # not from anywhere and was doing this job badly.
+    epsilon = description.BOARD["stack"][0]["epsilon_r"]
+    effective = 0.475 * epsilon + 0.67
+    velocity = 299.792458 / math.sqrt(effective)        # mm per nanosecond
+    edge, _ = spec("trip", "aggressor_edge")            # the fastest, so the worst
+    _, swing = spec("rail.3v3", "voltage")
+    hysteresis = max(
+        spec(address, "input_hysteresis")[0]
+        for address, part in design["parts"].items()
+        if part["symbol"].startswith("Comparator:")
+    )
+
     inputs = {
         net for net, nodes in design["nets"].items()
         for address, pad in nodes
@@ -646,17 +722,32 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
     }
 
     close = []
-    for a_start, a_end, a_layer, a_net in segments:
+    for a_start, a_end, a_layer, a_net, a_width in segments:
         if a_net not in inputs:
             continue
-        for b_start, b_end, b_layer, b_net in segments:
+        for b_start, b_end, b_layer, b_net, b_width in segments:
             if (b_layer != a_layer or b_net == a_net or b_net in PLANES
                     or b_net in inputs or b_net in quiet):
                 continue
-            along, apart = _parallel_overlap((a_start, a_end), (b_start, b_end))
-            if along > 1.0 and 0 < apart < wanted:
-                close.append(f"  {a_net} on {a_layer} runs {along:.2f} mm "
-                             f"alongside {b_net} at {apart:.2f} mm")
+            # Cheap reject before sampling: two segments whose bounding boxes
+            # are further apart than the limit cannot be within it.
+            if (min(a_start[0], a_end[0]) - max(b_start[0], b_end[0]) > wanted
+                    or min(b_start[0], b_end[0]) - max(a_start[0], a_end[0]) > wanted
+                    or min(a_start[1], a_end[1]) - max(b_start[1], b_end[1]) > wanted
+                    or min(b_start[1], b_end[1]) - max(a_start[1], a_end[1]) > wanted):
+                continue
+            along, apart = _run_alongside(
+                (a_start, a_end), (b_start, b_end), a_width, b_width, wanted)
+            if along <= 0.0:
+                continue
+            centres = apart + (a_width + b_width) / 2
+            coupled = _backward_crosstalk(along, centres, height, swing, edge, velocity)
+            if coupled > hysteresis:
+                close.append(
+                    f"  {a_net} on {a_layer} runs {along:.2f} mm alongside "
+                    f"{b_net}, {apart:.2f} mm between their edges: about "
+                    f"{coupled * 1e3:.1f} mV onto a {hysteresis * 1e3:g} mV threshold"
+                )
     assert not close, (
         f"Raw comparator inputs closer than {wanted:.2f} mm "
         f"({SEPARATION_IN_HEIGHTS} x the {height:g} mm prepreg) to a foreign track:\n"

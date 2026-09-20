@@ -252,6 +252,13 @@ INTENT: dict[str, tuple[float, float]] = {
     # laminate is over a metre, so the detour is a hundredth of one - short
     # enough that the loop it makes is the smallest thing in that corner.
     "routing.reference_change_distance": (0.0, 10.0),
+    # The fastest edge any track on this board carries, for working out what
+    # one track couples into another. The buffers' outputs are the quickest
+    # thing here at about three nanoseconds and the RMII is slower again, so
+    # one nanosecond is below anything a part on this board specifies -
+    # deliberately, because coupling rises as the edge shortens and the
+    # comparator inputs have six millivolts to spend.
+    "trip.aggressor_edge": (1e-9, 3e-9),
     # The tracks from a surface pad down to its plane via. Inductance in series
     # with whatever that pad was decoupling; a pad that needs more than this
     # wants moving rather than reaching for.
