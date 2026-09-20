@@ -23,8 +23,6 @@ FUSE = "power.fuse"
 ZENER = "power.d_gate_clamp"
 REFERENCE = "vref.ic"
 
-# Half a resistor's rating, the same derating the MCU core's checks use.
-POWER_DERATING = 0.5
 
 # What a part's absolute maximum must exceed the voltage it will actually see
 # by. led12 shipped a regulator rated 3 % above the clamp its own TVS produced;
@@ -48,6 +46,12 @@ def two_pad_parts(design, pad_net):
         for address, part in design["parts"].items()
         if part["symbol"] in ("Device:C", "Device:R", "Device:L")
     }
+
+
+def _derating(spec) -> float:
+    """How much of a rating this board will use, from design.json."""
+    _, share = spec("parts", "derating")
+    return share
 
 
 def _inside(found, wanted) -> bool:
@@ -242,11 +246,11 @@ def test_the_gate_clamp_survives_conducting_through_a_surge(design, two_pad_part
     resistor_rating, _ = spec(gate[0], "max_power")
 
     current = (clamp - v_low) / resistance
-    assert v_high * current <= rated * POWER_DERATING, (
+    assert v_high * current <= rated * _derating(spec), (
         f"{ZENER} dissipates {v_high * current * 1e3:.0f} mW at the clamp, "
         f"against {rated * 1e3:g} mW derated by half"
     )
-    assert (clamp - v_low) ** 2 / resistance <= resistor_rating * POWER_DERATING, (
+    assert (clamp - v_low) ** 2 / resistance <= resistor_rating * _derating(spec), (
         f"{gate[0]} dissipates "
         f"{(clamp - v_low) ** 2 / resistance * 1e3:.0f} mW at the clamp"
     )
@@ -923,7 +927,7 @@ def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
         resistance, _ = spec(address, "resistance")
         rated, _ = spec(address, "max_power")
         power = across**2 / resistance
-        if power > rated * POWER_DERATING:
+        if power > rated * _derating(spec):
             hot.append(
                 f"  {address}: {power * 1e3:.0f} mW across {across:g} V, rated "
                 f"{rated * 1e3:g} mW"
@@ -1022,7 +1026,7 @@ def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pa
             for v_far, r_far in far_side:
                 current = abs(v_near - v_far) / (series + r_near + r_far)
                 worst = max(worst, current**2 * series)
-        if worst > rated * POWER_DERATING:
+        if worst > rated * _derating(spec):
             hot.append(f"  {address}: {worst * 1e3:.1f} mW, rated {rated * 1e3:g} mW")
     assert not hot, "Series resistors past half their rating:\n" + "\n".join(hot)
 
@@ -1105,7 +1109,7 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
             resistance, _ = spec(address, "resistance")
             rated, _ = spec(address, "max_power")
             power = fault**2 / resistance
-            if power > rated * POWER_DERATING:
+            if power > rated * _derating(spec):
                 hot.append(f"  {address}: {power:.1f} W if {transceiver}'s bus is "
                            f"driven to {fault:g} V, rated {rated * 1e3:g} mW")
     assert not hot, (

@@ -142,6 +142,23 @@ def qfp_pins(path: Path, origin: tuple[float, float] = (0.0, 0.0)) -> dict[str, 
     return out
 
 
+def point_to_segment(point, a, b) -> float:
+    """
+    How close a point comes to a line segment, not to either of its endpoints.
+
+    Here rather than in a check because three of them wanted it and each had
+    written its own - a mounting hole asking whether a track passes through
+    it, a via asking how far it is from foreign copper, and a pair asking how
+    much of one half runs beside the other.
+    """
+    (px, py), (ax, ay), (bx, by) = point, a, b
+    dx, dy = bx - ax, by - ay
+    if dx == 0.0 and dy == 0.0:
+        return math.dist(point, a)
+    along = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+    return math.dist(point, (ax + along * dx, ay + along * dy))
+
+
 def offset(point: tuple[float, float], dx: float = 0.0, dy: float = 0.0) -> tuple[float, float]:
     return (round(point[0] + dx, 4), round(point[1] + dy, 4))
 

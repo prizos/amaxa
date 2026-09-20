@@ -36,18 +36,26 @@ def stack(board_dir):
 @pytest.fixture(scope="session")
 def layer_stack(board_dir):
     """
-    Copper layer -> the dielectric between it and the nearest ground plane.
+    Copper layer -> the dielectric between it and the nearest plane.
 
-    Derived from the stackup and from which layers the design pours ground on,
-    rather than written out: a layer's neighbour changes the moment the layer
-    roles do, and the number that changes with it is a capacitance nobody would
+    Derived from the stackup and from which layers the design pours on, rather
+    than written out: a layer's neighbour changes the moment the layer roles
+    do, and the number that changes with it is a capacitance nobody would
     think to re-derive.
+
+    **The nearest plane, not the nearest ground.** A microstrip's field stops
+    at the first plane it meets whatever net that plane carries - a supply
+    plane is an equipotential at these frequencies too - and this said ground
+    while `plane_layers` in test_routing.py said plane, so two fixtures gave
+    In3.Cu two different heights, 0.43 mm and 0.175. Only outer pours are
+    excluded, because a pour on a signal layer is local copper rather than a
+    reference: the same distinction `plane_layers` draws.
     """
     module = _layout(board_dir)
     from layout_lib import Microstrip
 
     board = module.BOARD
-    grounds = {p["layer"] for p in module.PLANES if p["net"] == "GND"}
+    grounds = {p["layer"] for p in module.PLANES} - {"F.Cu", "B.Cu"}
 
     copper = ["F.Cu"] + [f"In{n}.Cu" for n in range(1, board["copper_layers"] - 1)] + ["B.Cu"]
     dielectrics = board["stack"]

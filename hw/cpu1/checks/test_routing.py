@@ -17,6 +17,11 @@ from pathlib import Path
 
 import pytest
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "tools"))
+from layout_lib import point_to_segment  # noqa: E402
+
 GROUND = "GND"
 PLANES = ("GND", "3V3", "5V")
 
@@ -154,14 +159,6 @@ def stitchers(pcb_text, design) -> list[tuple[float, float]]:
     return out
 
 
-def _point_to_segment(point, a, b) -> float:
-    """How close a point comes to a line segment, not to its endpoints."""
-    (px, py), (ax, ay), (bx, by) = point, a, b
-    dx, dy = bx - ax, by - ay
-    if dx == 0.0 and dy == 0.0:
-        return math.dist(point, a)
-    along = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
-    return math.dist(point, (ax + along * dx, ay + along * dy))
 
 
 def _edge_crossings(polygon, a, b) -> list[tuple[float, float]]:
@@ -284,7 +281,7 @@ def test_every_layer_change_has_a_way_back_for_its_return_current(
         here = (x, y)
         layers = {
             layer for start, end, layer in by_net.get(net, [])
-            if _point_to_segment(here, start, end) < 1e-3
+            if point_to_segment(here, start, end) < 1e-3
         }
         references = {reference(layer) for layer in layers}
         if len(references) <= 1:
@@ -642,7 +639,7 @@ def _run_alongside(a, b, a_width, b_width, within):
         fraction = i / steps
         point = (a[0][0] + (a[1][0] - a[0][0]) * fraction,
                  a[0][1] + (a[1][1] - a[0][1]) * fraction)
-        apart = _point_to_segment(point, b[0], b[1]) - gap
+        apart = point_to_segment(point, b[0], b[1]) - gap
         if 0 < apart < within:
             run += length / steps
             if run >= best:
@@ -841,7 +838,7 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
 
     def near_the_edge(point):
         return min(
-            _point_to_segment(point, a, b)
+            point_to_segment(point, a, b)
             for a, b in zip(outline, outline[1:] + outline[:1])
         ) <= at_the_edge
 
@@ -943,7 +940,7 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
         for start, end, _, track, width in segments:
             if track == net:
                 continue
-            gap = _point_to_segment((x, y), start, end) - radius - width / 2
+            gap = point_to_segment((x, y), start, end) - radius - width / 2
             if gap < copper * over - 1e-9:
                 tight.append(
                     f"  a {track} track passes {gap:.3f} mm from a {net} via at "
@@ -953,3 +950,38 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
         f"Copper within {over:g} times the fabricator's floor:\n"
         + "\n".join(sorted(set(tight)))
     )
+
+
+def test_the_crossing_solver_finds_where_a_track_enters_and_leaves():
+    """
+    `_edge_crossings` against shapes whose answers are known by inspection.
+
+    It is exercised nowhere else. The island it serves is on B.Cu, which is
+    not a reference plane, so the check that uses it returns before reaching
+    it - correctly, because a pour on an outer layer strands nobody, but that
+    leaves forty lines of geometry that only a break-test ever runs. This is
+    the direct test, so the solver is not trusted on the strength of a board
+    that happens not to need it.
+
+    The middle case is the one that matters: a track straight through a
+    rectangle has **both ends outside it**, which is what the endpoint
+    comparison this replaced could never see.
+    """
+    box = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+    cases = (
+        ("in one side and out the other", (-1.0, 5.0), (11.0, 5.0), 2),
+        ("entering and stopping inside", (-1.0, 5.0), (5.0, 5.0), 1),
+        ("wholly inside", (2.0, 5.0), (8.0, 5.0), 0),
+        ("wholly outside and clear", (-5.0, 5.0), (-2.0, 5.0), 0),
+        ("a diagonal across a corner", (8.0, -1.0), (11.0, 2.0), 2),
+        ("running along an edge", (2.0, 0.0), (8.0, 0.0), 0),
+    )
+    for what, a, b, expected in cases:
+        found = _edge_crossings(box, a, b)
+        assert len(found) == expected, (
+            f"{what}: {len(found)} crossings, expected {expected} ({found})"
+        )
+
+    # And the point it reports is on the boundary, not merely between the ends.
+    (x, y), = _edge_crossings(box, (-1.0, 5.0), (5.0, 5.0))
+    assert abs(x) < 1e-9 and abs(y - 5.0) < 1e-9, f"crossed at ({x}, {y}), expected (0, 5)"

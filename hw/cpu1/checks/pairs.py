@@ -15,6 +15,11 @@ disagree.
 import math
 import re
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "tools"))
+from layout_lib import point_to_segment  # noqa: E402
+
 LIGHT = 299.792458e9      # mm per second
 
 
@@ -158,7 +163,7 @@ def coupled_length(one: list, other: list, width: float, gap: float
             point = (start[0] + (end[0] - start[0]) * fraction,
                      start[1] + (end[1] - start[1]) * fraction)
             nearest = min(
-                (_point_to_segment(point, b_start, b_end)
+                (point_to_segment(point, b_start, b_end)
                  for b_start, b_end, _, b_layer in other if b_layer == layer),
                 default=float("inf"))
             if nearest <= limit:
@@ -166,11 +171,3 @@ def coupled_length(one: list, other: list, width: float, gap: float
     return coupled, total
 
 
-def _point_to_segment(point, a, b) -> float:
-    """How close a point comes to a segment, not to its endpoints."""
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    if dx == 0.0 and dy == 0.0:
-        return math.dist(point, a)
-    along = max(0.0, min(1.0,
-                         ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / (dx * dx + dy * dy)))
-    return math.dist(point, (a[0] + along * dx, a[1] + along * dy))

@@ -14,6 +14,11 @@ import sys
 
 import pytest
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "tools"))
+from layout_lib import point_to_segment  # noqa: E402
+
 
 def test_every_part_is_on_the_board(footprints, board_outline):
     """
@@ -209,14 +214,6 @@ def test_every_polarised_part_marks_its_cathode_on_the_silkscreen(pcb_text, desi
     )
 
 
-def _point_to_segment(point, a, b) -> float:
-    """How close a point comes to a line segment, not to its endpoints."""
-    (px, py), (ax, ay), (bx, by) = point, a, b
-    dx, dy = bx - ax, by - ay
-    if dx == 0.0 and dy == 0.0:
-        return math.dist(point, a)
-    along = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
-    return math.dist(point, (ax + along * dx, ay + along * dy))
 
 
 def test_the_board_has_mounting_holes_and_nothing_is_in_them(pcb_text, board_dir):
@@ -260,7 +257,7 @@ def test_the_board_has_mounting_holes_and_nothing_is_in_them(pcb_text, board_dir
             # that is exactly the track this check exists to find - "the only
             # thing standing between a hole and the track someone routes
             # through it later", which it could not see.
-            near = _point_to_segment((hx, hy), (x1, y1), (x2, y2))
+            near = point_to_segment((hx, hy), (x1, y1), (x2, y2))
             if near < keep:
                 fouled.append(f"  a track passes {near:.1f} mm "
                               f"from the hole at ({hx:g}, {hy:g})")

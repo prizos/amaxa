@@ -60,13 +60,27 @@ def _nets_in(text: str) -> dict:
 
 
 def _moved(before: dict, after: dict) -> list[str]:
-    """Copper whose net changed as the board was loaded and filled."""
-    return [
-        f"  {kind} at ({x}, {y}) mm on {layer}: {was!r} became {after[key]!r}"
-        for key, was in sorted(before.items())
-        if key in after and after[key] != was
-        for kind, layer, x, y, *_ in [key]
-    ]
+    """
+    Copper the load-and-fill changed: moved to another net, removed, or added.
+
+    All three, not just the first. Reporting only keys present on both sides
+    meant copper pcbnew *deleted* or *invented* vanished from the comparison
+    entirely - and a via silently dropped is exactly as bad as one silently
+    renamed, with the same absence of anything downstream to notice.
+    """
+    out = []
+    for key, was in sorted(before.items()):
+        kind, layer, x, y = key[0], key[1], key[2], key[3]
+        if key not in after:
+            out.append(f"  {kind} at ({x}, {y}) mm on {layer}: {was!r} was removed")
+        elif after[key] != was:
+            out.append(
+                f"  {kind} at ({x}, {y}) mm on {layer}: {was!r} became {after[key]!r}")
+    for key, now in sorted(after.items()):
+        if key not in before:
+            kind, layer, x, y = key[0], key[1], key[2], key[3]
+            out.append(f"  {kind} at ({x}, {y}) mm on {layer}: {now!r} was added")
+    return out
 
 
 def main() -> int:

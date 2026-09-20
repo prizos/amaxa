@@ -217,6 +217,11 @@ INTENT: dict[str, tuple[float, float]] = {
     # here rather than worked out from the parts: the parts are chosen to fit
     # inside it. Two check files used to carry their own copy of the number.
     "trip.budget": (0.0, 50e-9),
+    # How much of a part's own rating this board will use. Half is what a
+    # 0402 in still air is worth, and it applies to every rating that is a
+    # thermal one - a resistor's power, a ferrite's current. It was written
+    # out in three check files, which is how `trip.budget` got here too.
+    "parts.derating": (0.0, 0.5),
     # Where each kind of channel rolls off. The fast ones carry what the control
     # loop reads every PWM cycle: low enough to stop the switching node aliasing
     # into the measurement, high enough that the measurement is of now.

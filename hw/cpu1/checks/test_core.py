@@ -35,7 +35,6 @@ DECOUPLING_REACH = 3.0  # mm
 # across temperature and part spread.
 GAIN_MARGIN = 5.0
 
-POWER_DERATING = 0.5
 
 
 # --- reading the design ------------------------------------------------------------
@@ -60,6 +59,12 @@ def two_pad_parts(design, pad_net):
         if part["symbol"] in ("Device:C", "Device:R", "Device:FerriteBead_Small"):
             out[address] = (pad_net.get((address, "1")), pad_net.get((address, "2")))
     return out
+
+
+def _derating(spec) -> float:
+    """How much of a rating this board will use, from design.json."""
+    _, share = spec("parts", "derating")
+    return share
 
 
 def symbol_of(design, address):
@@ -360,7 +365,7 @@ def test_inputs_rest_low(net, design, two_pad_parts, spec):
     r_low, _ = spec(resistors[0], "resistance")
     rated, _ = spec(resistors[0], "max_power")
     _, rail_high = spec("rail.3v3", "voltage")
-    assert rail_high**2 / r_low <= rated * POWER_DERATING, f"{resistors[0]} is over half its rating"
+    assert rail_high**2 / r_low <= rated * _derating(spec), f"{resistors[0]} is over half its rating"
 
 
 def test_indicators_are_visible_and_within_ratings(design, two_pad_parts, pad_net, spec):
@@ -398,7 +403,7 @@ def test_indicators_are_visible_and_within_ratings(design, two_pad_parts, pad_ne
         if least < visible_low or most > ceiling:
             problems.append(f"  {address}: {least * 1e3:.2f} to {most * 1e3:.2f} mA")
         rated, _ = spec(series[0], "max_power")
-        if most**2 * r_high > rated * POWER_DERATING:
+        if most**2 * r_high > rated * _derating(spec):
             problems.append(f"  {series[0]}: over half its power rating")
     assert found, "no indicator LEDs found"
     assert not problems, "Indicators outside their bands:\n" + "\n".join(problems)

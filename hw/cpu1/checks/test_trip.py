@@ -17,8 +17,12 @@ LATCH = "safety.latch"
 BUFFER = "safety.buffer1"
 HEADER = "header.analog"
 
-# The same half every other check on this board derates to.
-POWER_DERATING = 0.5
+
+
+def _derating(spec) -> float:
+    """How much of a rating this board will use, from design.json."""
+    _, share = spec("parts", "derating")
+    return share
 
 
 def _pin_count(pad_net) -> int:
@@ -421,7 +425,7 @@ def test_the_board_sends_out_its_reference_and_an_analog_supply(design, pad_net,
     _, budget = spec("analog", "supply_current")
     _, allowed = spec("analog", "supply_drop")
 
-    assert budget <= bead * POWER_DERATING, (
+    assert budget <= bead * _derating(spec), (
         f"5VA is budgeted {budget * 1e3:g} mA against a bead rated "
         f"{bead * 1e3:g} mA, which is past the half this board derates to"
     )
