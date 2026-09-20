@@ -37,15 +37,15 @@ Zones on this layer: `GND`
 
 ### `In2.Cu`
 
-Power islands. 3V3 fills most of the layer; the 5 V island inside it is a higher-priority zone, so it wins the overlap. That is what lets the two share a layer without a hand-drawn boundary between them. It sits here, beside the quietest signal layer, rather than beside B.Cu, which carries twelve times as much.
+A solid 3V3 plane, and solid is the point. It used to carry a 5 V island inside it, which cut the plane In3.Cu is referenced to: In3 sits 0.175 mm below this layer and 0.43 mm above the ground under it, so most of its return flows here, and every motion-feedback line crossed the island's edge. The island is on B.Cu now, where it is local copper and nobody's reference.
 
-Zones on this layer: `3V3`, `5V`
+Zones on this layer: `3V3`
 
 ![In2.Cu plot](In2_Cu.svg)
 
 ### `In3.Cu`
 
-The inner signal layer, and the reason this board is six layers rather than four. It carries the eight motion-feedback signals from the package to the connector: on four layers every one of those crossings was a via, and there was nowhere left to put one. Solid ground immediately below it keeps its return continuous under the islands above.
+The inner signal layer, and the reason this board is six layers rather than four. It carries the eight motion-feedback signals from the package to the connector: on four layers every one of those crossings was a via, and there was nowhere left to put one. Both planes around it are solid, which is what keeps its return continuous - the nearer of the two is In2, and it is the layer that had to give up its island for that to be true.
 
 ![In3.Cu plot](In3_Cu.svg)
 
@@ -59,7 +59,9 @@ Zones on this layer: `GND`
 
 ### `B.Cu`
 
-The solder side. Placement is single-sided for this spin, so the back carries only what had to change layer: the analog sense lines crossing the input bank, the static signals running under the package, and the six RMII lines taking the long way round it.
+The solder side, and the 5 V island. Placement is single-sided for this spin, so the back otherwise carries only what had to change layer: the analog sense lines crossing the input bank, the static signals running under the package, and the six RMII lines taking the long way round it.
+
+Zones on this layer: `5V`
 
 ![B.Cu plot](B_Cu.svg)
 

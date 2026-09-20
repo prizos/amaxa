@@ -143,6 +143,30 @@ def stitchers(pcb_text, design) -> list[tuple[float, float]]:
     return out
 
 
+def _edge_crossings(polygon, a, b) -> list[tuple[float, float]]:
+    """
+    Every point where the segment a-b crosses the polygon's boundary.
+
+    Not "are the two ends on the same side": a track running straight through
+    an island leaves its reference on the way in and takes it back on the way
+    out, and both ends are outside. HALL_2 and HALL_3 do exactly that, in at
+    the island's south edge and out at its north, and an endpoint test saw
+    neither of the two crossings.
+    """
+    out = []
+    for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ex, ey = x2 - x1, y2 - y1
+        denominator = dx * ey - dy * ex
+        if abs(denominator) < 1e-12:
+            continue                      # parallel, including running along it
+        s = ((x1 - a[0]) * ey - (y1 - a[1]) * ex) / denominator
+        u = ((x1 - a[0]) * dy - (y1 - a[1]) * dx) / denominator
+        if 0.0 <= s <= 1.0 and 0.0 <= u <= 1.0:
+            out.append((a[0] + s * dx, a[1] + s * dy))
+    return out
+
+
 def _inside(polygon, point) -> bool:
     x, y = point
     crossings = 0
@@ -248,11 +272,32 @@ def plane_layers(board_dir) -> dict:
     planes = getattr(description, "PLANES", None) or [description.PLANE]
     count = description.BOARD.get("copper_layers", 4)
     order = ["F.Cu"] + [f"In{n}.Cu" for n in range(1, count - 1)] + ["B.Cu"]
+    # How far apart the copper layers are, which is what decides which plane a
+    # signal is really referenced to. Adjacency by index says In3.Cu touches
+    # two planes and stops there; the stackup says one is 0.175 mm away and
+    # the other 0.43, and the near one takes most of the return.
+    dielectrics = description.BOARD["stack"]
+    assert len(dielectrics) == len(order) - 1, "a dielectric between every pair of layers"
+
+    def apart(a: str, b: str) -> float:
+        low, high = sorted((order.index(a), order.index(b)))
+        return sum(d["thickness"] for d in dielectrics[low:high])
+
+    # A pour on an outer layer is local copper, not a reference plane: the
+    # layer still carries routing, and whatever is under it is what its
+    # signals return through. So the outer layers are always signal layers,
+    # and only the inner pours count as references. Without this, moving the
+    # 5 V island to B.Cu would have quietly taken B.Cu off the list of layers
+    # that must have ground beside them.
+    poured = {plane["layer"] for plane in planes}
+    outer = {"F.Cu", "B.Cu"}
+    references = poured - outer
     return {"order": order,
-            "planes": {plane["layer"] for plane in planes},
-            "grounds": {p["layer"] for p in planes if p["net"] == GROUND},
-            "signals": [l for l in order
-                        if l not in {plane["layer"] for plane in planes}],
+            "planes": references,
+            "poured": poured,
+            "grounds": {p["layer"] for p in planes if p["net"] == GROUND} - outer,
+            "signals": [l for l in order if l in outer or l not in poured],
+            "apart": apart,
             "island": next(p["layer"] for p in planes if p["net"] == "5V")}
 
 
@@ -294,7 +339,7 @@ def test_every_signal_layer_has_a_ground_plane_beside_it(plane_layers):
 
 
 def test_no_signal_beside_a_supply_island_crosses_its_edge(
-    pcb_text, net_names, plane_outlines, plane_layers
+    pcb_text, net_names, plane_outlines, plane_layers, stitchers, spec
 ):
     """
     No signal on a layer the supply islands reference crosses from over one
@@ -319,28 +364,47 @@ def test_no_signal_beside_a_supply_island_crosses_its_edge(
     island = plane_outlines.get("5V")
     assert island, "this board is meant to have a 5 V island"
 
-    order, planes = plane_layers["order"], plane_layers["planes"]
-    grounds = plane_layers["grounds"]
-    at = order.index(plane_layers["island"])
+    planes = plane_layers["planes"]
+    if plane_layers["island"] not in planes:
+        # The islands are on an outer layer, where they are nobody's
+        # reference: a signal beside them returns through the plane under that
+        # layer, which is solid. That is where the 5 V island ended up and the
+        # reason it moved - see the layer table in README.md. Put it back on
+        # an inner layer and the walk below starts again.
+        assert plane_layers["island"] in ("F.Cu", "B.Cu"), (
+            f"the 5 V island is on {plane_layers['island']}, which is neither "
+            f"a reference plane nor an outer layer"
+        )
+        return
 
-    # A signal layer next to the islands is only stranded by them if it has no
-    # ground plane on its other side. On four layers B.Cu had the islands above
-    # and nothing below, so the islands were its only reference and an island
-    # edge cut its return in half. A layer with solid ground hugging its other
-    # face keeps a continuous return whatever the supply plane does, which is
-    # what `test_every_signal_layer_has_a_ground_plane_beside_it` requires of
-    # every signal layer on this board - so on this stackup nothing is at risk
-    # and the loop below has nothing to walk. That is the stackup being right,
-    # not the check being asleep: it is the same derivation, and it starts
-    # finding tracks again the moment a signal layer loses its ground.
-    facing = set()
-    for n in (at - 1, at + 1):
-        if not (0 <= n < len(order)) or order[n] in planes:
-            continue
-        layer, other = order[n], n + (n - at)
-        has_ground = 0 <= other < len(order) and order[other] in grounds
-        if not has_ground:
-            facing.add(layer)
+    # Which signal layers the islands are the *nearest* plane to.
+    #
+    # This used to ask whether the layer had a ground plane on its other side
+    # and exempt it if so - "a layer with solid ground hugging its other face
+    # keeps a continuous return whatever the supply plane does". That ignores
+    # the two numbers which decide it, and they are sitting in the stackup.
+    # In3.Cu is **0.175 mm** from the islands and **0.43 mm** from the ground
+    # below it, so about seven tenths of its return flows in the split plane
+    # and the ground that was supposed to excuse the crossing carries the
+    # minority. `facing` came out empty and the loop below walked nothing.
+    #
+    # Nearest is the whole mechanism - the sentence above is "the field stops
+    # at the first plane it meets" - so nearest is what this asks, and there
+    # is no threshold to pick.
+    apart = plane_layers["apart"]
+    facing = {
+        layer for layer in plane_layers["signals"]
+        if min(planes, key=lambda plane: apart(layer, plane)) == plane_layers["island"]
+    }
+
+    # What a crossing costs is the loop its return takes to follow it, and a
+    # tie between the two pours nearby makes that a short hop. The board
+    # already says how long a hop may be, for a track changing layer; this is
+    # the same question and takes the same number. Only ties over the island
+    # count - a capacitor tying ground to a 5 V *track* joins nothing here.
+    _, allowed = spec("routing", "reference_change_distance")
+    ties = [c for c in stitchers if _inside(island, c)]
+    assert ties, "nothing ties the 5 V island to ground over the island itself"
 
     crossing = []
     for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
@@ -355,11 +419,17 @@ def test_no_signal_beside_a_supply_island_crosses_its_edge(
             continue
         a = (float(start.group(1)), float(start.group(2)))
         b = (float(end.group(1)), float(end.group(2)))
-        if _inside(island, a) != _inside(island, b):
-            crossing.append(f"  {name} on {layer.group(1)} crosses the island edge "
-                            f"between ({a[0]:g}, {a[1]:g}) and ({b[0]:g}, {b[1]:g})")
+        for point in _edge_crossings(island, a, b):
+            detour = min(math.dist(point, tie) for tie in ties)
+            if detour > allowed:
+                crossing.append(
+                    f"  {name} on {layer.group(1)} crosses at "
+                    f"({point[0]:.2f}, {point[1]:.2f}), {detour:.1f} mm from "
+                    f"the nearest tie between the two pours"
+                )
     assert not crossing, (
-        f"Tracks on {sorted(facing)} changing what they are referenced to:\n"
+        f"Tracks on {sorted(facing)} handing their return across the island's "
+        f"edge further than {allowed:g} mm from anywhere it can follow:\n"
         + "\n".join(crossing)
     )
 

@@ -24,7 +24,7 @@ will connect it (`_MILESTONES` in [`cpu1.py`](cpu1.py)); the review lists them.
 | | |
 |---|---|
 | Stackup | 6 layers, 1 oz throughout, **PCBWay's own published 1.6 mm build**: 7628 outer prepreg at 0.1855, 0.43 cores, 7628 middle prepreg at 0.175. Picked out of their table because that outer prepreg is identical to the 4-layer spin's, so the controlled-impedance pairs are unchanged — their default 6-layer build uses 2116 at 0.1195 and would have moved every pair |
-| Layers | F.Cu signal, In1.Cu ground, In2.Cu supply islands, In3.Cu signal, In4.Cu ground, B.Cu signal — the supplies sit next to the quietest signal layer, not the busiest. A ground via ring on a 14 mm pitch stitches the plane edges |
+| Layers | F.Cu signal, In1.Cu ground, **In2.Cu a solid 3V3 plane**, In3.Cu signal, In4.Cu ground, B.Cu signal and the 5 V island — **no split plane anywhere**: the island was on In2 and cut the plane In3 is referenced to, so it moved outward, where it is local copper rather than a reference. A ground via ring on a 14 mm pitch stitches the plane edges |
 | Size | 130 × 110 mm — grown from 100 × 80 to hold the Ethernet jack. Four M3 holes, milled as circles on the edge layer so they carry no net and no BOM line |
 | MCU | STM32H743ZIT6, LCSC C114408 — **zero stock at both JLCPCB and LCSC** on 2026-09-19; see [its review note](parts/LQFP144/LQFP144.md) |
 

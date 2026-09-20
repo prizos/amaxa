@@ -557,9 +557,24 @@ def _boot_and_console() -> None:
 #
 # Everything on the input hangs off one horizontal track at BUS - the y of the
 # buck's own VIN pin - with its ground via straight below. Everything on 5 V
-# connects through a via instead: the second inner layer carries a 5 V island
-# inside the 3V3 plane, at a higher priority, so the two pours keep clear of
-# each other without either outline being drawn around the other.
+# connects through a via instead, to a 5 V island poured at higher priority so
+# the two pours keep clear of each other without either outline being drawn
+# around the other.
+#
+# **That island is on B.Cu, and it used to be on In2.Cu inside the 3V3 plane.**
+# On the inner layer it cut the plane that In3.Cu is referenced to. In3 sits
+# 0.175 mm below In2 and 0.43 mm above In4, so roughly seven tenths of its
+# return flows in the nearer plane - and every motion-feedback line on In3
+# crossed the island's edge, the three Hall lines running the length of it
+# under the 5 V buck itself, 14 to 18 mm from anywhere the return could
+# follow. No capacitor position fixes that: the strip the Hall columns climb
+# is where the buck and its feedback divider sit.
+#
+# On an outer layer the island is local copper rather than a reference. In2
+# is a solid 3V3 plane, In3 is referenced to solid copper on both sides, and
+# the 5 V pour now faces In4's ground instead - which is a better plane pair
+# for it than the one it had. The vias that reach it are through-hole and
+# already went that far.
 
 BUS = 29.36                        # the input rail, at the 100 V buck's VIN pin
 POWER = 0.4                        # the input rail, before any regulator
@@ -871,7 +886,7 @@ PLANES = [
     },
     {
         "net": "5V",
-        "layer": "In2.Cu",
+        "layer": "B.Cu",
         "outline": _island_outline(),
         "priority": 1,
         "pad_clearance": 0.3,
