@@ -326,6 +326,10 @@ VREF_3V0 = PartSpec(
     params={
         "output_voltage": between(2.994, 3.006),
         "v_in_max": exact(5.5),
+        # SBVS032F states the supply as V_OUT + 1 mV to 5.5 V. It is what
+        # makes running this from 3V3 rather than 5 V possible, and running it
+        # from 3V3 is what stops VREF+ existing before VDDA does.
+        "supply_headroom": exact(1e-3),
         "output_current_max": exact(25e-3),
         "supply_bypass": exact(0.47e-6),
         "temperature_drift": exact(75e-6),

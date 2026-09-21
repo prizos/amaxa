@@ -10,6 +10,7 @@ Datasheets: TI SCAS298N (SN74LVC541A, June 2014) and SCES794E (SN74LVC1G74,
 January 2015), and the BAT54A data recorded in `parts/SOT23/SOT23.md`.
 """
 
+import math
 import sys
 from pathlib import Path
 
@@ -230,19 +231,74 @@ def test_the_latch_can_only_be_cleared_by_the_mcu(design, pad_net, spec):
     The clear is the one input that can undo a trip, so the interesting
     question is what else can reach it. The answer has to be: the MCU, and a
     resistor holding it inactive while the MCU is in reset.
+
+    **And the MCU has to reach it through a capacitor.** A pull-up only covers
+    a pin that has gone high-impedance. A pin driven low and then abandoned -
+    firmware spinning in a handler that still feeds the watchdog, or a
+    debugger halt with the IWDG frozen - holds the clear asserted, and a held
+    clear does not leave the board tripped, it leaves it oscillating: PRE
+    asserts, the outputs go off, the current decays, PRE releases, the latch
+    clears itself and the outputs come back. Sustained over-current at the
+    trip threshold, with TRIP_N reading "no break" throughout because both
+    inputs low puts Q-bar high.
+
+    Breaking the DC turns a level into a pulse, so a stuck pin clears once and
+    then lets go. That is what is asserted here: the walk from the latch's
+    clear back to the MCU has to cross a capacitor, and it must not have any
+    resistive path to the MCU at all.
     """
     clear = pad_net.get((LATCH, "6"))
-    assert clear == "TRIP_CLEAR_N", f"the latch's clear is on {clear!r}"
     members = {address for address, _ in
                {tuple(n) for n in design["nets"][clear]}}
-    assert members == {LATCH, "mcu", "safety.r_clear_pullup"}, (
-        f"the clear net reaches {sorted(members)}"
+    assert "mcu" not in members, (
+        f"{clear} reaches the MCU directly. A pin driven low and abandoned "
+        f"then holds the trip latch cleared, and the board rings between "
+        f"tripping and re-arming instead of stopping."
     )
     pulls = _through_resistor(design, pad_net, clear)
     assert [n for _, n in pulls] == ["3V3"], (
         f"the clear is pulled to {[n for _, n in pulls]}, and it has to be the rail: "
         "pulled the other way, a reset pin would clear a trip"
     )
+
+    # Walk back to the MCU through two-terminal parts, remembering what was
+    # crossed. Rails are not routes: every pull-up on the board reaches the
+    # MCU through its own supply pins, and a walk that steps onto 3V3 arrives
+    # everywhere. Which nets those are is read from the symbols.
+    rails = set()
+    for address, part in design["parts"].items():
+        names = symbol_pin_names(part["symbol"])
+        for (a, pad), net in pad_net.items():
+            if a == address and names.get(pad) in (
+                    "VCC", "VDD", "VIO", "VDDA", "V+", "V-", "VEE", "VSS", "GND"):
+                rails.add(net)
+
+    hops = {}
+    for address, part in design["parts"].items():
+        pads = [net for (a, _), net in pad_net.items() if a == address]
+        if len(set(pads)) == 2 and part["symbol"] in ("Device:R", "Device:C"):
+            a, b = sorted(set(pads))
+            hops.setdefault(a, []).append((b, address, part["symbol"]))
+            hops.setdefault(b, []).append((a, address, part["symbol"]))
+
+    def routes(net, seen):
+        for far, address, symbol in hops.get(net, ()):
+            if far in seen or far in rails:
+                continue
+            if "mcu" in {a for a, _ in design["nets"][far]}:
+                yield [(address, symbol)]
+                continue
+            for rest in routes(far, seen | {far}):
+                yield [(address, symbol)] + rest
+
+    paths = list(routes(clear, {clear}))
+    assert paths, f"nothing reaches the MCU from {clear}"
+    for path in paths:
+        assert any(symbol == "Device:C" for _, symbol in path), (
+            f"the MCU reaches {clear} through "
+            f"{', '.join(address for address, _ in path)} with no capacitor "
+            f"in the way, so holding the pin low holds the trip cleared"
+        )
 
 
 def test_the_latch_powers_up_tripped(design, pad_net):
@@ -300,6 +356,73 @@ def test_the_latch_powers_up_tripped(design, pad_net):
         f"{', '.join(missing)} says when a rail stops regulating and does not "
         f"reach the trip bus; it carries {sorted(cathodes)}. That leaves NRST "
         f"as the only supply-related preset, and NRST is late."
+    )
+
+
+def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, spec):
+    """
+    The coupled clear pulse, worked out from the three parts that make it.
+
+    Two things have to be true of an AC-coupled clear and they pull opposite
+    ways. It has to go low enough, for long enough, that the latch sees it:
+    when PG5 drives low the capacitor is uncharged, so the latch's clear sits
+    at the divider of the series resistor against the pull-up, and it has to
+    be under V_IL. And it has to let go on its own, which any finite RC does -
+    that is the whole reason the capacitor is there.
+
+    The time it spends asserted is the one that needs arithmetic. The node
+    recovers through the two resistors with a time constant of (R_s + R_pu)C
+    and leaves the valid-low band at
+
+        t = tau * ln((V - V_min) / (V - V_IL))
+
+    which has to be longer than the latch takes to respond to it at all. The
+    part records 5.9 ns for clear-to-output and nothing for a minimum pulse
+    width, so that is the figure this is held to; on these values the answer
+    is four orders of magnitude clear of it.
+
+    **What it is not held to is an upper bound**, because nothing on this
+    board derives one. While the clear is asserted the latch cannot hold a
+    trip, so the pulse is a blind window - but the firmware it replaces held
+    the pin down for a millisecond, so the window shrank by a hundred times
+    and the direction is the safe one either way.
+    """
+    latch_clear = pad_net[(LATCH, "6")]
+    series = "safety.r_clear_series"
+    pullup = "safety.r_clear_pullup"
+    coupling = "safety.c_clear"
+
+    r_s, _ = spec(series, "resistance")
+    _, r_pu = spec(pullup, "resistance")
+    _, farads = spec(coupling, "capacitance")
+    rail_low, _ = spec("rail.3v3", "voltage")
+    v_il, _ = spec(LATCH, "input_low_voltage_max")
+    v_ih, _ = spec(LATCH, "input_high_voltage_min")
+    respond, _ = spec(LATCH, "preset_to_output_max")
+
+    # Worst case for reaching a low is the largest series resistor against the
+    # smallest pull-up, so the two ends are taken the way that hurts.
+    _, r_s_high = spec(series, "resistance")
+    r_pu_low, _ = spec(pullup, "resistance")
+    low = rail_low * r_s_high / (r_s_high + r_pu_low)
+    assert low < v_il, (
+        f"driving the pin low puts {latch_clear} at {low:.2f} V, and the latch "
+        f"calls anything above {v_il:g} V undecided. The series resistor is too "
+        f"big against the pull-up for the clear to be seen at all."
+    )
+
+    tau = (r_s + r_pu) * farads
+    asserted = tau * math.log((rail_low - low) / (rail_low - v_il))
+    assert asserted > respond, (
+        f"the clear is asserted for {asserted * 1e9:.0f} ns and the latch takes "
+        f"{respond * 1e9:g} ns to respond to it"
+    )
+    # And it does let go: the node is a valid high again a few time constants
+    # later whatever the pin is doing, which is the property the capacitor was
+    # added for.
+    released = tau * math.log((rail_low - low) / (rail_low - v_ih))
+    assert released < float("inf") and released > asserted, (
+        f"the clear reaches a valid high at {released * 1e6:.1f} us"
     )
 
 

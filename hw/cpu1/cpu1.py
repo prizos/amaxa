@@ -826,17 +826,35 @@ def power_block(v3v3, gnd, nets) -> None:
 
     # --- VREF+ -------------------------------------------------------------------
     #
-    # A series reference from the 5 V rail, not a divider off 3V3 and not the
-    # MCU's own VREFBUF: everything the ADCs measure is scaled by this voltage,
-    # so its 0.2 % and 75 ppm/degC are the board's measurement accuracy. It
-    # needs no output capacitor; the 1 uF and 100 nF at the pin are the MCU's.
+    # A series reference, not a divider off 3V3 and not the MCU's own VREFBUF:
+    # everything the ADCs measure is scaled by this voltage, so its 0.2 % and
+    # 75 ppm/degC are the board's measurement accuracy. It needs no output
+    # capacitor; the 1 uF and 100 nF at the pin are the MCU's.
+    #
+    # **From 3V3, not from the 5 V rail, and that is a sequencing decision.**
+    # VDDA is 3V3 through a ferrite, and 3V3 comes from a buck whose VIN and
+    # EN are both on the 5 V rail. With the reference on 5 V the order was
+    # forced and came out the same way every power-up: 5 V rises, the
+    # reference follows it and is regulating at 3.006 V as soon as 5 V passes
+    # 3 V, and only then does the 3V3 buck clear its own UVLO at about 4.1 V
+    # and soft-start VDDA from zero over a millisecond. For that millisecond
+    # VREF+ sat up to 3 V above VDDA, against an absolute maximum of VDDA plus
+    # 0.4 - tens of milliamps out of VREF+ into the 3V3 rail through an
+    # unrated structure on the die, every power cycle, showing up as reference
+    # leakage and ADC offset drift months later rather than as a dead board.
+    #
+    # The part makes this free. SBVS032F specifies its supply as V_OUT + 1 mV
+    # to 5.5 V, so 3V3 at its 3.135 V corner leaves 129 mV of headroom on a
+    # 1 mV requirement, and VREF+ now rises with the rail VDDA is derived
+    # from instead of a millisecond ahead of it. The steady-state margin the
+    # 3.0 V choice was made for is unchanged.
     vref = part(parts.VREF_3V0, "vref.ic", "U4")
-    v5 += vref["IN"]
+    v3v3 += vref["IN"]
     gnd += vref["GND"]
     nets["VREF+"] += vref["OUT"]
     nets["VREF+"].drive = POWER
     c_vref_in = part(parts.CAP_1U_0402, "vref.c_in", "C25")
-    v5 += c_vref_in[1]
+    v3v3 += c_vref_in[1]
     gnd += c_vref_in[2]
     nets["VREF+"] += part(parts.TEST_PAD, "tp_vref", "TP9")[1]
 
@@ -893,10 +911,46 @@ def safety_chain(v3v3, gnd, nets) -> None:
     v3v3 += latch["VCC"]
     gnd += latch["GND"], latch["D"], latch["C"]
     trip_set += latch["~{PRE}"]
-    nets["TRIP_CLEAR_N"] += latch["~{CLR}"]
+
+    # **The clear is a pulse, not a level, and the copper is what makes it
+    # one.** PG5 used to reach the latch's CLR directly, with R20 covering
+    # only the case where the pin is high-impedance. To clear a trip firmware
+    # drives PG5 low; if it then stops - an ISR spinning, a fault handler that
+    # still feeds the watchdog, a debugger halt with the IWDG frozen - the pin
+    # is frozen low and CLR is asserted for ever.
+    #
+    # That does not leave the board tripped. It leaves it oscillating. A trip
+    # asserts PRE, the buffers go high-impedance and the pull-downs hold the
+    # gates off, the current decays, the comparator releases PRE, and with CLR
+    # still low the latch goes straight to the cleared state: the buffers
+    # re-enable, PWM resumes, and it over-currents again. The board sits in
+    # sustained over-current at the trip threshold, at whatever rate the
+    # motor's L/R and the comparator's 6 mV of hysteresis set, which is the
+    # opposite of what this function's name promises. While both inputs are
+    # low Q-bar is high, so TRIP_N reads "no break" and the MCU is not even
+    # told.
+    #
+    # A capacitor in the path breaks the DC. Driving PG5 low couples the edge
+    # onto CLR, which sits at 3.3 x 1k/11k = 0.30 V - a valid low - and
+    # recovers through R20 with a time constant of 52 us, so the clear is
+    # asserted for about 10 us and released whatever the pin does afterwards.
+    # Ten microseconds against the latch's few nanoseconds, and against the
+    # millisecond the firmware currently holds the pin down for, so the window
+    # in which a trip arriving mid-clear could be missed gets a hundred times
+    # smaller rather than larger.
+    #
+    # The series 1k is what makes the release safe: when PG5 goes high again
+    # the coupled step would put CLR at 6.3 V, and the resistor holds the
+    # current into the latch's input clamp to 0.2 mA.
+    clear_series = part(parts.RES_1K_0402, "safety.r_clear_series", "R98")
+    clear_couple = part(parts.CAP_4N7_0402, "safety.c_clear", "C245")
+    nets["TRIP_CLEAR_N"] += clear_series[1]
+    Net("TRIP_CLEAR_COUPLE").connect(clear_series[2], clear_couple[1])
+    clear_latch = Net("TRIP_CLEAR_LATCH_N")
+    clear_latch.connect(clear_couple[2], latch["~{CLR}"])
     clear_pull_up = part(parts.RES_10K_0402, "safety.r_clear_pullup", "R20")
     v3v3 += clear_pull_up[1]
-    nets["TRIP_CLEAR_N"] += clear_pull_up[2]
+    clear_latch += clear_pull_up[2]
 
     # Q is high when tripped, which is what the buffers' second enable wants.
     # Q-bar is low when tripped, which is what a break input wants: one output,

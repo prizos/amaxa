@@ -60,6 +60,26 @@ and the AUP part of the same function is pin-identical.
 **Footprint.** KiCad stock `Package_SO:VSSOP-8_2.3x2mm_P0.5mm`, unmodified.
 The DCU package is 2.3 × 2.0 mm on a 0.5 mm pitch.
 
+## The clear is AC-coupled, so a stuck pin cannot hold it
+
+PG5 reaches this part's clear through a 1 k and a 4.7 nF, with the 10 k pull-up
+on the far side. Driving the pin low puts the clear at 3.135 x 1/11 = 0.29 V,
+under V_IL, and it recovers through (1 k + 10 k) x 4.7 nF = 57 us: asserted for
+about 11 us, a valid high again by 53 us, whatever the pin does afterwards.
+
+Without it, a pin driven low and then abandoned - a handler spinning while it
+still feeds the watchdog, or a debugger halt with the IWDG frozen - holds the
+clear asserted for ever, and a permanently cleared latch is worse than no latch.
+A trip presets it, the outputs go off, the current decays, the comparator
+releases the preset, and the latch immediately clears itself and turns the
+outputs back on. The board then sits in sustained over-current at the trip
+threshold, and because both inputs low puts Q-bar high, the MCU's break input
+reads *no trip* the whole time.
+
+`test_the_clear_reaches_a_valid_low_and_lets_go_by_itself` does this arithmetic
+from the three part values, and `test_the_latch_can_only_be_cleared_by_the_mcu`
+asserts that every path from the MCU to this pin crosses a capacitor.
+
 ## Clearing the latch hides the break input while it happens
 
 With `~PRE` and `~CLR` both low the datasheet's nonstable condition drives

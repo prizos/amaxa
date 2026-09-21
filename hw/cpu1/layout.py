@@ -852,10 +852,13 @@ def _reference() -> None:
     ]))
     VIAS.append(("core.vref.c1u:2", (-16.98, 17.8), "GND", *VIA, SUPPLY))
 
-    # The reference's own supply, up from the island on the 5 V side.
-    ROUTES.append(("5V", RAIL, F, [(-6.0, 25.0), (-6.0, 21.49), "vref.c_in:1"]))
-    VIAS.append((None, (-6.0, 25.0), "5V", *VIA))
-    ROUTES.append(("5V", RAIL, F, ["vref.c_in:1", "vref.ic:1"]))
+    # The reference's own supply, down to the 3V3 plane rather than up into
+    # the 5 V island. The reference moved rails so that VREF+ cannot exist
+    # before VDDA does, and the via moved with it: it has to be clear of the
+    # island's own copper, which starts at y 24.5.
+    ROUTES.append(("3V3", RAIL, F, [(-6.0, 23.0), (-6.0, 21.49), "vref.c_in:1"]))
+    VIAS.append((None, (-6.0, 23.0), "3V3", *VIA))
+    ROUTES.append(("3V3", RAIL, F, ["vref.c_in:1", "vref.ic:1"]))
     VIAS.append(("vref.c_in:2", (-12.56, 23.7), "GND", *VIA, SUPPLY))
     VIAS.append(("vref.ic:3", (-14.44, 17.0), "GND", *VIA, SUPPLY))
 
@@ -1016,6 +1019,10 @@ def _safety() -> None:
     # latch. South of the buffer put their ground vias across the only way the
     # four signals from the package have of getting here.
     PLACEMENT["safety.r_clear_pullup"] = (21.0, 13.6, 0)
+    PLACEMENT["safety.r_clear_series"] = (15.5, SAFETY_STEP_END, 0)
+    PLACEMENT["safety.c_clear"] = (17.5, SAFETY_STEP_END, 0)
+    for address in ("safety.r_clear_series", "safety.c_clear"):
+        LABELS[address] = (0.0, -1.3)
     PLACEMENT["safety.r_enable_pullup"] = (18.0, 11.3, 0)
     # The two that make an open latch output read as tripped. Each sits on the
     # net it holds, with its other pad on a plane via - which is cheap now
@@ -2346,11 +2353,18 @@ def _safety_signals() -> None:
     _safety_column("TRIP_N", width, 13.5, 15.4, 10.4)
 
     # The clear input is on the far side of the latch, so this one carries on
-    # past it on the back and comes back to the pad from the east.
+    # past it on the back and comes back to the pad from the east. The series
+    # resistor and the coupling capacitor that turn a held pin into a pulse
+    # stand in the lane itself, before the pull-up hangs off it: everything
+    # east of the capacitor is the latch's own node.
     width = _width_for("TRIP_CLEAR_N", SIGNAL)
     over, clear = (23.0, SAFETY_STEP_END), (29.0, 9.25)
-    path("TRIP_CLEAR_N", width, [
-        (F, [(11.9, SAFETY_STEP_END), over]),
+    ROUTES.append(("TRIP_CLEAR_N", width, F,
+                   [(11.9, SAFETY_STEP_END), "safety.r_clear_series:1"]))
+    ROUTES.append(("TRIP_CLEAR_COUPLE", width, F,
+                   ["safety.r_clear_series:2", "safety.c_clear:1"]))
+    path("TRIP_CLEAR_LATCH_N", width, [
+        (F, ["safety.c_clear:2", over]),
         (B, [over, (clear[0], over[1]), clear]),
         (F, [clear, "safety.latch:6"]),
     ])

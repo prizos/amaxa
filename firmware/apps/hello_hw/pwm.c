@@ -238,8 +238,15 @@ bool pwm_break_input_active(void)
  */
 bool pwm_clear_trip_latch(void)
 {
+    /* The pin no longer reaches the latch's clear directly: a 1 k and a 4.7 nF
+     * couple the edge onto it, so driving low asserts the clear for about
+     * 11 us and it releases itself after about 53 us whatever this pin does
+     * next. That is deliberate - a pin left low by a hung handler or a halted
+     * debugger used to hold the trip cleared, which turns the latch into a
+     * hysteretic current limiter. Holding the pin down for a millisecond here
+     * is still correct and still harmless; it simply no longer matters. */
     HAL_GPIO_WritePin(BOARD_TRIP_CLEAR_PORT, BOARD_TRIP_CLEAR_PIN, GPIO_PIN_RESET);
-    HAL_Delay(1);       /* the latch needs nanoseconds; a millisecond is free */
+    HAL_Delay(1);
     HAL_GPIO_WritePin(BOARD_TRIP_CLEAR_PORT, BOARD_TRIP_CLEAR_PIN, GPIO_PIN_SET);
     HAL_Delay(1);
     return !pwm_break_input_active();

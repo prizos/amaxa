@@ -765,18 +765,74 @@ def test_the_reference_is_below_the_analog_supply_it_sits_under(spec):
     )
 
 
-def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, spec):
-    """Its supply is inside the part's range, and its bypass is what it asks for."""
-    _, rail_high = spec("rail.5v", "voltage")
+def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, pad_net, spec):
+    """
+    Its supply is inside the part's range, it clears its own dropout, its
+    bypass is what it asks for - and it is the *same rail VDDA comes from*.
+
+    **That last one is a sequencing requirement, not a steady-state one**, and
+    it is the whole reason this reads the netlist for the supply net instead
+    of being told "5V". The MCU specifies VREF+ up to VDDA with an absolute
+    maximum of VDDA + 0.4, and a reference on a rail that comes up first
+    breaks that for as long as the second rail takes to start. On this board
+    the order was forced by the topology: 3V3's converter takes its input and
+    its enable from the 5 V rail, so it cannot start until 5 V has cleared its
+    UVLO, by which time a reference on 5 V has been regulating for a while.
+    A millisecond of soft-start with VREF+ up to 3 V above VDDA, on every
+    power cycle, through a structure with no positive-injection allowance.
+
+    So what is asserted is that the reference's supply reaches VDDA through
+    nothing but two-terminal passives - the ferrite - which makes "VREF+
+    cannot rise before VDDA" a property of the topology rather than a timing
+    argument. Move the reference back to a separate rail and this fails.
+    """
+    supply = pad_net[(REFERENCE, "1")]
+
+    # Nets walked from VDDA through series supply elements. A ferrite or an
+    # inductor in a rail keeps you on the same rail; a converter does not, and
+    # neither does a resistor - following resistors walks out of the supply
+    # network entirely through the first pull-up and arrives at every rail on
+    # the board, which is how the first version of this passed its own
+    # break-test.
+    passives = []
+    for address, part in design["parts"].items():
+        if part["symbol"] not in ("Device:L", "Device:FerriteBead_Small"):
+            continue
+        ends = [net for net, nodes in design["nets"].items()
+                if any(a == address for a, _ in nodes)]
+        if len(ends) == 2:
+            passives.append(tuple(ends))
+    seen, edge = {"VDDA"}, ["VDDA"]
+    while edge:
+        net = edge.pop()
+        for a, b in passives:
+            far = b if a == net else a if b == net else None
+            if far and far not in seen:
+                seen.add(far)
+                edge.append(far)
+    assert supply in seen, (
+        f"the reference is powered from {supply}, and VDDA is reached from "
+        f"{sorted(seen)}. A reference on a rail of its own comes up when that "
+        f"rail does, which on this board is before VDDA exists."
+    )
+
+    rail = f"rail.{supply.lower()}"
+    rail_low, rail_high = spec(rail, "voltage")
     limit, _ = spec(REFERENCE, "v_in_max")
     assert rail_high <= limit, (
-        f"the 5 V rail reaches {rail_high:g} V and the reference takes {limit:g} V"
+        f"the {supply} rail reaches {rail_high:g} V and the reference takes {limit:g} V"
+    )
+    _, output_high = spec(REFERENCE, "output_voltage")
+    headroom, _ = spec(REFERENCE, "supply_headroom")
+    assert rail_low >= output_high + headroom, (
+        f"the {supply} rail falls to {rail_low:g} V and the reference needs "
+        f"{output_high:g} + {headroom * 1e3:g} mV to regulate"
     )
     wanted, _ = spec(REFERENCE, "supply_bypass")
     # The reference's own, not the rail's: same scope error as the converters'
     # input capacitance, and the same answer.
     found_low, _ = _capacitance_on(
-        design, two_pad_parts, spec, "5V", "GND", block=REFERENCE.rpartition(".")[0])
+        design, two_pad_parts, spec, supply, "GND", block=REFERENCE.rpartition(".")[0])
     assert found_low >= wanted, (
         f"{found_low * 1e6:.2f} uF on the reference's supply, against "
         f"{wanted * 1e6:g} uF asked for"
