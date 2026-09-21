@@ -527,3 +527,42 @@ def test_the_32khz_crystal_leaves_its_case_pads_alone(design, pad_net):
         f"{crystal}: Epson's outline says not to connect #2 and #3, but "
         f"{ {p: n for p, n in joined.items() if n} } "
     )
+
+
+def test_every_part_that_states_a_temperature_range_covers_the_air_it_sits_in(
+    design, spec, spec_has
+):
+    """
+    The board declares the ambient it is for, and nothing on it is graded
+    narrower than that.
+
+    Nothing declared one before. Two parts here have ranges worth arguing
+    about and neither was ever compared with anything: the MCU's T6 suffix is
+    a minus-forty to eighty-five part, and the Ethernet jack is graded zero to
+    seventy - a genuine substitution decision that `parts/RJ45HR/RJ45HR.md`
+    already calls one, sitting on a board that never said what temperature it
+    was for. `environment.ambient` is that statement, and the jack is what set
+    it.
+
+    The band only grows as parts record their grades, which is the intended
+    shape: a part with nothing to say about temperature says nothing here, and
+    one that does is held to it.
+    """
+    low, high = spec("environment", "ambient")
+    assert low < high, f"the declared ambient is {low} to {high}"
+
+    graded = [address for address in sorted(design["parts"])
+              if spec_has(address, "ambient_max")]
+    assert graded, "no part on this board states a temperature range"
+
+    outside = []
+    for address in graded:
+        part_low, _ = spec(address, "ambient_min")
+        _, part_high = spec(address, "ambient_max")
+        if part_low > low or part_high < high:
+            outside.append(
+                f"  {address} is graded {part_low:g} to {part_high:g} degC")
+    assert not outside, (
+        f"Parts narrower than the {low:g} to {high:g} degC this board says it "
+        f"is for:\n" + "\n".join(outside)
+    )

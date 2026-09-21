@@ -9,5 +9,16 @@
     "sha256": "038596b984f86bbbe4dabba535b142046984afa283c4f4e07009286e3cb8516b",
     "shows": "the SOT-23 package with its pins numbered, and the internal circuit beside it: pin 3 is the common ANODE and pins 1 and 2 are the two CATHODEs",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/af161ed6ca4d4770821aa0bb9080dfb0.pdf"
+  },
+  "bat54a_reverse_current": {
+    "assumes": "that 70 degC sits between the 25 and 75 degC curves at about 3 uA, read by eye off a log axis. The datasheet plots no 70 degC curve.",
+    "crop": "840,380,760,780",
+    "document": "Leshan Radio LBAT54ALT1G / S-LBAT54ALT1G, Rev. C (May 2015), served by LCSC for C12743",
+    "dpi": 200,
+    "page": 2,
+    "read": "2026-09-21",
+    "sha256": "038596b984f86bbbe4dabba535b142046984afa283c4f4e07009286e3cb8516b",
+    "shows": "FIG.2, reverse current against reverse voltage at seven temperatures. At the 2 V end of the axis - which is where the trip bus holds these diodes - the curve reads about 0.11 uA at 25 degC, 3.7 uA at 75 degC, 12 uA at 100 degC and 27 uA at 125 degC. It is the figure the 10 k pull-up's noise margin has to be set against, and the electrical table's 2 uA at 25 V and 25 degC says nothing about either the voltage or the temperature these actually see.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/af161ed6ca4d4770821aa0bb9080dfb0.pdf"
   }
 }

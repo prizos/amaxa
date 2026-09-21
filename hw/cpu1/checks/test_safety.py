@@ -359,6 +359,69 @@ def test_the_latch_powers_up_tripped(design, pad_net):
     )
 
 
+def test_the_trip_bus_still_reads_high_with_every_diode_leaking(design, pad_net, spec):
+    """
+    The other end of the trip bus's noise margin, and the one that fails on a
+    hot bench rather than on a cold one.
+
+    Twelve Schottky junctions hang off TRIP_SET_N with their cathodes at
+    whatever the comparators and the fault lines are doing, and when nothing
+    is tripped every one of them is reverse biased. Their leakage all flows
+    the same way, out of the 10 k pull-up, and the latch will not read a high
+    below 2.0 V. So the budget is (3.135 - 2.0) / 10.1 k of current shared
+    between them.
+
+    **Neither figure in the electrical table is the right one.** It gives
+    2 uA at 25 V and 25 degC; these sit at about 1.6 V, and a board in a
+    cabinet beside a motor drive does not sit at 25 degC. FIG.2 of the same
+    datasheet plots the current against voltage at seven temperatures, and
+    at the 2 V end it runs from 0.11 uA at 25 degC to 27 uA at 125. This
+    takes the 75 degC point as the anchor and doubles every 17.4 degC, both
+    read off that curve, and evaluates it at the top of the ambient the board
+    declares.
+
+    The failure is in the safe direction - the board reads permanently
+    tripped and will not run - but it is temperature-dependent, so it passes
+    on a bench and fails in a cabinet, with nothing pointing at the cause.
+    """
+    _, ambient = spec("environment", "ambient")
+    preset = pad_net[(LATCH, "7")]
+    v_ih, _ = spec(LATCH, "input_high_voltage_min")
+    rail_low, _ = spec("rail.3v3", "voltage")
+
+    pullups = [address for address, part in design["parts"].items()
+               if part["symbol"] == "Device:R"
+               and preset in {net for net, nodes in design["nets"].items()
+                              for a, _ in nodes if a == address}
+               and "3V3" in {net for net, nodes in design["nets"].items()
+                             for a, _ in nodes if a == address}]
+    assert len(pullups) == 1, f"{preset} is pulled up by {pullups}"
+    _, resistance = spec(pullups[0], "resistance")
+    budget = (rail_low - v_ih) / resistance
+
+    leaking = 0.0
+    junctions = 0
+    for address, part in design["parts"].items():
+        if part["symbol"] != "Diode:BAT54A":
+            continue
+        if preset not in {net for net, nodes in design["nets"].items()
+                          for a, pad in nodes if a == address and pad == "3"}:
+            continue
+        anchor, _ = spec(address, "reverse_current_at_75c")
+        doubles, _ = spec(address, "reverse_current_doubling_degrees")
+        junctions += 2
+        leaking += 2 * anchor * 2.0 ** ((ambient - 75.0) / doubles)
+    assert junctions, f"nothing reaches {preset} through a diode"
+
+    assert leaking < budget, (
+        f"at {ambient:g} degC the {junctions} Schottky junctions on {preset} "
+        f"leak {leaking * 1e6:.0f} uA between them, and {resistance / 1e3:g} k "
+        f"from {rail_low:g} V can spare {budget * 1e6:.0f} uA before the latch "
+        f"stops reading a high. The board would sit permanently tripped, and "
+        f"only when warm."
+    )
+
+
 def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, spec):
     """
     The coupled clear pulse, worked out from the three parts that make it.
@@ -487,14 +550,28 @@ def test_both_timers_see_the_trip_on_one_piece_of_copper(design, pad_net, pin_ma
     )
 
 
-def test_a_trip_stops_the_outputs_inside_the_budget(design, spec):
+def test_a_trip_stops_the_outputs_inside_the_budget(design, spec, board_capacitance):
     """
-    Latch plus buffer, worst case, against the time a bridge can survive.
+    Comparator plus latch plus buffer, worst case, against the time a bridge
+    can survive - **including what the bus between them costs.**
 
-    Both numbers are maxima from the datasheets, over the full temperature
-    range. What is left over is what the comparators in the next block have to
-    fit into, and saying so here is the point: the budget is spent in order,
-    and this is how much of it the parts already chosen have taken.
+    Every number is a maximum from a datasheet over the full temperature
+    range. What is left over is what the tap network in M6 has to fit into,
+    and saying so here is the point: the budget is spent in order, and this is
+    how much of it the parts already chosen have taken.
+
+    The bus was worth nothing in that sum and it is not worth nothing. The
+    comparator's 7 ns comes from a switching table that states no capacitive
+    load, and Figure 5 of the same datasheet plots the delay against load: the
+    table's own figure is the left-hand end of that curve, near 13 pF, and
+    past it the delay grows 40 ps for every picofarad. TRIP_SET_N is 161 mm of
+    track carrying twelve Schottky junctions - six BAT54A, both junctions of
+    each facing the bus through their common anode, 10 pF apiece - which comes
+    to about 135 pF, and that is five nanoseconds nobody was counting against
+    ten of slack.
+
+    Reading the copper off the board rather than assuming it is the point of
+    doing it this way: route the bus the long way round and this notices.
     """
     _, trip_budget = spec("trip", "budget")
     latch, _ = spec(LATCH, "preset_to_output_max")
@@ -511,10 +588,49 @@ def test_a_trip_stops_the_outputs_inside_the_budget(design, spec):
                    if part["symbol"].startswith("Comparator:")]
     assert comparators, "no comparator on this board, and the budget assumes one"
     slowest = max(spec(address, "propagation_delay_max")[0] for address in comparators)
-    assert spent + slowest < trip_budget, (
-        f"{spent * 1e9:.1f} ns leaves the comparators "
-        f"{(trip_budget - spent) * 1e9:.1f} ns and the slowest of them takes "
-        f"{slowest * 1e9:g}"
+
+    # What the bus adds. The copper is measured; the junctions are counted off
+    # the netlist at the figure their own datasheet gives.
+    bus = {net for net, nodes in design["nets"].items()
+           for address, pad in nodes
+           if address == LATCH and pad == "7"}
+    assert len(bus) == 1, f"the latch's preset is on {sorted(bus)}"
+    trip_bus = bus.pop()
+    loaded = board_capacitance(trip_bus)
+    junctions = 0
+    for address, part in design["parts"].items():
+        if part["symbol"] != "Diode:BAT54A":
+            continue
+        if trip_bus not in {net for net, nodes in design["nets"].items()
+                            for a, pad in nodes if a == address and pad == "3"}:
+            continue
+        junctions += 2
+        loaded += 2 * spec(address, "total_capacitance")[1]
+    assert junctions, f"nothing reaches {trip_bus} through a diode"
+
+    # The worst of them on each term, not the first: seven comparators sit on
+    # this bus and a board with two different parts on it would otherwise have
+    # six of them go unread.
+    reference = min(spec(address, "delay_load_reference")[0] for address in comparators)
+    per_farad = max(spec(address, "delay_per_farad")[1] for address in comparators)
+    loading = max(0.0, (loaded - reference) * per_farad)
+
+    assert spent + slowest + loading < trip_budget, (
+        f"{spent * 1e9:.1f} ns for the latch and buffer, {slowest * 1e9:g} ns "
+        f"for the comparator at its datasheet's own load, and {loading * 1e9:.1f} "
+        f"ns more for the {loaded * 1e12:.0f} pF on {trip_bus} - "
+        f"{junctions} Schottky junctions and the copper between them - against "
+        f"a {trip_budget * 1e9:g} ns budget"
+    )
+
+    # And what that leaves the tap network, which is the number M6 is designed
+    # against. It is declared, so the two have to agree.
+    _, reserved = spec("trip", "reserved_share")
+    left = trip_budget - (spent + slowest + loading)
+    assert left >= reserved * trip_budget, (
+        f"the parts on the board take all but {left * 1e9:.1f} ns, and "
+        f"{reserved * 100:g}% of {trip_budget * 1e9:g} ns is held back for the "
+        f"tap filter: {reserved * trip_budget * 1e9:.1f} ns"
     )
 
 

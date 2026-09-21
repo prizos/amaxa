@@ -229,6 +229,16 @@ INTENT: dict[str, tuple[float, float]] = {
     # thermal one - a resistor's power, a ferrite's current. It was written
     # out in three check files, which is how `trip.budget` got here too.
     "parts.derating": (0.0, 0.5),
+    # The air this board sits in. Nothing declared one, and several things on
+    # the board only make sense against a number: a Schottky's reverse leakage
+    # runs over two decades across the range its own datasheet plots, and the
+    # noise margin on the trip bus is set by twelve of them in parallel
+    # against a 10 k pull-up. Zero to seventy is what the Ethernet jack is
+    # graded for, and it is the narrowest thing on the board - the MCU's T6
+    # suffix is minus forty to eighty-five, and the passives wider still. A
+    # board meant for a cabinet beside a motor drive wants this argued rather
+    # than assumed, which is what declaring it here makes possible.
+    "environment.ambient": (0.0, 70.0),
     # Where each kind of channel rolls off. The fast ones carry what the control
     # loop reads every PWM cycle: low enough to stop the switching node aliasing
     # into the measurement, high enough that the measurement is of now.

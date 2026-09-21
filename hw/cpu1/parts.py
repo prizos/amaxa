@@ -9,6 +9,8 @@ comes from the part's review note in `parts/<LIB>/<LIB>.md`.
 cpu1 is being built one block at a time, so this list grows with it.
 """
 
+import math
+
 import sys
 from pathlib import Path
 
@@ -51,6 +53,9 @@ MCU_H743 = PartSpec(
         # number. Recorded as the overhead so a check reads the board's own
         # rail rather than assuming 3.3 V. Table 12, note 3.
         "ft_input_overhead": exact(4.0),
+        # The T6 suffix's grade, from the ordering-information table.
+        "ambient_min": exact(-40.0),
+        "ambient_max": exact(85.0),
     },
 )
 
@@ -513,6 +518,22 @@ SCHOTTKY_DUAL = PartSpec(
         "forward_voltage_max": exact(0.24),          # at 0.1 mA
         "reverse_voltage_max": exact(30.0),
         "forward_current_max": exact(200e-3),
+        # Total capacitance, 10 pF maximum at V_R = 1.0 V and 1 MHz. Both
+        # junctions of a BAT54A face the trip bus through their common anode,
+        # so each package puts twice this on it, and six packages are most of
+        # what the comparators have to pull down.
+        "total_capacitance": exact(10e-12),
+        # Reverse current. **Not** the electrical table's 2 uA, which is
+        # stated at V_R = 25 V and 25 degC and so describes neither the
+        # voltage nor the temperature these see: on the trip bus they sit at
+        # about 1.6 V reverse, and a board in a cabinet beside a motor drive
+        # is not at 25 degC. FIG.2 of the same datasheet plots the current
+        # against voltage at seven temperatures, and these two are read off
+        # its 2 V end - the anchor at 75 degC, and the doubling interval taken
+        # across the 75 to 125 degC span, which is the part of the curve the
+        # declared ambient sits under. See the figure in SOT23/evidence.
+        "reverse_current_at_75c": exact(3.7e-6),
+        "reverse_current_doubling_degrees": exact(50.0 / math.log2(27.0 / 3.7)),
     },
 )
 
@@ -561,6 +582,16 @@ COMPARATOR = PartSpec(
         # is half as fast again, which is what the tap network in M6 has to
         # deliver against.
         "propagation_delay_max": exact(7e-9),
+        # The 7 ns above is the switching table's figure, and the table states
+        # no capacitive load. Figure 5 of the same datasheet plots the delay
+        # against load at the same 20 mV overdrive: about 4.7 ns at 13 pF,
+        # about 8.2 ns at 100 pF. So the table's own load is the left end of
+        # that curve, and everything hung on the output past it costs 40 ps
+        # per picofarad. On the trip bus, where twelve Schottky junctions and
+        # 161 mm of track come to 135 pF, that is five nanoseconds the budget
+        # was not counting. See the figure in SOT23_6/evidence.
+        "delay_load_reference": exact(13e-12),
+        "delay_per_farad": exact((8.2e-9 - 4.7e-9) / (100e-12 - 13e-12)),
         "input_offset_voltage": exact(6.5e-3),
         "input_hysteresis": exact(6e-3),
         "common_mode_headroom": exact(0.2),      # from either rail
@@ -819,7 +850,13 @@ ETH_JACK = PartSpec(
     symbol="Connector:RJ45_Hanrun_HR911105A_Horizontal",
     footprint="RJ45HR:RJ45_Hanrun_HR911105A_Horizontal", prefix="J",
     manufacturer="HANRUN", mpn="HR911105A", lcsc="C12074", value="RJ45",
-    params={"isolation_voltage": exact(1500.0)},
+    params={
+        "isolation_voltage": exact(1500.0),
+        # HanRun's own grade, and the narrowest on this board. It is what
+        # `environment.ambient` was set against.
+        "ambient_min": exact(0.0),
+        "ambient_max": exact(70.0),
+    },
 )
 
 RES_12K1_0402 = PartSpec(

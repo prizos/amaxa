@@ -1,0 +1,13 @@
+{
+  "tlv3501_delay_vs_load": {
+    "assumes": "that the switching table's own load is the left-hand end of this curve. The table states no capacitive load; the two agree near 4.5 to 4.7 ns typical, which is the reason for reading it that way.",
+    "crop": "160,1373,700,530",
+    "document": "TI TLV3501, TLV3502, SBOS321E (March 2005, revised April 2016), served by LCSC for C193413",
+    "dpi": 200,
+    "page": 7,
+    "read": "2026-09-21",
+    "sha256": "d9e72b376e576f102abb7e354c6930ace852e7e98629f706f30e5fa95ec6fae0",
+    "shows": "Figure 5: propagation delay against capacitive load at 20 mV overdrive. The fall curve starts at about 4.7 ns at 13 pF - close to the 4.5 ns the switching table gives as typical - and reaches about 8.2 ns at 100 pF, so the delay grows by roughly 40 ps for every picofarad hung on the output.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/32caf6282c83fc4232a547d24aa7019c.pdf"
+  }
+}
