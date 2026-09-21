@@ -24,13 +24,39 @@ BLOCKING: dict[str, str] = {
         "supply during exactly the over-current the trip chain exists for. "
         "`docs/research/07` called for clamps; they are not fitted and do not "
         "fit, and the requirement now sits on a board that does not exist "
-        "yet. Everything else here is drawn, routed, checked and reproducible; "
-        "this is the one thing between that and ordering."
+        "yet."
+    ),
+    "the converters' capacitance is checked at nominal, and nothing on this "
+    "board knows what DC bias does to it": (
+        "Every ceramic capacitance check here - the 3V3 buck's 10 uF input "
+        "minimum, its 20 to 68 uF D-CAP2 output window, the 5 V buck's 2.2 uF "
+        "input - compares a nominal value and its tolerance against a "
+        "datasheet requirement. A Class II ceramic at half its rated voltage "
+        "is worth well under its nominal, and the parts here are exactly that "
+        "case: buck3v3.c_in is a 22 uF 10 V X7R in 0805 sitting at 5 V. Two "
+        "of the three requirements fail on any reasonable derating - 17.6 uF "
+        "of tolerance-corner input becomes 8.8 against a 10 uF minimum - and "
+        "the board already knows the effect exists, because the Ethernet "
+        "reset capacitor's delay is argued with its capacitance 'derated to a "
+        "third by its own DC bias'.\n\n"
+        "What stops this being fixed rather than recorded is that no maker "
+        "here publishes the curve. HRE's datasheet for CGA0805X7R226M100MT "
+        "carries no bias data at all; Samsung's CL21 series PDF gives "
+        "temperature coefficients and no bias characteristic - that data "
+        "lives in their online tool, which `make offline` cannot reach and "
+        "which is not a document to cite. Inventing a flat derating is worse "
+        "than the gap: at 50 % the D-CAP2 window becomes unsatisfiable by any "
+        "number of 22 uF parts, because three of them exceed its 68 uF "
+        "ceiling at the other tolerance corner. The number has to be real.\n\n"
+        "Resolving it means either parts whose datasheets plot capacitance "
+        "against bias - Murata and TDK do, and JLCPCB stock some - or a "
+        "measurement on the first assembled board. Until then the 3V3 rail's "
+        "input ripple and its loop stability are both unverified."
     ),
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 191
+EXPECTED_CHECKS = 192
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {

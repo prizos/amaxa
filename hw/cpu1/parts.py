@@ -56,6 +56,16 @@ MCU_H743 = PartSpec(
         # The T6 suffix's grade, from the ordering-information table.
         "ambient_min": exact(-40.0),
         "ambient_max": exact(85.0),
+        # Table 30: 400 MHz, VOS1, all peripherals enabled, at T_J 105 degC,
+        # production tested. It is the figure the 3V3 rail is budgeted at, and
+        # it is also what the package has to get rid of.
+        "supply_current_max": exact(500e-3),
+        # Table 126 and Table 22. ST give the equation beside them:
+        # T_J max = T_A max + (P_D max x theta_JA). At the rail's own budget
+        # this package can lose 1.65 W at 43.7 degC/W, which is 72 degC of
+        # rise, and 125 - 72 is the ambient this board can be declared for.
+        "thermal_resistance_junction_ambient": exact(43.7),
+        "junction_temperature_max": exact(125.0),
     },
 )
 

@@ -22,6 +22,7 @@ sys.path.insert(0, str(HW_DIR / "tools"))
 from layout_lib import footprint_pads  # noqa: E402
 from series import closest  # noqa: E402
 from stm32 import Silicon  # noqa: E402
+from symbols import symbol_pin_names  # noqa: E402
 
 MCU = "mcu"
 
@@ -565,4 +566,71 @@ def test_every_part_that_states_a_temperature_range_covers_the_air_it_sits_in(
     assert not outside, (
         f"Parts narrower than the {low:g} to {high:g} degC this board says it "
         f"is for:\n" + "\n".join(outside)
+    )
+
+
+def test_nothing_runs_hotter_inside_than_its_datasheet_allows(
+    design, pad_net, spec, spec_has
+):
+    """
+    Junction temperature, for every part that states what it takes to work it
+    out - and the MCU is the one that does.
+
+    ST give the equation in Section 7.9 of DocID030538 and both numbers for
+    it in the same document: T_J max = T_A max + P_D max x theta_JA, with
+    43.7 degC/W for the LQFP-144 20x20 and 125 degC for the junction. The
+    dissipation is the rail budget's own figure, Table 30's 500 mA at 400 MHz
+    with every peripheral on, which is 1.65 W and 72 degC of rise.
+
+    **That is what set `environment.ambient`.** Nothing on this board declared
+    a temperature and nothing compared these numbers with each other, so the
+    board was buying an 85 degC part, fitting a 70 degC jack, and had a
+    package that could not clear 53 degC at its own budgeted current. Fifty is
+    what the arithmetic leaves with a few degrees in hand, and it is a real
+    constraint on where this board can live: a cabinet beside a motor drive
+    can be hotter than that. Raising it means justifying a lower current than
+    ST's worst case, or getting heat out of the package another way.
+
+    The rest of the board is comfortable - the PHY dissipates a third of a
+    watt in a QFN with an exposed pad, the converters a fraction of that - and
+    none of them states a thermal resistance yet, so none of them is checked
+    here. This grows the same way the temperature grades do.
+    """
+    _, ambient = spec("environment", "ambient")
+    considered, hot = [], []
+    for address in sorted(design["parts"]):
+        if not (spec_has(address, "thermal_resistance_junction_ambient")
+                and spec_has(address, "junction_temperature_max")
+                and spec_has(address, "supply_current_max")):
+            continue
+        _, current = spec(address, "supply_current_max")
+        # The rail it is actually given, not the range it would tolerate. A
+        # part specified from 1.62 to 3.6 V does not dissipate 3.6 V worth of
+        # current on a 3.3 V board, and reading the part's own band here
+        # overstated the MCU by nine per cent.
+        names = symbol_pin_names(design["parts"][address]["symbol"])
+        rails = {net for (a, pad), net in pad_net.items()
+                 if a == address and names.get(pad) in ("VDD", "VCC", "V+")}
+        assert len(rails) == 1, f"{address} is powered from {sorted(rails)}"
+        _, supply = spec(f"rail.{rails.pop().lower()}", "voltage")
+        _, resistance = spec(address, "thermal_resistance_junction_ambient")
+        _, limit = spec(address, "junction_temperature_max")
+        considered.append(address)
+        dissipated = current * supply
+        junction = ambient + dissipated * resistance
+        if junction > limit:
+            hot.append(
+                f"  {address}: {dissipated:.2f} W at {resistance:g} degC/W is "
+                f"{dissipated * resistance:.0f} degC of rise, so a {ambient:g} degC "
+                f"ambient puts its junction at {junction:.0f} against {limit:g}. "
+                f"It can be declared for {limit - dissipated * resistance:.0f} degC."
+            )
+    assert considered, (
+        "nothing on this board states a thermal resistance, a junction limit, "
+        "a supply current and a supply voltage together, so this check has "
+        "nothing to work out"
+    )
+    assert not hot, (
+        "Parts whose junction leaves its datasheet at the ambient this board "
+        "declares:\n" + "\n".join(hot)
     )
