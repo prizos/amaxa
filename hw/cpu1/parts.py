@@ -353,6 +353,18 @@ VREF_3V0 = PartSpec(
         # makes running this from 3V3 rather than 5 V possible, and running it
         # from 3V3 is what stops VREF+ existing before VDDA does.
         "supply_headroom": exact(1e-3),
+        # ...which is the *unloaded* figure, and the datasheet says so in the
+        # description: "Unloaded, the REF30xx can be operated with supplies
+        # within 1mV of output voltage". Loaded, the dropout is the curve on
+        # page 1 - about 10 mV per milliamp to 20 mA, 300 mV at the full 25.
+        # With 129 mV of headroom on 3V3 that bounds what VREF+ may supply at
+        # around 12 mA, which is half the part's output capability and was the
+        # figure nothing on this board had ever written down. See the figure
+        # in SOT23/evidence.
+        "dropout_at_5ma": exact(50e-3),
+        "dropout_at_10ma": exact(100e-3),
+        "dropout_at_20ma": exact(200e-3),
+        "dropout_at_25ma": exact(300e-3),
         "output_current_max": exact(25e-3),
         "supply_bypass": exact(0.47e-6),
         "temperature_drift": exact(75e-6),

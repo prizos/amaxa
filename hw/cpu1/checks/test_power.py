@@ -828,6 +828,42 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, pad
         f"the {supply} rail falls to {rail_low:g} V and the reference needs "
         f"{output_high:g} + {headroom * 1e3:g} mV to regulate"
     )
+
+    # **And at the current the board promises, not unloaded.** That 1 mV is
+    # the no-load dropout - the datasheet's description says so - and the real
+    # figure is a curve, about 10 mV per milliamp. VREF+ leaves this board on
+    # a connector pin with no series element and the power board's sensors are
+    # ratiometric to it, so something out there draws from it; until
+    # `analog.reference_current` was declared, nothing said how much, and the
+    # check above was comparing 129 mV of headroom against a figure that
+    # assumed nobody was connected.
+    _, promised = spec("analog", "reference_current")
+    curve = sorted(
+        (amps, spec(REFERENCE, f"dropout_at_{name}")[1])
+        for amps, name in ((5e-3, "5ma"), (10e-3, "10ma"),
+                           (20e-3, "20ma"), (25e-3, "25ma"))
+    )
+    drawn = promised + 50e-6                      # the part's own quiescent
+    loaded = curve[-1][1]
+    if drawn <= curve[0][0]:
+        loaded = curve[0][1] * drawn / curve[0][0]
+    else:
+        for (i0, v0), (i1, v1) in zip(curve, curve[1:]):
+            if drawn <= i1:
+                loaded = v0 + (v1 - v0) * (drawn - i0) / (i1 - i0)
+                break
+    assert rail_low >= output_high + loaded, (
+        f"the board promises the power board {promised * 1e3:g} mA out of "
+        f"VREF+, which drops the reference {loaded * 1e3:.0f} mV - and the "
+        f"{supply} rail falls to {rail_low:g} V against an output of "
+        f"{output_high:g} V, which leaves {(rail_low - output_high) * 1e3:.0f} mV"
+    )
+
+    _, capable = spec(REFERENCE, "output_current_max")
+    assert promised <= capable, (
+        f"the board promises {promised * 1e3:g} mA out of VREF+ and the part "
+        f"can supply {capable * 1e3:g}"
+    )
     wanted, _ = spec(REFERENCE, "supply_bypass")
     # The reference's own, not the rail's: same scope error as the converters'
     # input capacitance, and the same answer.

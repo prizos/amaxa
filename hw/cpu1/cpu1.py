@@ -76,8 +76,12 @@ INTENT: dict[str, tuple[float, float]] = {
     #   buffers        6 mA  sixteen outputs into their 10 k pull-downs
     #   LEDs, latch,
     #   DAC, CAN VIO  17 mA
-    #   reference      25 mA  the REF3030's whole output capability, moved
-    #                          here with the part itself
+    #   reference       5 mA  what `analog.reference_current` promises the
+    #                          power board it may take from VREF+, plus the
+    #                          part's own 50 uA. Not its 25 mA capability:
+    #                          the rail cannot give the reference enough
+    #                          headroom to deliver that, which is the point
+    #                          of declaring the promise
     #   header        100 mA what the connector may take at 3V3
     #   ------------------
     #   total        770 mA, and the budget is 800.
@@ -102,6 +106,13 @@ INTENT: dict[str, tuple[float, float]] = {
     # What the analog header is allowed to draw from 5VA, which is what the
     # 5 V rail's budget above carries for it.
     "analog.supply_current": (0.0, 0.05),
+    # And the same promise for VREF+, which had none. It leaves on one pin of
+    # the analog connector with no series element, and the power board's
+    # sensors are ratiometric to it - so something out there draws from it and
+    # nothing said how much. Five milliamps is fifty millivolts of dropout off
+    # the reference's own curve, against the 129 mV of headroom 3V3 leaves at
+    # its low corner; the part could give 25 mA and the rail could not.
+    "analog.reference_current": (0.0, 5e-3),
     # The highest voltage a sensor on the far side of the analog connector may
     # ever present to one of the fast inputs, **including while it is
     # failing**. It is a requirement this board places on the power board, and

@@ -129,12 +129,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "Recorded because it is what makes the part suitable for a rail that "
         "may be fed from a battery"
     ),
-    ("vref.ic", "output_current_max"): (
-        "25 mA against what VREF+ draws, which the pages of ST's datasheet "
-        "read for this board do not state - the same gap as VDDA's current. "
-        "The 1 uF and 100 nF at the pin supply the conversion transients; the "
-        "steady draw is what needs measuring at bring-up"
-    ),
     ("vref.ic", "temperature_drift"): (
         "75 ppm/degC is the board's measurement accuracy, and there is nothing "
         "to compare it against until the ADC input networks exist and the "
@@ -200,7 +194,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOIC8": ["can_common_mode", "can_esd_ratings",
               "rs485_common_mode", "rs485_esd_ratings"],
     "SOT23": ["bat54a_common_anode", "bat54a_forward_voltage",
-              "bat54a_reverse_current"],
+              "bat54a_reverse_current", "ref3030_dropout"],
     "SOT23_6": ["tlv3501_delay_vs_load"],
     "TC2030": ["pad_signals"],
     "XTAL5032_4P": ["parameters"],
