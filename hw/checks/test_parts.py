@@ -158,11 +158,28 @@ def test_a_confirmed_review_left_its_evidence_behind(part_dirs, board_config, bo
 
     Without this the two lists are the same thing - a statement that somebody
     once looked - and the only difference between them is which one is shorter.
+
+    **It walks the figures on disk as well as the declared list**, because
+    iterating the list alone only checks the claims someone remembered to
+    declare. Six crops had accumulated that nothing reached: the two field-bus
+    transceivers' common-mode and ESD ratings, the comparator's delay against
+    capacitive load, the Schottky's forward and reverse curves, and the
+    thermal table the board's declared ambient is derived from. Every one is
+    cited by name in `parts.py` and every one could have been deleted, or had
+    its digest blanked, with the suite still green.
     """
     declared = getattr(board_config, "CONFIRMED_FROM_A_RENDER", {})
     by_name = {d.name: d for d in part_dirs}
 
     problems = []
+    for directory in sorted(part_dirs, key=lambda d: d.name):
+        for figure in sorted((directory / "evidence").glob("*.png")):
+            if figure.stem not in declared.get(directory.name, ()):
+                problems.append(
+                    f"  {directory.name}/{figure.stem}: a figure kept as evidence "
+                    f"and not named in CONFIRMED_FROM_A_RENDER, so nothing holds "
+                    f"it to its source")
+
     for library, claims in sorted(declared.items()):
         directory = by_name.get(library)
         if directory is None:

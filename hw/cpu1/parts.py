@@ -62,8 +62,9 @@ MCU_H743 = PartSpec(
         "supply_current_max": exact(500e-3),
         # Table 126 and Table 22. ST give the equation beside them:
         # T_J max = T_A max + (P_D max x theta_JA). At the rail's own budget
-        # this package can lose 1.65 W at 43.7 degC/W, which is 72 degC of
-        # rise, and 125 - 72 is the ambient this board can be declared for.
+        # and its high corner this package loses 1.73 W at 43.7 degC/W, which
+        # is 76 degC of rise, so 125 - 76 = 49 degC is the most this board can
+        # be declared for and `environment.ambient` sits at 45.
         "thermal_resistance_junction_ambient": exact(43.7),
         "junction_temperature_max": exact(125.0),
         # Table 23's own answer for this package, and the reason the 125 degC
@@ -570,8 +571,20 @@ SCHOTTKY_DUAL = PartSpec(
         # its 2 V end - the anchor at 75 degC, and the doubling interval taken
         # across the 75 to 125 degC span, which is the part of the curve the
         # declared ambient sits under. See the figure in SOT23/evidence.
-        "reverse_current_at_75c": exact(3.7e-6),
-        "reverse_current_doubling_degrees": exact(50.0 / math.log2(27.0 / 3.7)),
+        # Three points off that curve at 2 V, so the value used is
+        # interpolated between the two that bracket the board's ambient rather
+        # than extrapolated from one anchor. The first attempt anchored at
+        # 75 degC and doubled every 17.4 - a slope taken across 75 to 125 -
+        # and then used it at 45, which is the wrong side of the anchor. It
+        # happened to be conservative there and would not have been on a
+        # hotter board.
+        "reverse_current_typical_at_25c": exact(0.11e-6),
+        "reverse_current_typical_at_75c": exact(3.7e-6),
+        "reverse_current_typical_at_125c": exact(27e-6),
+        # And the curves are typical while the budget needs a maximum. The
+        # electrical table gives both at its own condition - 0.5 uA typical
+        # against 2 uA maximum at 25 V - so four is the spread between them.
+        "reverse_current_typical_to_max": exact(2.0 / 0.5),
     },
 )
 

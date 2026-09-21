@@ -411,6 +411,37 @@ def test_the_latch_powers_up_tripped(design, pad_net):
     )
 
 
+def _leakage(spec, address: str, ambient: float) -> float:
+    """
+    A Schottky's reverse current at a temperature, as a maximum.
+
+    FIG.2 is plotted at seven temperatures and this interpolates between the
+    two that bracket the ambient - on a log axis, because that is how the
+    quantity behaves and how the figure is drawn. Outside them it holds the
+    nearest, rather than extrapolating a slope fitted somewhere else.
+
+    Then the spread from typical to maximum, because those curves are typical
+    and a noise budget needs the other one. The electrical table gives both at
+    its own condition and their ratio is four.
+    """
+    curve = sorted(
+        (degrees, spec(address, f"reverse_current_typical_at_{name}")[1])
+        for degrees, name in ((25.0, "25c"), (75.0, "75c"), (125.0, "125c"))
+    )
+    spread, _ = spec(address, "reverse_current_typical_to_max")
+    if ambient <= curve[0][0]:
+        typical = curve[0][1]
+    elif ambient >= curve[-1][0]:
+        typical = curve[-1][1]
+    else:
+        for (t0, i0), (t1, i1) in zip(curve, curve[1:]):
+            if ambient <= t1:
+                share = (ambient - t0) / (t1 - t0)
+                typical = i0 * (i1 / i0) ** share
+                break
+    return typical * spread
+
+
 def test_the_trip_bus_still_reads_high_with_every_diode_leaking(design, pad_net, spec):
     """
     The other end of the trip bus's noise margin, and the one that fails on a
@@ -459,10 +490,8 @@ def test_the_trip_bus_still_reads_high_with_every_diode_leaking(design, pad_net,
         if preset not in {net for net, nodes in design["nets"].items()
                           for a, pad in nodes if a == address and pad == "3"}:
             continue
-        anchor, _ = spec(address, "reverse_current_at_75c")
-        doubles, _ = spec(address, "reverse_current_doubling_degrees")
         junctions += 2
-        leaking += 2 * anchor * 2.0 ** ((ambient - 75.0) / doubles)
+        leaking += 2 * _leakage(spec, address, ambient)
     assert junctions, f"nothing reaches {preset} through a diode"
 
     assert leaking < budget, (
@@ -552,11 +581,9 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
     leaked = 0.0
     for address in clamps:
         _, junction = spec(address, "total_capacitance")
-        anchor, _ = spec(address, "reverse_current_at_75c")
-        doubles, _ = spec(address, "reverse_current_doubling_degrees")
         _, ambient = spec("environment", "ambient")
         tau += (r_s_low + r_pu_low_again) * junction
-        leaked += anchor * 2.0 ** ((ambient - 75.0) / doubles)
+        leaked += _leakage(spec, address, ambient)
     low += leaked * r_s_high            # the leak lifts the low level
     assert low < v_il, (
         f"with {leaked * 1e6:.1f} uA of clamp leakage added, {latch_clear} only "
@@ -759,8 +786,14 @@ def test_a_trip_stops_the_outputs_inside_the_budget(design, spec, board_capacita
     to about 135 pF, and that is five nanoseconds nobody was counting against
     ten of slack.
 
-    Reading the copper off the board rather than assuming it is the point of
-    doing it this way: route the bus the long way round and this notices.
+    **The copper is measured rather than assumed, and it is the small half.**
+    Of the 137 pF, the twelve junctions are 120 and the 161 mm of track is 17.
+    So this is live through the diode count - fit a fatter Schottky, or hang
+    another one on the bus, and it fails - but not through the routing: at
+    40 ps/pF the 5 ns of slack is 128 pF, about 1,400 mm of extra copper on a
+    board 129 mm across. An earlier version of this sentence said "route the
+    bus the long way round and this notices", which is wrong by an order of
+    magnitude.
     """
     _, trip_budget = spec("trip", "budget")
     latch, _ = spec(LATCH, "preset_to_output_max")

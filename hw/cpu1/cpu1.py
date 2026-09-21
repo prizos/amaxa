@@ -76,6 +76,8 @@ INTENT: dict[str, tuple[float, float]] = {
     #   buffers        6 mA  sixteen outputs into their 10 k pull-downs
     #   LEDs, latch,
     #   DAC, CAN VIO  17 mA
+    #   reference      25 mA  the REF3030's whole output capability, moved
+    #                          here with the part itself
     #   header        100 mA what the connector may take at 3V3
     #   ------------------
     #   total        770 mA, and the budget is 800.
@@ -84,14 +86,18 @@ INTENT: dict[str, tuple[float, float]] = {
     # 5 V, its own loads only:
     #   comparators   35 mA  seven TLV3501 at their 5 mA maximum
     #   CAN           80 mA  TCAN1044V dominant into 50 ohm, maximum
-    #   reference     25 mA  the REF3030's whole output capability
     #   5VA           50 mA  half the ferrite's 100 mA rating, like every
     #                         other part on this board. It was budgeted at the
     #                         whole of it - no derating at all, on a figure
     #                         that is a temperature rise and an impedance
     #                         collapse rather than a limit.
     #   ------------------
-    #   total        190 mA, and the budget is 200.
+    #   total        165 mA, and the budget is 200.
+    #
+    # The reference's 25 mA used to be on this line and is not any more: it
+    # moved to 3V3 so that VREF+ cannot exist before VDDA does, and the entry
+    # went with it. A budget that still carries a load the schematic has moved
+    # is a budget nobody has read since.
     "rail.5v.current": (0.0, 0.20),
     # What the analog header is allowed to draw from 5VA, which is what the
     # 5 V rail's budget above carries for it.
@@ -243,6 +249,12 @@ INTENT: dict[str, tuple[float, float]] = {
     # 500 mA - 400 MHz, VOS1, every peripheral on - which at the rail's high
     # corner is 1.73 W and seventy-six degrees of rise. That leaves 49 degC of
     # ambient, and forty-five is that with a few degrees in hand.
+    #
+    # Forty-nine is what the arithmetic leaves exactly; forty-five is that
+    # with four degrees in hand, which is the number to quote. (Three comments
+    # around this board gave three different figures for it - 53, 50 and 49 -
+    # because each had done the division with a different one of the rail's
+    # corners.)
     #
     # It is lower than the seventy the jack would have allowed, and lower than
     # a cabinet beside a motor drive is likely to be. Raising it means

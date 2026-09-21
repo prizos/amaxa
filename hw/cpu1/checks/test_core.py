@@ -585,8 +585,9 @@ def test_nothing_runs_hotter_inside_than_its_datasheet_allows(
     **That is what set `environment.ambient`.** Nothing on this board declared
     a temperature and nothing compared these numbers with each other, so the
     board was buying an 85 degC part, fitting a 70 degC jack, and had a
-    package that could not clear 53 degC at its own budgeted current. Fifty is
-    what the arithmetic leaves with a few degrees in hand, and it is a real
+    package that could not clear 49 degC at its own budgeted current. That is
+    what the arithmetic leaves; forty-five is it with four degrees in hand,
+    and it is a real
     constraint on where this board can live: a cabinet beside a motor drive
     can be hotter than that. Raising it means justifying a lower current than
     ST's worst case, or getting heat out of the package another way.

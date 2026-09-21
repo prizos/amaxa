@@ -688,7 +688,12 @@ def _run_alongside(a, b, a_width, b_width, within):
         point = (a[0][0] + (a[1][0] - a[0][0]) * fraction,
                  a[0][1] + (a[1][1] - a[0][1]) * fraction)
         apart = point_to_segment(point, b[0], b[1]) - gap
-        if 0 < apart < within:
+        # `apart <= 0` is copper that touches or overlaps, the worst case
+        # there is, and it used to fall into the else and reset the run -
+        # scoring the worst geometry as not-alongside. Unreachable between two
+        # nets on one layer because DRC holds them apart, but it was the wrong
+        # way round.
+        if apart < within:
             run += length / steps
             if run >= best:
                 best, closest = run, min(closest, apart)
@@ -948,8 +953,11 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
     # are both multiples of five.
     # How far a point on the edge may be from the nearest stitch. A ring on a
     # pitch of `pitch` puts every edge point within half a pitch of a via
-    # along the edge, and the ring's own inset is the other leg of that
-    # triangle. Nothing else goes into it.
+    # along the edge, and `at_the_edge` - the inset plus a via, the furthest
+    # from the edge a via can be and still count as on the ring - is the other
+    # leg of that triangle. Nothing else goes into it. (This said "the ring's
+    # own inset", which is the first term of `at_the_edge` and not the whole
+    # of it: 7.16 mm rather than 7.28.)
     #
     # This was `1.5 * pitch` - twenty-one millimetres, three times the
     # spacing the wavelength argument asks for, from a factor that appeared
@@ -958,7 +966,11 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
     # candidates in a row.
     allowed = math.hypot(pitch / 2, at_the_edge)
 
-    step = 5.0
+    # Half a millimetre, not five. The distance to the nearest via changes no
+    # faster than the walk moves, so a five-millimetre step could miss a bare
+    # patch by two and a half - a third of the whole allowance. It was
+    # under-reporting the true worst here by 0.08 mm.
+    step = 0.5
     bare = []
     for a, b in zip(outline, outline[1:] + outline[:1]):
         length = math.dist(a, b)
@@ -979,7 +991,16 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
 
 def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, pcb_text):
     """
-    No copper within a fifth of the fabricator's minimum.
+    No copper within a fifth of the fabricator's minimum, and no hole inside
+    the escape diagonal of the finest package on the board.
+
+    **Two rules, because the two floors are not the same kind of number.** The
+    copper clearance is published, so it takes the design margin in
+    `routing.clearance_over_floor`. The hole-to-hole figure is not - the fab
+    file says so - so holes are held to something the board derives instead,
+    and that lands 7 um above the fab's own figure. A real bound, and it does
+    catch what it was written for, but it is not "a fifth" and this sentence
+    used to claim it was.
 
     `fab/pcbway.kicad_dru` says it in as many words: "These are the
     fabricator's floor, not a design target. A board that only just clears
