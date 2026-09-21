@@ -243,6 +243,9 @@ pins-write: ## Regenerate the firmware pin header from the board's pin map
 check: layout ## Run the common and board-specific design checks
 	@$(PY) -m pytest checks/ $(BOARD)/checks/ -q --import-mode=importlib --board $(BOARD)
 
+mutate: check ## Change every declared number and report which ones nothing notices
+	@$(PY) tools/mutate.py $(BOARD)
+
 # The decks take their component values from the build's design.json, so
 # there is no second copy of the design to fall out of step with the first.
 #

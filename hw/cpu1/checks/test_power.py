@@ -1114,16 +1114,20 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
     a thing to know before closing a jumper, and `parts/R0402/R0402.md` now
     says it.
 
-    That paragraph used to be prose beside an assertion that could not run.
-    Because nothing on this board conducts, `hot` was provably empty and the
-    only live content was the walk deciding to skip everything - the 13.9 W
-    was a model presented as a derivation with nothing evaluating it. So the
-    walk now runs twice. The second pass bridges the open jumpers and works
-    out what a termination would dissipate if somebody closed one; where that
-    exceeds the part, the check requires that an open jumper is in fact what
-    is standing between the resistor and the bus. Fit a termination resistor
-    directly, or close a jumper in the design, and the arithmetic that was
-    only ever a comment is what fails.
+    That paragraph used to be prose beside an assertion that could not run,
+    and the first attempt at fixing it did not fix it. Bridging the jumpers
+    and computing the power was right; asking whether one of the resistor's
+    own *pads* sat on CAN_H or CAN_L was not, because on a split termination
+    the jumpers sit between the resistors and the wires. Every CAN resistor
+    was discarded before the arithmetic, so the worked example above was still
+    evaluated by nothing - and a hard-wired CANL leg dissipating 56 W in an
+    0402 passed, excused by the open jumper in the *other* leg.
+
+    Both halves are reachability now. A resistor is on this transceiver's bus
+    if it can get there through anything that conducts; and it is protected
+    only if it can **not** get there once the jumpers are open again. Fit a
+    termination directly, or close a jumper in the design, and the arithmetic
+    that was only ever a comment is what fails.
     """
     voltages, _ = _net_voltages(spec)
 
@@ -1140,7 +1144,6 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
                     out.append((address, a, b))
         return out
 
-    hot = []
     unprotected = []
     for transceiver in sorted(design["parts"]):
         if not spec_has(transceiver, "bus_fault_voltage"):
@@ -1157,52 +1160,60 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
                if any(address in connectors for address, _ in design["nets"][net])}
         driven = bus | set(voltages)
 
-        for bridged in (False, True):
-            conducting = conductors(bridged)
-            for address, net_a, net_b in conducting:
-                if design["parts"][address]["symbol"] != "Device:R":
-                    continue
-                reach, through = {}, set()
-                for start in (net_a, net_b):
-                    seen, edge = {start}, [start]
-                    while edge:                  # walk out, never back through self
-                        net = edge.pop()
-                        for other, x, y in conducting:
-                            if other == address:
-                                continue
-                            far = y if x == net else x if y == net else None
-                            if far and far not in seen:
-                                seen.add(far)
-                                through.add(other)
-                                edge.append(far)
-                    reach[start] = seen & driven
-                if not (reach[net_a] and reach[net_b]):
-                    continue                     # no complete path: nothing flows
-                if not ({net_a, net_b} & bus):
-                    continue                     # not on this transceiver's bus
-                resistance, _ = spec(address, "resistance")
-                rated, _ = spec(address, "max_power")
-                power = fault**2 / resistance
-                if power <= rated * _derating(spec):
-                    continue
-                if not bridged:
-                    hot.append(f"  {address}: {power:.1f} W if {transceiver}'s bus is "
-                               f"driven to {fault:g} V, rated {rated * 1e3:g} mW")
-                    continue
-                # It only survives because a jumper is open. Check that one
-                # actually is, rather than assuming the first pass's silence
-                # meant something.
-                shut = [other for other in through | {address}
-                        if "Open" in design["parts"][other]["symbol"]]
-                if not shut:
-                    unprotected.append(
-                        f"  {address}: {power:.1f} W if {transceiver}'s bus is driven "
-                        f"to {fault:g} V, rated {rated * 1e3:g} mW, and no open "
-                        f"jumper stands between it and the bus")
-    assert not hot, (
-        "Bus terminations that a declared fault destroys:\n" + "\n".join(sorted(set(hot)))
-        + "\nEither the part survives it or the board stops claiming it does."
-    )
+        def reaches(start, conducting, skip):
+            """The nets reachable from `start`, never back through `skip`."""
+            seen, edge = {start}, [start]
+            while edge:
+                net = edge.pop()
+                for other, x, y in conducting:
+                    if other == skip:
+                        continue
+                    far = y if x == net else x if y == net else None
+                    if far and far not in seen:
+                        seen.add(far)
+                        edge.append(far)
+            return seen
+
+        bridged = conductors(True)
+        shipped = conductors(False)
+        for address, net_a, net_b in bridged:
+            if design["parts"][address]["symbol"] != "Device:R":
+                continue
+            # **Reachability, not pad membership.** Asking whether one of this
+            # resistor's own pads is on CAN_H or CAN_L threw away the entire
+            # split termination, because the jumpers sit between the resistors
+            # and the wires - so the docstring's worked example was evaluated
+            # by nothing at all, in both passes, and a hard-wired CANL leg
+            # passed this check while dissipating 56 W in an 0402.
+            from_a = reaches(net_a, bridged, address)
+            from_b = reaches(net_b, bridged, address)
+            if not (from_a & driven and from_b & driven):
+                continue                     # no complete path: nothing flows
+            if not ((from_a | from_b) & bus):
+                continue                     # not on this transceiver's bus
+            resistance, _ = spec(address, "resistance")
+            rated, _ = spec(address, "max_power")
+            power = fault**2 / resistance
+            if power <= rated * _derating(spec):
+                continue
+            # It survives only if no current can flow through it once the
+            # jumpers are open again - which means **both** of its ends have
+            # to stop reaching something driven, not just one. Touching the
+            # bus is not dissipating: RS-485's 120 ohm has a pad directly on
+            # RS485_B and its other end dead-ends at an open jumper, so it
+            # carries nothing.
+            #
+            # The previous version looked for an open jumper anywhere in the
+            # closure reached from either end, which excused CAN's low leg on
+            # account of the jumper in the *high* leg.
+            left = reaches(net_a, shipped, address) & driven
+            right = reaches(net_b, shipped, address) & driven
+            if left and right:
+                unprotected.append(
+                    f"  {address}: {power:.1f} W if {transceiver}'s bus is driven "
+                    f"to {fault:g} V, rated {rated * 1e3:g} mW, and with the "
+                    f"jumpers as they ship it still runs from "
+                    f"{', '.join(sorted(left))} to {', '.join(sorted(right))}")
     assert not unprotected, (
         "Terminations a declared fault destroys, fitted with nothing open in the "
         "way:\n" + "\n".join(sorted(set(unprotected)))

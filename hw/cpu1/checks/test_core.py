@@ -616,6 +616,22 @@ def test_nothing_runs_hotter_inside_than_its_datasheet_allows(
         _, resistance = spec(address, "thermal_resistance_junction_ambient")
         _, limit = spec(address, "junction_temperature_max")
         considered.append(address)
+        # Before using them, check ST's own three figures close on each other.
+        # The junction limit is the one that is easy to read off the wrong
+        # table - the absolute-maximum section gives 125 degC for every
+        # suffix, while the operating table gives an ambient range per grade -
+        # and this part's own Table 23 settles it: 85 degC of ambient plus
+        # 915 mW through 43.7 degC/W is 125.0, so the three agree.
+        if spec_has(address, "power_dissipation_at_reference_ambient"):
+            _, stated = spec(address, "power_dissipation_at_reference_ambient")
+            _, at = spec(address, "power_dissipation_reference_ambient")
+            implied = at + stated * resistance
+            assert abs(implied - limit) < 1.0, (
+                f"{address}: the datasheet allows {stated * 1e3:g} mW at "
+                f"{at:g} degC, which through {resistance:g} degC/W implies a "
+                f"junction limit of {implied:.1f} degC - not the {limit:g} "
+                f"recorded. One of the three figures is off the wrong table."
+            )
         dissipated = current * supply
         junction = ambient + dissipated * resistance
         if junction > limit:

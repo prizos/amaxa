@@ -1,4 +1,15 @@
 {
+  "power_dissipation_at_85c": {
+    "assumes": "",
+    "crop": "260,1250,1400,480",
+    "document": "STMicroelectronics STM32H743xI datasheet, DocID030538 Rev 3 (October 2017), served by LCSC for C114408",
+    "dpi": 200,
+    "page": 98,
+    "read": "2026-09-21",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Table 23: power dissipation at T_A = 85 degC for the suffix 6 version, 915 mW in the LQFP144 row, and the suffix 6 ambient range of -40 to 85 degC at maximum power dissipation. 85 + 0.915 x 43.7 = 125, so ST's own three figures are consistent with the 125 degC junction limit and this is what pins that down.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
   "power_supply_scheme": {
     "assumes": "",
     "crop": "240,240,800,980",
@@ -8,6 +19,17 @@
     "read": "2026-09-19",
     "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
     "shows": "Figure 13, Power supply scheme, with each decoupling value against the pin it belongs to: VDD gets N x 100 nF plus one 4.7 uF where N is the package's VDD pin count, VCAP 2 x 2.2 uF, VDDLDO 4.7 uF, VDDA 100 nF + 1 uF, VREF+ 100 nF + 1 uF, and VDD33USB and VDD50USB 100 nF each",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
+  "thermal_characteristics": {
+    "assumes": "",
+    "crop": "260,700,1400,560",
+    "document": "STMicroelectronics STM32H743xI datasheet, DocID030538 Rev 3 (October 2017), served by LCSC for C114408",
+    "dpi": 200,
+    "page": 223,
+    "read": "2026-09-21",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Section 7.9's equation T_J max = T_A max + (P_D max x theta_JA) and Table 126 beside it, where the LQFP144 20x20 mm 0.5 mm pitch row reads 43.7 degC/W. It is the figure the board's declared ambient is derived from.",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
   }
 }

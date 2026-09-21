@@ -917,6 +917,24 @@ def safety_chain(v3v3, gnd, nets) -> None:
     nets["NRST"] += reset[1]
     nets["PGOOD"] += reset[2]
 
+    # The gate enable's own input, held off.
+    #
+    # This is the one buffer input on the board that nothing defines. The
+    # others are TIM1 and TIM8 channels, driven by their timers in alternate
+    # function; PD7 is a plain GPIO, and a plain GPIO is a floating input
+    # until firmware configures it - which for this pin no firmware path yet
+    # does. A floating CMOS input is not just undefined at the output, it
+    # sits the '541's input stage near mid-rail and draws cross-conduction
+    # current through it. The board already states the rule this follows, a
+    # few hundred lines up: every pin nobody is driving gets a 10 k. The
+    # enable, both relays and every buffered output had one; this did not.
+    #
+    # Down, not up: the far side of the buffer has a pull-down at the
+    # connector, so low is the state that means the gates are off.
+    gate_enable_pull = part(parts.RES_10K_0402, "safety.r_gate_enable_pulldown", "R99")
+    nets["GATE_ENABLE"] += gate_enable_pull[1]
+    gnd += gate_enable_pull[2]
+
     # Both fault lines idle high, so an unfitted power board is not a fault.
     for address, net, ref in (
         ("safety.r_fault1_pullup", "FAULT1_N", "R17"),
@@ -961,9 +979,26 @@ def safety_chain(v3v3, gnd, nets) -> None:
     # in which a trip arriving mid-clear could be missed gets a hundred times
     # smaller rather than larger.
     #
-    # The series 1k is what makes the release safe: when PG5 goes high again
-    # the coupled step would put CLR at 6.3 V, and the resistor holds the
-    # current into the latch's input clamp to 0.2 mA.
+    # **The release needs a clamp, and the latch does not have one.** When PG5
+    # goes high again the capacitor is charged, so the step lands on top of
+    # the rail: 3.3 x (1 + 10/11) = 6.3 V nominal, 6.6 V at the corner. An
+    # earlier version of this comment said the series resistor held the
+    # current into the latch's input clamp to 0.2 mA, and that was wrong in
+    # the way that matters - an LVC input has no clamp to V_CC. Its absolute
+    # maximum is a flat 6.5 V rather than V_CC + 0.5, and I_IK is specified
+    # only for negative inputs; that is exactly what makes the family tolerant
+    # of 5.5 V on a 3.3 V rail. So there was no clamp current to limit, and
+    # the node simply went to 6.3 V and stayed there for the 25 us the RC
+    # takes to come back - past the 5.5 V recommended maximum every time a
+    # trip is cleared, and past the 6.5 V absolute maximum at the rail's high
+    # corner. On the one part standing between the MCU and the gate drivers.
+    #
+    # D13 is the clamp: a Schottky from the clear node to 3V3, both junctions
+    # in parallel. It holds the node at the rail plus a forward drop, about
+    # 3.9 V, and the series 1 k limits what flows into it to 3 mA. It does
+    # nothing on the falling edge, where the node goes *below* the rail. No
+    # arrangement of the two resistors avoids this: the low level needs
+    # R98/R20 < 0.3, which forces the overshoot above 1.77 times the rail.
     clear_series = part(parts.RES_1K_0402, "safety.r_clear_series", "R98")
     clear_couple = part(parts.CAP_4N7_0402, "safety.c_clear", "C245")
     nets["TRIP_CLEAR_N"] += clear_series[1]
@@ -973,6 +1008,13 @@ def safety_chain(v3v3, gnd, nets) -> None:
     clear_pull_up = part(parts.RES_10K_0402, "safety.r_clear_pullup", "R20")
     v3v3 += clear_pull_up[1]
     clear_latch += clear_pull_up[2]
+    clear_clamp = part(parts.SCHOTTKY_DUAL, "safety.d_clear_clamp", "D13")
+    clear_latch += clear_clamp[3]          # the common anode, on the clear node
+    v3v3 += clear_clamp[1]
+    # One junction, not both. Three milliamps is a hundredth of what one of
+    # these carries, and a second cathode on the same net asks the stitching
+    # generator for a second plane via in a corner that has room for one.
+    clear_clamp[2] += NC  # noqa: F821
 
     # Q is high when tripped, which is what the buffers' second enable wants.
     # Q-bar is low when tripped, which is what a break input wants: one output,

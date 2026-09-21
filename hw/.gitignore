@@ -40,3 +40,4 @@ __pycache__/
 # keeps is the cropped figure in <board>/parts/<LIB>/evidence/ and, beside it,
 # the URL and SHA-256 the crop came from.
 /.datasheets/
+.mutate/

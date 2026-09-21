@@ -66,6 +66,13 @@ MCU_H743 = PartSpec(
         # rise, and 125 - 72 is the ambient this board can be declared for.
         "thermal_resistance_junction_ambient": exact(43.7),
         "junction_temperature_max": exact(125.0),
+        # Table 23's own answer for this package, and the reason the 125 degC
+        # above is the right row rather than a number from the absolute
+        # maximums: 85 + 0.915 x 43.7 = 125.0 exactly, so ST's three figures
+        # close on each other. A check asserts that, which is what would catch
+        # reading the junction limit off the wrong table.
+        "power_dissipation_at_reference_ambient": exact(0.915),
+        "power_dissipation_reference_ambient": exact(85.0),
     },
 )
 
@@ -513,6 +520,14 @@ LATCH_DFF = PartSpec(
         "output_current_max": exact(24e-3),
         "input_low_voltage_max": exact(0.8),
         "input_high_voltage_min": exact(2.0),
+        # **An LVC input has no clamp diode to V_CC**, and the two rows below
+        # are how the datasheet says so: the absolute maximum on an input is a
+        # flat 6.5 V rather than V_CC + 0.5, and I_IK is specified only for
+        # V_I < 0. That absence is the point of the family - it is what makes
+        # these inputs tolerant of 5.5 V on a 3.3 V rail - and it means nothing
+        # inside the part limits a positive overshoot. SCES794E 7.1 and 7.3.
+        "input_voltage_max": exact(5.5),            # recommended operating
+        "input_voltage_absolute_max": exact(6.5),
     },
 )
 
@@ -525,7 +540,6 @@ SCHOTTKY_DUAL = PartSpec(
     symbol="Diode:BAT54A", footprint="SOT23:SOT-23", prefix="D",
     manufacturer="LRC", mpn="LBAT54ALT1G", lcsc="C12743", value="BAT54A",
     params={
-        "forward_voltage_max": exact(0.24),          # at 0.1 mA
         "reverse_voltage_max": exact(30.0),
         "forward_current_max": exact(200e-3),
         # Total capacitance, 10 pF maximum at V_R = 1.0 V and 1 MHz. Both
@@ -533,6 +547,20 @@ SCHOTTKY_DUAL = PartSpec(
         # so each package puts twice this on it, and six packages are most of
         # what the comparators have to pull down.
         "total_capacitance": exact(10e-12),
+        # Forward voltage at three currents, all maxima at 25 degC, from the
+        # electrical table. One figure was not enough: the trip bus runs these
+        # at about 0.28 mA rather than the 0.1 mA the single recorded value
+        # came from, and the clamp on the latch's clear runs one at about
+        # 3 mA.
+        "forward_voltage_at_100ua": exact(0.24),
+        "forward_voltage_at_1ma": exact(0.32),
+        "forward_voltage_at_10ma": exact(0.4),
+        # How the drop moves with temperature, read off FIG.1 at 0.1 mA: the
+        # 25 degC curve sits near 0.195 V and the -25 degC curve near 0.285,
+        # which is 1.8 mV per degree of cooling. The board is declared down to
+        # 0 degC, so it is 45 mV the trip bus's low level has to find. See the
+        # figure in SOT23/evidence.
+        "forward_voltage_tempco": exact(-1.8e-3),
         # Reverse current. **Not** the electrical table's 2 uA, which is
         # stated at V_R = 25 V and 25 degC and so describes neither the
         # voltage nor the temperature these see: on the trip bus they sit at

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-from symbols import symbol_pin_names  # noqa: E402
+from symbols import symbol_description, symbol_pin_names  # noqa: E402
 
 BUFFERS = ("safety.buffer1", "safety.buffer2")
 LATCH = "safety.latch"
@@ -220,6 +220,58 @@ def test_the_enable_is_pulled_to_off(design, pad_net, spec):
     assert 1_000 <= value <= 100_000, f"{to_rail[0][0]} is {value:g} ohm"
     assert not [n for _, n in pulls if n == "GND"], (
         "the enable is also pulled down, which is a fight between two resistors"
+    )
+
+
+def test_every_buffer_input_is_held_somewhere_until_something_drives_it(
+    design, pad_net, pin_map
+):
+    """
+    A buffer input that no peripheral drives has a resistor holding it.
+
+    A GPIO comes out of reset as a floating input, and stays one until
+    firmware configures it. On a pin that feeds a '541 that is not merely an
+    undefined output: a floating CMOS input sits the input stage near
+    mid-rail and draws cross-conduction current through it for as long as it
+    floats, which on a pin firmware never configures is for ever.
+
+    Most of these inputs are timer channels - TIM1 and TIM8 drive them in
+    alternate function, and the pin map says which those are - so they are
+    defined as soon as the timer is. `GATE_ENABLE` is the exception: a plain
+    GPIO, on PD7, feeding buffer1's A7. It had nothing. The board states this
+    rule about itself in `safety_chain()`'s own comments - "every pin nobody
+    is driving gets 10 k", listing the enable, both relays and every buffered
+    output - and this is the check that the rule is actually followed rather
+    than described.
+
+    Which pins count as driven is read from the pin map's function column, so
+    moving a signal from a timer channel to a GPIO brings it under the rule.
+    """
+    buffers = [address for address in design["parts"] if address in BUFFERS]
+    assert buffers, "no buffers on this board"
+
+    by_net = {}
+    for (address, pad), net in pad_net.items():
+        by_net.setdefault(net, set()).add(address)
+
+    peripheral = {pin.net_name for pin in pin_map.PINS if pin.signal != "GPIO"}
+
+    floating = []
+    for address in sorted(buffers):
+        inputs = {net for (a, pad), net in pad_net.items()
+                  if a == address and pad in {str(n) for n in range(2, 10)}}
+        for net in sorted(inputs):
+            if net in peripheral:
+                continue                  # a timer drives it
+            held = [other for other in by_net[net]
+                    if design["parts"][other]["symbol"] == "Device:R"]
+            if not held:
+                floating.append(
+                    f"  {net} reaches {address} and is driven by a plain GPIO "
+                    f"with nothing holding it")
+    assert not floating, (
+        "Buffer inputs left floating until firmware happens to configure "
+        "them:\n" + "\n".join(floating)
     )
 
 
@@ -449,6 +501,9 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
     trip, so the pulse is a blind window - but the firmware it replaces held
     the pin down for a millisecond, so the window shrank by a hundred times
     and the direction is the safe one either way.
+
+    The release is the other half and it is in
+    `test_the_clear_does_not_drive_the_latch_past_its_input_rating`.
     """
     latch_clear = pad_net[(LATCH, "6")]
     series = "safety.r_clear_series"
@@ -474,22 +529,133 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
         f"big against the pull-up for the clear to be seen at all."
     )
 
-    tau = (r_s + r_pu) * farads
+    # The *shortest* time constant, which is the corner that hurts: the
+    # smallest series resistor, the smallest pull-up and the smallest
+    # capacitor. Taking the low end of one and the high end of the others,
+    # which this did, is the most favourable corner there is and it was three
+    # lines under a comment claiming the opposite - it reported 11.3 us where
+    # the worst corner gives 9.1.
+    r_s_low, _ = spec(series, "resistance")
+    r_pu_low_again, _ = spec(pullup, "resistance")
+    farads_low, _ = spec(coupling, "capacitance")
+    tau = (r_s_low + r_pu_low_again) * farads_low
+
+    # The clamp hangs on this node too, and what it contributes is its own
+    # junction capacitance in parallel with the coupling capacitor, plus a
+    # reverse leakage that flows *into* the node and so fights the low level
+    # rather than the high one. Both are small - a few picofarads against
+    # nanofarads, a microamp against three hundred - and both are read here
+    # rather than declared and forgotten.
+    clamps = [address for address, part in design["parts"].items()
+              if "diode" in symbol_description(part["symbol"]).lower()
+              and pad_net.get((address, "3")) == latch_clear]
+    leaked = 0.0
+    for address in clamps:
+        _, junction = spec(address, "total_capacitance")
+        anchor, _ = spec(address, "reverse_current_at_75c")
+        doubles, _ = spec(address, "reverse_current_doubling_degrees")
+        _, ambient = spec("environment", "ambient")
+        tau += (r_s_low + r_pu_low_again) * junction
+        leaked += anchor * 2.0 ** ((ambient - 75.0) / doubles)
+    low += leaked * r_s_high            # the leak lifts the low level
+    assert low < v_il, (
+        f"with {leaked * 1e6:.1f} uA of clamp leakage added, {latch_clear} only "
+        f"reaches {low:.2f} V and the latch wants under {v_il:g}"
+    )
     asserted = tau * math.log((rail_low - low) / (rail_low - v_il))
     assert asserted > respond, (
         f"the clear is asserted for {asserted * 1e9:.0f} ns and the latch takes "
         f"{respond * 1e9:g} ns to respond to it"
     )
-    # And it does let go: the node is a valid high again a few time constants
-    # later whatever the pin is doing, which is the property the capacitor was
-    # added for.
+    # It does let go, and how long that takes is worth reporting - but there
+    # is no assertion here, because there was one and it could not fail.
+    # `released > asserted` reduces to ln((V-low)/(V-V_IH)) > ln((V-low)/(V-V_IL)),
+    # which is true for any component values whatever simply because V_IL is
+    # below V_IH. Every value cancelled; the ratio is 4.65 on this part and
+    # would be 4.65 on any board. An assertion that is a restatement of
+    # V_IL < V_IH is not a check, and dressing it in three component values
+    # made it read like one.
     released = tau * math.log((rail_low - low) / (rail_low - v_ih))
-    assert released < float("inf") and released > asserted, (
-        f"the clear reaches a valid high at {released * 1e6:.1f} us"
+    print(f"    clear: {low:.2f} V, asserted {asserted * 1e6:.1f} us, "
+          f"valid high at {released * 1e6:.1f} us")
+
+
+def test_the_clear_does_not_drive_the_latch_past_its_input_rating(
+    design, pad_net, spec, forward_voltage
+):
+    """
+    What the coupled clear does to the latch's input when the pin lets go.
+
+    The capacitor that makes a held pin harmless makes the *release* into a
+    step on top of the rail. By the time firmware raises PG5 the capacitor has
+    charged to nearly the whole rail, so the node goes to
+
+        V x (1 + R_pu / (R_s + R_pu))
+
+    which is 6.3 V nominal and 6.6 V at the corner, and stays there for the
+    tens of microseconds the RC takes to recover.
+
+    **The latch has nothing inside it to stop that.** An LVC input's absolute
+    maximum is a flat 6.5 V rather than V_CC + 0.5, and its clamp current is
+    specified only for negative inputs: there is no diode to V_CC, which is
+    precisely what makes the family tolerant of 5.5 V on a 3.3 V rail. The
+    comment beside this network in `cpu1.py` used to say the series resistor
+    held the current into "the latch's input clamp" to 0.2 mA. There was no
+    clamp and so no current - just the node sitting above its recommended
+    maximum on every fault recovery, on the one part between the MCU and the
+    gate drivers.
+
+    So the board has a clamp now, and this is what says it must: the check
+    looks for a diode with its anode on the clear node and its cathode on a
+    rail, and works the peak out with it or without it. Remove D13 and the
+    unclamped peak fails against the recommended maximum.
+    """
+    node = pad_net[(LATCH, "6")]
+    r_s, _ = spec("safety.r_clear_series", "resistance")
+    _, r_pu = spec("safety.r_clear_pullup", "resistance")
+    _, rail = spec("rail.3v3", "voltage")
+    allowed, _ = spec(LATCH, "input_voltage_max")
+    absolute, _ = spec(LATCH, "input_voltage_absolute_max")
+
+    # Unclamped: the capacitor holds the rail, and the step lands on top of it
+    # attenuated by the divider the two resistors make.
+    bare = rail * (1.0 + r_pu / (r_s + r_pu))
+
+    # A clamp is a diode whose anode is on this node and whose cathode is on a
+    # rail. Read from the netlist, so removing it is what fails.
+    clamps = []
+    for address, part in design["parts"].items():
+        if "diode" not in symbol_description(part["symbol"]).lower():
+            continue
+        pads = {pad: net for (a, pad), net in pad_net.items() if a == address}
+        if pads.get("3") != node:
+            continue
+        held = {net for pad, net in pads.items() if pad in ("1", "2")}
+        if held and all(net.startswith(("3V3", "5V")) for net in held):
+            clamps.append(address)
+
+    if not clamps:
+        peak, how = bare, "with nothing clamping it"
+    else:
+        # Current into the clamp is what the series resistor passes, and the
+        # forward drop at ten milliamps bounds it: the real current is about
+        # three, so the datasheet's 10 mA row is the pessimistic end.
+        # Three milliamps is what the series resistor passes into it.
+        into = (bare - rail) / r_s
+        drop = max(forward_voltage(address, into, 25.0) for address in clamps)
+        peak = rail + drop
+        how = f"clamped to the rail by {', '.join(sorted(clamps))}"
+
+    assert peak <= allowed, (
+        f"releasing the clear puts {node} at {peak:.2f} V {how}, against the "
+        f"{allowed:g} V this part is specified to and a {absolute:g} V absolute "
+        f"maximum. An LVC input has no clamp of its own."
     )
 
 
-def test_the_trip_bus_reaches_a_valid_low_through_its_diodes(design, spec):
+def test_the_trip_bus_reaches_a_valid_low_through_its_diodes(
+    design, spec, forward_voltage
+):
     """
     A fault pulling the bus down through a Schottky still counts as a low.
 
@@ -497,21 +663,44 @@ def test_the_trip_bus_reaches_a_valid_low_through_its_diodes(design, spec):
     to its own low level plus a diode drop, and the latch decides what is low at
     0.8 V. A silicon diode's 0.7 V spends the entire budget before the fault
     output has contributed anything.
+
+    **At the current the bus actually runs them at, and at the temperature the
+    board is declared for.** This used to take the one recorded figure, 0.24 V,
+    which is the datasheet's 0.1 mA row - while the bus's own pull-up sets the
+    current, and the suite computes that current sixty lines away in
+    `test_the_trip_diodes_and_the_latch_are_inside_their_ratings`. It is about
+    0.28 mA, nearly three times the row being read. And the forward drop of a
+    Schottky rises as it cools, by 1.8 mV per degree off FIG.1, so a board
+    declared down to 0 degC finds another 45 mV. The recorded margin was 160 mV
+    and the real one is about half that.
+
+    The current is solved rather than assumed, because it depends on the drop
+    that depends on it: the bus sits at the source's low level plus the drop,
+    and the pull-up carries whatever is left of the rail.
     """
     _, fault_low = spec("header", "fault_output_low")
     threshold, _ = spec(LATCH, "input_low_voltage_max")
+    _, rail = spec("rail.3v3", "voltage")
+    ambient, _ = spec("environment", "ambient")
+    # The smallest pull-up passes the most current, which is the largest drop.
+    resistance, _ = spec("safety.r_trip_pullup", "resistance")
+
     diodes = sorted(
         address for address, part in design["parts"].items()
         if part["symbol"] == "Diode:BAT54A"
     )
     assert diodes, "no diodes on the trip bus"
     for address in diodes:
-        drop, _ = spec(address, "forward_voltage_max")
+        drop = forward_voltage(address, 100e-6, 25.0)
+        for _ in range(20):                 # converges in three
+            current = (rail - (fault_low + drop)) / resistance
+            drop = forward_voltage(address, current, ambient)
         reached = fault_low + drop
         assert reached < threshold, (
-            f"{address}: a source at {fault_low:g} V plus {drop:g} V across the "
-            f"diode leaves the bus at {reached:.2f} V, and the latch calls "
-            f"anything under {threshold:g} V a low"
+            f"{address}: a source at {fault_low:g} V plus {drop:.3f} V across "
+            f"the diode - at the {current * 1e6:.0f} uA the pull-up passes and "
+            f"{ambient:g} degC - leaves the bus at {reached:.3f} V, and the "
+            f"latch calls anything under {threshold:g} V a low"
         )
 
 

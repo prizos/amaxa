@@ -152,3 +152,33 @@ def lengths(build_dir):
     report = build_dir / "lengths.json"
     assert report.is_file(), "no lengths.json; run `make layout` first"
     return json.loads(report.read_text())
+
+
+@pytest.fixture(scope="session")
+def forward_voltage(spec):
+    """
+    A Schottky's forward drop at the current and temperature it is used at.
+
+    The datasheet gives three points - 0.1, 1 and 10 mA - and a family of
+    curves against temperature. One figure was being used for all of it, the
+    0.1 mA row, on a bus that runs these at nearly three times that and on a
+    board declared down to 0 degC. Log-linear between the rows, then the
+    tempco off FIG.1.
+    """
+    import math
+
+    def at(address: str, current: float, ambient: float) -> float:
+        curve = sorted(
+            (amps, spec(address, f"forward_voltage_at_{name}")[1])
+            for amps, name in ((100e-6, "100ua"), (1e-3, "1ma"), (10e-3, "10ma"))
+        )
+        tempco, _ = spec(address, "forward_voltage_tempco")
+        current = min(max(current, curve[0][0]), curve[-1][0])
+        drop = curve[-1][1]
+        for (i0, v0), (i1, v1) in zip(curve, curve[1:]):
+            if current <= i1:
+                drop = v0 + (v1 - v0) * math.log10(current / i0) / math.log10(i1 / i0)
+                break
+        return drop + tempco * (ambient - 25.0)
+
+    return at

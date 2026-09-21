@@ -462,7 +462,9 @@ def test_the_analog_supply_is_decoupled_where_it_leaves(design, pad_net, spec):
     )
 
 
-def test_a_comparator_pulls_the_trip_bus_to_a_valid_low(design, pad_net, comparators, spec):
+def test_a_comparator_pulls_the_trip_bus_to_a_valid_low(
+    design, pad_net, comparators, spec, forward_voltage
+):
     """
     What the latch sees when a comparator asserts, through the diode between them.
 
@@ -477,9 +479,19 @@ def test_a_comparator_pulls_the_trip_bus_to_a_valid_low(design, pad_net, compara
         if part["symbol"] == "Diode:BAT54A" and pad_net.get((address, "3")) == BUS
     )
     assert diodes, "no diodes between the comparators and the trip bus"
-    drop = max(spec(address, "forward_voltage_max")[0] for address in diodes)
+    # At the current the bus's own pull-up passes and the temperature the
+    # board declares, not at the datasheet's 0.1 mA row - the same correction
+    # `test_the_trip_bus_reaches_a_valid_low_through_its_diodes` needed, and
+    # the same shared interpolation.
+    _, rail = spec("rail.3v3", "voltage")
+    ambient, _ = spec("environment", "ambient")
+    resistance, _ = spec("safety.r_trip_pullup", "resistance")
     for address in sorted(comparators):
         swing, _ = spec(address, "output_swing_from_rail")
+        drop = max(forward_voltage(diode, 100e-6, 25.0) for diode in diodes)
+        for _ in range(20):
+            current = (rail - (swing + drop)) / resistance
+            drop = max(forward_voltage(diode, current, ambient) for diode in diodes)
         reached = swing + drop
         assert reached < threshold, (
             f"{address} asserting leaves the bus at {reached:.2f} V against a "

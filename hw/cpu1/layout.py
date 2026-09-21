@@ -1021,7 +1021,17 @@ def _safety() -> None:
     PLACEMENT["safety.r_clear_pullup"] = (21.0, 13.6, 0)
     PLACEMENT["safety.r_clear_series"] = (15.5, SAFETY_STEP_END, 0)
     PLACEMENT["safety.c_clear"] = (17.5, SAFETY_STEP_END, 0)
-    for address in ("safety.r_clear_series", "safety.c_clear"):
+    # The clamp sits on the lane itself, its anode a pad's length below the
+    # track it clamps and its two cathodes facing the open ground to the
+    # north. Beside the latch would be nearer the thing it protects, but the
+    # strip between here and there is where the PWM enable crosses on the
+    # diagonal, and there is no room for a SOT-23 on either side of it.
+    PLACEMENT["safety.d_clear_clamp"] = (25.5, 13.0, 180)
+    # The gate enable's pull-down, in the clear space west of buffer1 where
+    # that signal already passes on its way to A7.
+    PLACEMENT["safety.r_gate_enable_pulldown"] = (22.5, 21.5, 180)
+    for address in ("safety.r_clear_series", "safety.c_clear",
+                    "safety.d_clear_clamp", "safety.r_gate_enable_pulldown"):
         LABELS[address] = (0.0, -1.3)
     PLACEMENT["safety.r_enable_pullup"] = (18.0, 11.3, 0)
     # The two that make an open latch output read as tripped. Each sits on the
@@ -2379,6 +2389,19 @@ def _safety_signals() -> None:
         (B, [(12.7, 1.1), under]),
         (F, [under, (20.0, -0.65), "safety.buffer2:1"]),
     ])
+
+    # The clamp's anode joins the clear node where it surfaces beside the
+    # latch, and the gate enable's pull-down hangs off the via that signal
+    # already comes up through.
+    path("TRIP_CLEAR_LATCH_N", _width_for("TRIP_CLEAR_LATCH_N", SIGNAL), [
+        # Under the PWM enable's diagonal rather than across it: the clamp
+        # stands south of that crossing and the node it clamps runs north of
+        # it, and on this layer there is no way between the two.
+        (F, ["safety.d_clear_clamp:3", (24.56, 12.6)]),
+        (B, [(24.56, 12.6), (24.56, 15.5)]),
+    ])
+    ROUTES.append(("GATE_ENABLE", _width_for("GATE_ENABLE", SIGNAL), F,
+                   ["safety.r_gate_enable_pulldown:1", (24.3, 20.5)]))
 
     # And each pull-up hangs off its own lane by the length of one pad.
     for address, lane in (("safety.r_clear_pullup", SAFETY_STEP_END),
