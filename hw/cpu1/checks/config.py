@@ -99,10 +99,38 @@ BLOCKING: dict[str, str] = {
         "clamps - and until M6 is drawn against a real number rather than a "
         "reserved fraction, the tap filter has no time to spend."
     ),
+    "the comparator taps share a node with the ADC filter, so a fast edge "
+    "reaches them 17 to 29 per cent low": (
+        "The taps are on the unfiltered side of each input network and the "
+        "design says so repeatedly - 'ahead of everything, so it is fast'. "
+        "Being on the unfiltered side of a series resistor is not the same as "
+        "being unfiltered: the capacitor is a shunt branch on the *same node*, "
+        "and the power board drives that node through up to the 2 ohm "
+        "`header.source_impedance` promises. That makes the tap a lead-lag "
+        "network - unity at DC, so nothing static notices, and R/(Rs+R) to a "
+        "step.\n\n"
+        "9.9/(2+9.9) = 0.832, so a fast fault edge arrives 17 % low and the "
+        "effective trip point sits 20 % *above* where the DAC set it, for the "
+        "131 ns the node takes to recover. The trip budget is 50 ns, so the "
+        "comparator decides deep inside that window, and "
+        "`trip.threshold_tolerance` is 12 %. FAST4 - the DC-link "
+        "over-voltage channel - is worst precisely because it was given a "
+        "second independent network for redundancy: two 10 ohm branches in "
+        "parallel are 4.95, which is 29 % low and a 40 % error over 153 ns.\n\n"
+        "No value fixes it. The 10 ohm and the 10 nF are jointly fixed by the "
+        "converter's charge injection and the 1-2 MHz corner; 100 ohm with "
+        "1 nF holds the same corner and brings the error to 2 %, but a 1 nF "
+        "reservoir against the converter's own 4 pF sampling capacitor leaves "
+        "1.5 LSB in the 236 ns window where half of one is allowed. Isolating "
+        "the tap properly needs a buffer, or the comparator thresholds need to "
+        "be specified dynamically rather than at DC. Either is a decision.\n\n"
+        "`test_the_filter_does_not_load_the_tap_it_sits_beside` does the "
+        "arithmetic and prints it on every run."
+    ),
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 195
+EXPECTED_CHECKS = 196
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {

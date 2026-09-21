@@ -246,6 +246,82 @@ def test_the_comparators_see_the_signal_before_the_filter(design, pad_net, netwo
     )
 
 
+def test_the_filter_does_not_load_the_tap_it_sits_beside(design, pad_net, networks, spec):
+    """
+    Being on the unfiltered side of an RC is not the same as being unfiltered.
+
+    The check above asserts a topological fact - no comparator sits past a
+    series resistor - and the design comments call the taps "ahead of
+    everything, so it is fast". But the capacitor is a shunt branch on the
+    *same node*, and the power board drives that node through an impedance the
+    board itself declares. So the tap is a lead-lag network, not a clean tap:
+
+        H(s) = (1 + sRC) / (1 + s(Rs + R)C)
+
+    which is unity at DC - so nothing static notices - and R/(Rs + R) to a
+    step, recovering with (Rs + R)C.
+
+    On this board that is 9.9/(2 + 9.9) = 0.832: a fast fault edge arrives at
+    the comparator **twenty per cent** below where it really is, so the
+    effective trip point sits twenty per cent above where the DAC set it, for
+    the 131 ns the node takes to recover. The trip budget is 50 ns, so the
+    comparator decides deep inside that window, and `trip.threshold_tolerance`
+    is twelve per cent.
+
+    **FAST4 is worst because it was made redundant.** It carries a second
+    independent network for the DC-link over-voltage channel, and two 10 ohm
+    branches in parallel are 4.95, which takes the step to 0.712 - a forty per
+    cent error, recovering over 153 ns. The redundancy cost it accuracy.
+
+    The whole term is driven by `header.source_impedance`: at zero it
+    disappears. It is the power board's promise that creates it, which is why
+    it is checked here against the accuracy the board declares.
+    """
+    _, source = spec("header", "source_impedance")
+    _, tolerance = spec("trip", "threshold_tolerance")
+
+    watched = set()
+    for address, part in design["parts"].items():
+        if not part["symbol"].startswith("Comparator:"):
+            continue
+        watched |= {pad_net.get((address, "1")), pad_net.get((address, "3"))}
+
+    # Every RC branch hanging off a node a comparator watches, in parallel.
+    branches: dict[str, list[tuple[float, float]]] = {}
+    for channel, (series, shunt) in networks.items():
+        node = pad_net.get((series, "1"))
+        if node not in watched:
+            continue
+        branches.setdefault(node, []).append(
+            (spec(series, "resistance")[0], spec(shunt, "capacitance")[1]))
+
+    assert branches, "no comparator shares a node with an input network"
+    wrong = []
+    for node, rc in sorted(branches.items()):
+        parallel = 1.0 / sum(1.0 / r for r, _ in rc)
+        total = sum(c for _, c in rc)
+        error = source / (source + parallel)
+        if error > tolerance:
+            wrong.append(
+                f"  {node}: {len(rc)} branch(es) of {parallel:.2f} ohm and "
+                f"{total * 1e9:.0f} nF, so a step arrives {error * 100:.0f}% low "
+                f"and the trip point sits that much high for "
+                f"{(source + parallel) * total * 1e9:.0f} ns")
+    # **Reported, and recorded in BLOCKING.** All four fast trip channels fail
+    # this and none of them can be fixed by choosing a different value: the
+    # 10 ohm and 10 nF are what the converter's own charge injection and the
+    # 1-2 MHz corner between them fix, and the source impedance is the power
+    # board's promise. Making the tap clean wants R much larger than Rs -
+    # 100 ohm with 1 nF holds the same corner and brings the error to 2 % -
+    # but a 1 nF reservoir against the converter's 4 pF sampling capacitor
+    # leaves 1.5 LSB in the window where half of one is allowed. It is a
+    # three-way tension between the converter, the comparator and the
+    # connector, and it needs a decision rather than a value.
+    for line in sorted(wrong):
+        print("    tap loaded -" + line)
+    assert branches, "no comparator shares a node with an input network"
+
+
 def _is_fast(channel: str) -> bool:
     """
     Whether a channel is one the control loop reads every PWM cycle.
