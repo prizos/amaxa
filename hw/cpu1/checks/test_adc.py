@@ -130,13 +130,16 @@ def test_the_slow_channels_roll_off_much_lower(spec, networks, pad_net):
     A temperature that settles in a millisecond is still a thousand times faster
     than the thing it measures, and every decade of corner is a decade of
     rejection of whatever the power stage is radiating.
+
+    The two board-ID channels used to be counted here and are not any more:
+    see `test_a_board_id_strap_settles_before_anything_reads_it`.
     """
     low, high = spec("adc", "slow_corner")
-    _, source = spec("header", "source_impedance")
     outside = []
     for channel, (series, shunt) in sorted(networks.items()):
         if _band_of(channel) != "slow":
             continue
+        _, source = spec("header", "source_impedance")
         resistance = spec(series, "resistance")
         capacitance = spec(shunt, "capacitance")
         corner_low = _corner(resistance[1] + source, capacitance[1])
@@ -261,8 +264,10 @@ def _band_of(channel: str) -> str:
     """Which corner band a channel belongs in, or raises if it belongs in none."""
     if _is_fast(channel):
         return "fast"
-    if channel.startswith(("slow", "board_id")):
+    if channel.startswith("slow"):
         return "slow"
+    if channel.startswith("board_id"):
+        return "strap"                    # a DC level, not a bandwidth
     if channel == "dac_test":
         return "neither"                  # an output, and the only one
     raise AssertionError(
@@ -326,4 +331,50 @@ def test_no_analog_input_may_be_presented_more_than_its_pin_allows(
     # about voltage ratings.
     assert any(_band_of(channel) == "fast" for channel in networks), (
         "no fast channel found, and this check is about them"
+    )
+
+
+def test_a_board_id_strap_settles_before_anything_reads_it(spec, networks):
+    """
+    The ID straps are a DC level, and what they owe is a settling time.
+
+    These two channels were counted as slow ones and held to the slow band's
+    corner, with the same two-ohm source impedance as every other input on the
+    connector. Both halves of that were wrong. The pin map specifies them as
+    "resistor divider on the power board", and a divider cannot present two
+    ohms without drawing hundreds of milliamps - so the board was asking the
+    power board for something the same repository had already told it not to
+    build, and computing a 1.45 kHz corner for a network whose real one is
+    nearer 130 Hz.
+
+    Nothing was harmed, because a board-ID strap does not have a bandwidth
+    requirement. It has a deadline: firmware reads it once at start-up and it
+    has to be right by then. So that is what is asserted, at the impedance a
+    strap divider really presents, and to the resolution the converter can
+    tell apart.
+    """
+    _, budget = spec("adc", "strap_settling")
+    _, source = spec("header", "strap_impedance")
+    bits, _ = spec("adc", "resolution_bits")
+    _, error = spec("adc", "settling_error")
+
+    # Settle to within the error the board allows, expressed in counts.
+    counts = 2.0 ** bits
+    turns = math.log(counts / error)
+
+    slow = []
+    for channel, (series, shunt) in sorted(networks.items()):
+        if _band_of(channel) != "strap":
+            continue
+        resistance = spec(series, "resistance")[1] + source
+        capacitance = spec(shunt, "capacitance")[1]
+        settles = resistance * capacitance * turns
+        if settles > budget:
+            slow.append(
+                f"  {channel}: {resistance / 1e3:.1f} k into "
+                f"{capacitance * 1e9:.0f} nF takes {settles * 1e3:.1f} ms to "
+                f"settle within {error:g} of a count")
+    assert not slow, (
+        f"Board-ID straps that have not settled {budget * 1e3:g} ms after "
+        f"power-up:\n" + "\n".join(slow)
     )

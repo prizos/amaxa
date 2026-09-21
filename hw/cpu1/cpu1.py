@@ -275,6 +275,13 @@ INTENT: dict[str, tuple[float, float]] = {
     "adc.sampling_time": (236e-9, 458e-9),
     "adc.resolution_bits": (12.0, 12.0),
     "adc.settling_error": (0.0, 0.5),
+    # How long a board-ID strap may take to settle. It is not a corner, which
+    # is why these two channels sit outside the slow band: a strap is a DC
+    # level read once at start-up, and the only thing it has to do is be right
+    # by the time firmware looks. Fifty milliseconds is invisible against a
+    # power-up, and it is two hundred times the ten milliseconds the network
+    # as built actually takes.
+    "adc.strap_settling": (0.0, 50e-3),
     # What the power board must drive these pins from: an op-amp output, which
     # is what a current sensor's output stage is. The filter's corner depends on
     # this as much as on its own resistor - a sensor with a hundred ohms of
@@ -282,6 +289,15 @@ INTENT: dict[str, tuple[float, float]] = {
     # changing - so it is an interface promise rather than an assumption, and
     # every corner and settling figure here is worked with it included.
     "header.source_impedance": (0.0, 2.0),
+    # The board-ID pins are the exception, and the pin map says so in as many
+    # words: "resistor divider on the power board". A divider cannot present
+    # two ohms without drawing hundreds of milliamps, so holding those two
+    # channels to the figure above was asking the power board for something
+    # the same repository had already told it not to build. A strap divider
+    # that loads 3V3 at a fraction of a milliamp is several kilohms, and this
+    # is the band that admits one - comfortably inside the MCU's own 50 k
+    # ceiling on what an ADC input may look back into.
+    "header.strap_impedance": (0.0, 10e3),
     # What a terminated bus must present between its two wires, at each end.
     # ISO 11898 and TIA-485 both ask for the cable's characteristic impedance,
     # which for the twisted pair either of them runs on is 120 ohm nominal; the

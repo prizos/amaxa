@@ -740,6 +740,14 @@ CAN_TRANSCEIVER = PartSpec(
         "loop_delay_max": exact(210e-9),
         "bus_fault_voltage": exact(58.0),
         "data_rate_max": exact(8e6),
+        # Dominant differential output, 1.4 to 3.3 V into 45 to 70 ohm. The
+        # maximum is what a termination has to survive while the driver is
+        # dominant, and nothing was computing that - only the bus-fault case,
+        # which the open jumper excuses.
+        # (The part also times out between 1.2 and 4 ms if held dominant,
+        # which bounds a stuck-dominant fault but not normal traffic, so it is
+        # not a figure anything here computes with.)
+        "differential_output_max": exact(3.3),
         # Section 6.3, and read off the table in SOIC8/evidence. This one is
         # qualified to SAE J2962-2 per ISO 10650 and not to IEC 61000-4-2,
         # which the document never quotes: the discharge is applied while the
@@ -765,6 +773,10 @@ RS485_TRANSCEIVER = PartSpec(
         "supply_voltage": between(3.0, 5.5),
         "bus_fault_voltage": exact(18.0),
         "data_rate_max": exact(50e6),
+        # Driver differential output magnitude, 1.5 to 3.5 V into 54 ohm.
+        # Unlike CAN there is no timeout: a half-duplex driver holds the line
+        # for as long as DE is asserted.
+        "differential_output_max": exact(3.5),
         # Section 7.3, "ESD Ratings [IEC]", on the bus pins. TI's own summary
         # says this is what removes the need for external protection on the
         # bus, and at 18 kV contact it is more than twice what the connector
