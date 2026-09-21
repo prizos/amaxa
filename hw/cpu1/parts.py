@@ -124,6 +124,15 @@ RES_1K_0402 = PartSpec(
     **_R0402, mpn="0402WGF1001TCE", lcsc="C11702", value="1k",
     params={"resistance": pm(1_000, 0.01), "max_power": exact(0.0625)},
 )
+# The gate lines' pull-downs, and the reason they are not 10 k: when the trip
+# puts the buffers into high impedance, this resistor is the only thing
+# discharging the line, and at 10 k that took 59 ns against a 50 ns budget. The
+# floor is the buffer's own limit - eight outputs on one package at 3.465 V may
+# not exceed half of its 50 mA total - which puts it at 1.11 k.
+RES_1K2_0402 = PartSpec(
+    **_R0402, mpn="0402WGF1201TCE", lcsc="C25862", value="1k2",
+    params={"resistance": pm(1_200, 0.01), "max_power": exact(0.0625)},
+)
 
 # Between 3V3 and VDDA: 600 ohm at 100 MHz keeps digital noise off the analog
 # supply, and 0.9 ohm DC barely moves VDDA at the ADCs' few milliamps.
@@ -366,6 +375,10 @@ VREF_3V0 = PartSpec(
         "dropout_at_20ma": exact(200e-3),
         "dropout_at_25ma": exact(300e-3),
         "output_current_max": exact(25e-3),
+        # 50 uA maximum, from the features list. It was hard-coded in the
+        # check that uses it, which is a datasheet figure living somewhere
+        # nothing else can see.
+        "quiescent_current_max": exact(50e-6),
         "supply_bypass": exact(0.47e-6),
         "temperature_drift": exact(75e-6),
     },

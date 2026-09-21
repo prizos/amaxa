@@ -274,6 +274,15 @@ INTENT: dict[str, tuple[float, float]] = {
     # declaring this is that the decision now has to be made rather than
     # discovered.
     "environment.ambient": (0.0, 45.0),
+    # What the power board may hang on one gate line, at the connector. It
+    # matters because of what happens at a trip: the buffers go to high
+    # impedance and the line is then discharged by its pull-down alone, so
+    # whatever the far side presents is in the trip budget. This board's own
+    # copper is about 4 pF per line. Ten is the far side's share: this board is
+    # soldered onto the power board, so there is no cable - a gate driver's
+    # input pin and a short track on the other side of the header fit inside
+    # it, and anything that needs a flying lead does not.
+    "header.gate_line_capacitance": (0.0, 10e-12),
     # Where each kind of channel rolls off. The fast ones carry what the control
     # loop reads every PWM cycle: low enough to stop the switching node aliasing
     # into the measurement, high enough that the measurement is of now.
@@ -290,8 +299,10 @@ INTENT: dict[str, tuple[float, float]] = {
     # is why these two channels sit outside the slow band: a strap is a DC
     # level read once at start-up, and the only thing it has to do is be right
     # by the time firmware looks. Fifty milliseconds is invisible against a
-    # power-up, and it is two hundred times the ten milliseconds the network
-    # as built actually takes.
+    # power-up. The network as built takes 10.9 ms, so the band is a factor of
+    # 4.6 above it - not the two hundred an earlier version of this comment
+    # claimed, which made the margin read as uncritical when it is within a
+    # factor of five.
     "adc.strap_settling": (0.0, 50e-3),
     # What the power board must drive these pins from: an op-amp output, which
     # is what a current sensor's output stage is. The filter's corner depends on
@@ -397,14 +408,6 @@ INTENT: dict[str, tuple[float, float]] = {
     # receiver equalises far worse - it is how much of the signal is allowed to
     # become common mode, which is what leaves on the cable.
     "ethernet.rise_time": (3e-9, 5e-9),
-    # How much of an edge the parts of a pair that are *not* a pair may spend.
-    # A pair fans out of the package, spreads to the connector's pads and, on
-    # this board, sends one half under the other to swap them over; none of
-    # that is coupled, and each stretch of it is two single tracks presenting
-    # about twice the differential impedance. What decides whether that
-    # matters is how long it is against the edge travelling through it, and a
-    # tenth is the same share the USB pair's protection is held to.
-    "ethernet.uncoupled_edge_share": (0.0, 0.10),
     # And how much of each half has to be beside its partner at all.
     #
     # The share above is the physics - a discontinuity much shorter than the
@@ -1133,8 +1136,23 @@ def safety_chain(v3v3, gnd, nets) -> None:
     # Every buffered output holds itself low when the buffer is not driving it.
     # This is the whole point of the series resistor being before it: the
     # pull-down is at the connector, where a gate driver reads it.
+    #
+    # **1.2 k, not 10 k, and the reason is the trip budget.** These were sized
+    # for the static job - "an unfitted board is not a command" - where any
+    # value that beats leakage does. They have a second job nobody had costed:
+    # when a trip puts the buffers into high impedance, this resistor is the
+    # only thing discharging the gate line, and the budget's own words are
+    # "how long a half bridge survives a shoot-through", which is not the same
+    # instant as the buffer letting go. At 10 k, with the copper measured off
+    # the routed board, the worst line took 59 ns to reach a valid low - more
+    # than the whole 50 ns budget, on top of the 25 ns the chain already
+    # spends getting there.
+    #
+    # The floor is the buffer's own rating: eight of these on one package at
+    # 3.465 V is 23.1 mA against half of its 50 mA total. 1.2 k is the nearest
+    # value above that floor, and it brings the discharge to under 7 ns.
     for name, net in buffered.items():
-        pull_down = part(parts.RES_10K_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
+        pull_down = part(parts.RES_1K2_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
         reference += 1
         net += pull_down[1]
         gnd += pull_down[2]

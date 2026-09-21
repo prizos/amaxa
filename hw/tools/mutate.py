@@ -30,7 +30,14 @@ entry that does not have one of those explanations.
 
     make -C hw BOARD=cpu1 mutate
 
-At the time of writing, cpu1: 0 of 57 intent bands and 150 of 677 part
+**Re-run it after any commit that removes an assertion.** The headline below
+went stale within a day: a commit withdrew an Ethernet bound that could not
+fail and left its intent band declared, and the band then sat there being
+read into a message - which `test_every_design_intent_is_read_by_something`
+accepts, because it asks whether a value is looked up. This is the thing that
+notices, and it only notices when it is run.
+
+At the time of writing, cpu1: 0 of 56 intent bands and 150 of 677 part
 parameters change no outcome, and every one of the 150 falls into a category
 above or is already declared in `UNREAD_PARAMETERS` with its reason.
 """

@@ -524,7 +524,13 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
     much shorter than the distance an edge travels while it rises is
     electrically short. At 100BASE-TX's 3 ns these pairs' uncoupled stretches
     are about three per cent of one, against the tenth `ethernet.rise_time`
-    and `ethernet.uncoupled_edge_share` together allow.
+    and `ethernet.rise_time` together imply. There is no band for it any more:
+    `ethernet.uncoupled_edge_share` outlived its assertion by two commits,
+    still declared and still carrying fourteen lines of justification, because
+    the guard that hunts unread intent asks whether a value is *looked up* and
+    this one still was - into a message. `tools/mutate.py` is what finds that,
+    and it did: a band nothing notices when you set it to zero or to a million
+    has no check behind it.
 
     The pairs are 51 % and 40 % coupled on their longer halves, and that is as
     good as this placement gets: lengthening the parallel run collides with
@@ -549,7 +555,6 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
     this quantity that is tight.
     """
     rise, _ = spec("ethernet", "rise_time")          # the fastest, so the worst
-    _, share = spec("ethernet", "uncoupled_edge_share")
     wanted, _ = spec("ethernet", "coupled_fraction")
 
     loose = []
@@ -567,8 +572,7 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
             # the limit. Nothing can: it wants 24.3 mm running alone and
             # three of the four halves are shorter than that in total.
             print(f"    {net}: {alone:.2f} mm alone of {total:.2f}, round trip "
-                  f"{2 * alone / edge * 100:.1f}% of a {rise * 1e9:g} ns edge "
-                  f"({share * 100:g}% allowed)")
+                  f"{2 * alone / edge * 100:.1f}% of a {rise * 1e9:g} ns edge")
             if coupled / total < wanted:
                 loose.append(
                     f"  {net}: only {coupled / total * 100:.1f}% of its "

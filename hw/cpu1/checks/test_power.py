@@ -765,6 +765,20 @@ def test_the_reference_is_below_the_analog_supply_it_sits_under(spec):
     )
 
 
+def _current_at_dropout(curve, available: float) -> float:
+    """The load at which a reference's dropout uses up the headroom it has."""
+    if available <= 0.0:
+        return 0.0
+    if available >= curve[-1][1]:
+        return curve[-1][0]
+    if available <= curve[0][1]:
+        return curve[0][0] * available / curve[0][1]
+    for (i0, v0), (i1, v1) in zip(curve, curve[1:]):
+        if available <= v1:
+            return i0 + (i1 - i0) * (available - v0) / (v1 - v0)
+    return curve[-1][0]
+
+
 def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, pad_net, spec):
     """
     Its supply is inside the part's range, it clears its own dropout, its
@@ -843,26 +857,26 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, pad
         for amps, name in ((5e-3, "5ma"), (10e-3, "10ma"),
                            (20e-3, "20ma"), (25e-3, "25ma"))
     )
-    drawn = promised + 50e-6                      # the part's own quiescent
-    loaded = curve[-1][1]
-    if drawn <= curve[0][0]:
-        loaded = curve[0][1] * drawn / curve[0][0]
-    else:
-        for (i0, v0), (i1, v1) in zip(curve, curve[1:]):
-            if drawn <= i1:
-                loaded = v0 + (v1 - v0) * (drawn - i0) / (i1 - i0)
-                break
-    assert rail_low >= output_high + loaded, (
-        f"the board promises the power board {promised * 1e3:g} mA out of "
-        f"VREF+, which drops the reference {loaded * 1e3:.0f} mV - and the "
-        f"{supply} rail falls to {rail_low:g} V against an output of "
-        f"{output_high:g} V, which leaves {(rail_low - output_high) * 1e3:.0f} mV"
-    )
-
+    quiescent, _ = spec(REFERENCE, "quiescent_current_max")
+    drawn = promised + quiescent
+    # **One assertion against whichever of the two actually binds.** Asserting
+    # the part's 25 mA separately was theatre: the headroom runs out at
+    # 12.9 mA, so the capability assertion needed `promised > 25 mA` and could
+    # never be reached. Taking the smaller of the two and naming it means both
+    # figures are read, the binding one is reported, and the check still works
+    # on a board where the rail has room to spare and the part does not.
     _, capable = spec(REFERENCE, "output_current_max")
-    assert promised <= capable, (
-        f"the board promises {promised * 1e3:g} mA out of VREF+ and the part "
-        f"can supply {capable * 1e3:g}"
+    headroom_limit = _current_at_dropout(curve, rail_low - output_high)
+    allowed, why = min(
+        (capable, f"{REFERENCE} can supply {capable * 1e3:g} mA"),
+        (headroom_limit,
+         f"the {supply} rail leaves {(rail_low - output_high) * 1e3:.0f} mV of "
+         f"headroom, which this part's dropout curve reaches at "
+         f"{headroom_limit * 1e3:.1f} mA"),
+    )
+    assert drawn <= allowed, (
+        f"the board promises the power board {promised * 1e3:g} mA out of "
+        f"VREF+, plus {50e-6 * 1e6:g} uA of quiescent, and {why}"
     )
     wanted, _ = spec(REFERENCE, "supply_bypass")
     # The reference's own, not the rail's: same scope error as the converters'
