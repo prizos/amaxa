@@ -746,15 +746,38 @@ def power_block(v3v3, gnd, nets) -> None:
     v5 += c_ramp[2]
     fb5 += c_couple[1]
 
-    # Power good, pulled up to the rail it reports on the far side of, and
-    # brought to a pad. No MCU pin: the pin map is fixed and this is a bring-up
-    # signal, not one firmware acts on.
+    # Power good, pulled up to the rail it reports on the far side of, brought
+    # to a pad, and - this is the part that matters - into the trip latch.
+    #
+    # Without it the only power-related thing that presets the latch is NRST,
+    # which is the MCU deciding it has browned out, and on the way down that
+    # is the *last* event, not the first. When the input dips below the
+    # LM5164's UVLO the 5 V rail decays; below about 4 V the 3V3 buck stops
+    # switching too, and 3V3 then falls on 44 uF into a 770 mA load at about
+    # 17.5 V/ms - 3.3 V to 1.7 V in ninety microseconds. Through that window
+    # the MCU is still executing (V_DD min 1.62 V), the '541 buffers are still
+    # driving (1.65 V) and the latch is still latching (1.65 V), but the
+    # threshold DAC and all seven comparators are below their specified
+    # minimum supply of 2.7 V. Every trip threshold and every comparator
+    # output is undefined while PWM is still leaving the board, for about one
+    # and a half PWM periods.
+    #
+    # PGOOD is open drain, already the right polarity, and asserts at the
+    # *regulation* threshold - milliseconds before the rail collapses rather
+    # than ninety microseconds after. The second diode of D7 was sitting
+    # unused with its anode already on TRIP_SET_N. One track, no BOM change,
+    # and it presets on the way up as well, which is what you want.
+    #
+    # No MCU pin: the pin map is fixed and this is a bring-up signal as well,
+    # not one firmware acts on.
     # 49.9k and not 10k: the datasheet's range starts at 10 k, and a 10 k part
     # at 1 % starts below it. Higher is better here anyway - the pin's own
     # pull-down is 30 ohm, so the low level is microvolts either way.
     r_pgood = part(parts.RES_49K9_0402, "buck5.r_pgood", "R13")
     v3v3 += r_pgood[2]
-    Net("PGOOD").connect(r_pgood[1], buck5["PGOOD"], part(parts.TEST_PAD, "tp_pgood", "TP7")[1])
+    nets["PGOOD"] = Net("PGOOD")
+    nets["PGOOD"].connect(r_pgood[1], buck5["PGOOD"],
+                          part(parts.TEST_PAD, "tp_pgood", "TP7")[1])
     v5 += part(parts.TEST_PAD, "tp_5v", "TP8")[1]
 
     # --- 3V3 -------------------------------------------------------------------
@@ -846,10 +869,13 @@ def safety_chain(v3v3, gnd, nets) -> None:
     trip_set += faults[3]
     nets["FAULT1_N"] += faults[1]
     nets["FAULT2_N"] += faults[2]
+    # D7's two cathodes are the two ways a supply says the board is not fit to
+    # drive: NRST is the MCU's own brown-out, PGOOD is the 5 V rail's. Either
+    # one low pulls the bus down through the common anode and presets.
     reset = part(parts.SCHOTTKY_DUAL, "safety.d_reset", "D7")
     trip_set += reset[3]
     nets["NRST"] += reset[1]
-    reset[2] += NC  # noqa: F821 - one diode of the pair is spare
+    nets["PGOOD"] += reset[2]
 
     # Both fault lines idle high, so an unfitted power board is not a fault.
     for address, net, ref in (
@@ -1282,7 +1308,23 @@ def field_buses(v3v3, gnd, nets) -> None:
     # Split termination: two halves with the midpoint bypassed to ground, which
     # is what gives a CAN bus a defined common mode as well as a defined
     # differential impedance. In series with a jumper, so it can be left open.
+    #
+    # **A jumper in each leg.** One jumper, in the CANH leg, is what this had,
+    # and it does not disconnect the termination - it disconnects half of it.
+    # With JP1 open and the board shipped that way, CANH sees nothing while
+    # CANL still carries 60.4 ohm in series with 4.7 nF to ground: the pair is
+    # asymmetrically loaded on every board that is not a cable end, which is
+    # the normal case. A recessive-to-dominant edge on CANL then asks the
+    # transceiver for 4.7 nF x 2 V / 40 ns = 235 mA, far past what it drives,
+    # so it current-limits and that one line's edge stretches to about 130 ns
+    # - 27 % of a 2 Mbit/s FD data bit, turned straight into common mode on a
+    # cable leaving the machine. The RS-485 side next door is built correctly
+    # and the contrast is visible between the two blocks: its jumper breaks
+    # the only path there is.
+    #
+    # Two SJ2 footprints, no new BOM line.
     jumper = part(parts.SOLDER_JUMPER, "can.termination_jumper", "JP1")
+    jumper_low = part(parts.SOLDER_JUMPER, "can.termination_jumper_low", "JP3")
     # R97, not R76: the ADC block hands out references from a running counter
     # and that counter reached 76. Two parts asking for one designator is a
     # designator SKiDL renames, silently, and a board that then carries a
@@ -1293,7 +1335,8 @@ def field_buses(v3v3, gnd, nets) -> None:
     canh += jumper[1]
     Net("CAN_TERM").connect(jumper[2], upper[1])
     Net("CAN_TERM_MID").connect(upper[2], lower[1], split[1])
-    canl += lower[2]
+    Net("CAN_TERM_LOW").connect(lower[2], jumper_low[2])
+    canl += jumper_low[1]
     gnd += split[2]
 
     # --- RS-485 --------------------------------------------------------------
@@ -1505,9 +1548,11 @@ def ethernet(v3v3, gnd, nets) -> None:
     # microseconds, against a pin rated 20. Through 1 k it is 3.3 mA, and the
     # release is still (10 k + 1 k) x 4.7 uF.
     reset_series = part(parts.RES_1K_0402, "eth.r_reset_delay", "R96")
-    # C89, not C81: C68 to C88 are the plane-stitching capacitors, allocated as
-    # a contiguous block, and C81 is one of them.
-    reset_delay = part(parts.CAP_4U7_0603, "eth.c_reset", "C89")
+    # C90, not C81: C68 to C89 are the plane-stitching capacitors, allocated as
+    # a contiguous block, and C81 is one of them. The block grew by one when
+    # power good's crossing to the inner signal layer needed a tie beside it,
+    # which is what took C89 as well.
+    reset_delay = part(parts.CAP_4U7_0603, "eth.c_reset", "C90")
     nets["ETH_PHY_RESET"] += reset_series[1]
     Net("ETH_RESET_RC").connect(reset_series[2], reset_delay[1])
     gnd += reset_delay[2]
@@ -1614,7 +1659,7 @@ def plane_stitching(v3v3, gnd) -> None:
     `test_routing.py` failed, named the layer changes it had stranded, and
     these went where that list said.
     """
-    for index in range(21):
+    for index in range(22):
         cap = part(parts.CAP_100N_0402, f"stitch.{index + 1}", f"C{68 + index}")
         v3v3 += cap[1]
         gnd += cap[2]

@@ -131,9 +131,19 @@ def delay_per_mm(stack, width: float) -> float:
 
 
 def coupled_length(one: list, other: list, width: float, gap: float
-                   ) -> tuple[float, float]:
+                   ) -> tuple[float, float, float]:
     """
-    (how much of `one` runs beside `other`, how long `one` is altogether).
+    (how much of `one` runs beside `other`, how long `one` is altogether, and
+    the longest unbroken stretch of it that runs alone).
+
+    That third number is the one the physics is about. An uncoupled stretch is
+    an impedance discontinuity, and what decides whether a discontinuity
+    matters is its own extent against the rising edge - not the sum of every
+    discontinuity on the route. A pair fans out at the package, crosses over
+    in the middle and spreads again at the connector: three separate
+    discontinuities, and adding them up and comparing the total against one
+    edge length is both wrong and unfailable, because the total is bounded by
+    the route length while the edge is far longer than the board.
 
     "Beside" means on the same layer with no more than `gap` between their
     copper **edges**. The caller passes that distance rather than this file
@@ -152,6 +162,7 @@ def coupled_length(one: list, other: list, width: float, gap: float
     """
     limit = gap + width
     total = coupled = 0.0
+    run = longest = 0.0
     for start, end, _, layer in one:
         length = math.dist(start, end)
         total += length
@@ -168,6 +179,12 @@ def coupled_length(one: list, other: list, width: float, gap: float
                 default=float("inf"))
             if nearest <= limit:
                 coupled += length / steps
-    return coupled, total
+                run = 0.0
+            else:
+                # Segments arrive in the order the router laid them, so a
+                # stretch that spans two of them accumulates across the join.
+                run += length / steps
+                longest = max(longest, run)
+    return coupled, total, longest
 
 

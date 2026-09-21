@@ -531,12 +531,22 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
     the jack's own pads, which was tried. What is left is package and
     connector pitch.
 
-    **Two bounds, and only the second can fail.** The edge one is the physics
-    and on these routes it is slack by a factor of two - a tenth of a 3 ns
-    edge is 48.7 mm against a 24.7 mm route, so a pair with its halves on
-    opposite corners of the board would pass it. The fraction is a ratchet set
-    just under what this placement achieves, and it is what would catch a
-    regression.
+    **Two bounds.** The first is the physics. It used to sum every uncoupled
+    stretch on the route and compare the total against the distance an edge
+    travels, which could not fail for any routing at all: the sum is bounded
+    by the route's own length, 24.7 mm here, while a tenth of a 3 ns edge is
+    48.7 mm. It also asked the wrong question. A pair fans out at the package,
+    crosses over in the middle and spreads again at the jack, and those are
+    three separate discontinuities; what decides whether one matters is its
+    own extent against the edge, not the sum of all of them. So the bound is
+    now on the longest *unbroken* stretch, and on its round trip, because a
+    discontinuity is short when the reflection returns inside the rise. A pair
+    with its halves on opposite corners has one long stretch and fails.
+
+    The second is a ratchet, and is labelled as one: `ethernet.coupled_fraction`
+    is set just under what this placement achieves and is what catches a
+    regression. It is not derived from anything, and it is the only bound on
+    this quantity that is tight.
     """
     rise, _ = spec("ethernet", "rise_time")          # the fastest, so the worst
     _, share = spec("ethernet", "uncoupled_edge_share")
@@ -548,15 +558,17 @@ def test_each_pair_runs_as_a_pair_for_most_of_its_length(
         assert set(tracks) == {f"{pair}_P", f"{pair}_N"}, f"{pair} is not both halves"
         width = pairs.controlled_width(tracks)
         for net, partner in ((f"{pair}_P", f"{pair}_N"), (f"{pair}_N", f"{pair}_P")):
-            coupled, total = pairs.coupled_length(
+            coupled, total, alone = pairs.coupled_length(
                 tracks[net], tracks[partner], width, SEPARATION_IN_HEIGHTS * stack.height)
-            uncoupled = total - coupled
             edge = rise / pairs.delay_per_mm(stack, width)
-            if uncoupled > share * edge:
+            # Round trip: the reflection off the far end of a discontinuity
+            # has to come back while the edge is still rising for it to be
+            # absorbed into it.
+            if 2 * alone > share * edge:
                 loose.append(
-                    f"  {net}: {uncoupled:.2f} mm of {total:.2f} runs alone, "
-                    f"which is {uncoupled / edge * 100:.1f}% of the {edge:.0f} mm "
-                    f"a {rise * 1e9:g} ns edge occupies"
+                    f"  {net}: {alone:.2f} mm of its {total:.2f} runs alone in one "
+                    f"stretch, whose round trip is {2 * alone / edge * 100:.1f}% of "
+                    f"the {edge:.0f} mm a {rise * 1e9:g} ns edge occupies"
                 )
             if coupled / total < wanted:
                 loose.append(

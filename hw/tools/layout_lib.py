@@ -264,16 +264,23 @@ def pad_capacitance(area: float, width: float, stack: Microstrip) -> float:
     """
     Farads between a pad and that same plane, fringing included.
 
-    **It used to be parallel plate**, on the argument that "a pad is wide
-    compared with the dielectric under it, which is exactly the case where the
-    plate term dominates and the edges are a correction". That is wrong on
-    this stackup, and this module's own trace model says so: at the widths
-    these pads are, fringing is **half again to two and a half times** the
-    plate term, not a correction. The pad term is a third to two thirds of
-    every stray this file computes, so the assumption was setting the answer.
-
     A pad is a very wide, very short microstrip, so it is one: capacitance per
     millimetre at the pad's width, times its length.
+
+    **It used to be parallel plate**, and the reason recorded for replacing it
+    was wrong. That reason said fringing is "half again to two and a half
+    times the plate term, not a correction". Evaluated against every pad on
+    cpu1's board file at this stackup, the fringing term is between 7 % and
+    86 % of the plate term with a median of 23 % - a correction, which is what
+    the argument it replaced had said. It reaches half again only on pads
+    around a quarter of a millimetre across, of which this board has none.
+
+    What does justify the change is the other half: one model instead of two.
+    The parallel-plate pad sat beside a trace model that returned *negative*
+    capacitance above 1.343 mm, and a file computing one physical quantity two
+    incompatible ways will eventually be asked which answer it meant. The
+    numbers moved by a quarter, not by an order of magnitude, and the crystal
+    load capacitors this feeds were chosen with this model, not the old one.
     """
     if width <= 0.0:
         raise ValueError(f"a pad cannot be {width:g} mm wide")

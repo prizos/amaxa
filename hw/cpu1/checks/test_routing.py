@@ -138,15 +138,32 @@ def plane_outlines(board_dir) -> dict[str, list]:
 
 
 @pytest.fixture(scope="module")
-def stitchers(pcb_text, design) -> list[tuple[float, float]]:
+def stitchers(pcb_text, design, plane_layers, plane_outlines) -> list[tuple[float, float]]:
     """
     Where the ground plane and the supply planes are tied together.
 
     A capacitor with one pad on ground and the other on a rail. These are the
     only places a return current can cross between the two inner layers, so
     they are what a track changing layer has to stay near.
+
+    **A capacitor only counts where both pours it is meant to join exist
+    underneath it.** Two things were being counted that join nothing. A
+    GND-to-5V capacitor ties ground to the 5 V *island*, which is a pour on an
+    outer layer and nobody's reference - it is not a crossing between planes
+    at all, and there were fifty-nine of those in this list against four that
+    even sat over the island. And a capacitor outside a plane's own outline
+    ties ground to that supply's track, not to its pour. The docstring of
+    `test_every_layer_change_has_a_way_back_for_its_return_current` described
+    both filters; neither was implemented, and all sixty-three capacitors went
+    to the detour measurement.
+
+    So the supply nets here are the ones the stackup says are references, and
+    each capacitor has to sit inside that net's pour.
     """
     pad_net = {tuple(node): net for net, nodes in design["nets"].items() for node in nodes}
+    supplies = {net for net in plane_layers["plane_nets"] if net != GROUND}
+    assert supplies, "no supply plane in this stackup for anything to tie to"
+
     out = []
     for block in pcb_text.split("\n\t(footprint ")[1:]:
         address = re.search(r'\(property "address" "([^"]+)"', block)
@@ -154,8 +171,14 @@ def stitchers(pcb_text, design) -> list[tuple[float, float]]:
         if not (address and at):
             continue
         sides = {pad_net.get((address.group(1), pad)) for pad in ("1", "2")}
-        if GROUND in sides and sides & {"3V3", "5V"}:
-            out.append((float(at.group(1)), float(at.group(2))))
+        joined = sides & supplies
+        if GROUND not in sides or not joined:
+            continue
+        here = (float(at.group(1)), float(at.group(2)))
+        outline = plane_outlines.get(next(iter(joined)))
+        if outline and not _inside(outline, here):
+            continue                      # over that supply's track, not its pour
+        out.append(here)
     assert out, "no capacitor ties the ground plane to a supply plane"
     return out
 
@@ -245,10 +268,11 @@ def test_every_layer_change_has_a_way_back_for_its_return_current(
     the two planes are both ground, any via on the ground net joins them - all
     vias here are through-holes. If one of them is a supply plane, the only
     crossings are the capacitors that tie that supply to ground, and then a
-    capacitor only counts where its own pour actually exists: this board has
-    thirteen GND-to-5V capacitors and only four of them sit over the 5 V
-    island, the other nine tying ground to a 5 V *track*. Counting those nine
-    is how this check used to pass while ten layer changes sat past its limit.
+    capacitor only counts where its own pour actually exists. That filter now
+    lives in the `stitchers` fixture, next to the code that applies it; this
+    docstring described it for two commits while the fixture went on handing
+    over every GND-to-rail capacitor on the board, most of which tie ground to
+    an outer-layer island and cross nothing at all.
 
     This is the check that is easiest to satisfy by accident and hardest to
     notice failing: nothing about a long detour is visible in the layout, in
@@ -338,6 +362,8 @@ def plane_layers(board_dir) -> dict:
             "poured": poured,
             "grounds": {p["layer"] for p in planes if p["net"] == GROUND} - outer,
             "signals": [l for l in order if l in outer or l not in poured],
+            "plane_nets": {p["net"]: p["layer"] for p in planes
+                           if p["layer"] in references},
             "apart": apart,
             "island": next(p["layer"] for p in planes if p["net"] == "5V")}
 
@@ -406,15 +432,36 @@ def test_no_signal_beside_a_supply_island_crosses_its_edge(
     assert island, "this board is meant to have a 5 V island"
 
     planes = plane_layers["planes"]
-    if plane_layers["island"] not in planes:
-        # The islands are on an outer layer, where they are nobody's
-        # reference: a signal beside them returns through the plane under that
-        # layer, which is solid. That is where the 5 V island ended up and the
-        # reason it moved - see the layer table in README.md. Put it back on
-        # an inner layer and the walk below starts again.
-        assert plane_layers["island"] in ("F.Cu", "B.Cu"), (
-            f"the 5 V island is on {plane_layers['island']}, which is neither "
-            f"a reference plane nor an outer layer"
+    on = plane_layers["island"]
+    if on not in planes:
+        # The island is nobody's reference, so nothing crosses its edge and
+        # the walk below has nothing to walk. That is where the 5 V island
+        # ended up and the reason it moved - see the layer table in README.md.
+        #
+        # But "nobody's reference" has to be *measured*, not taken from the
+        # same layout.py that says where the pour is. Comparing one declared
+        # constant against another is how this returned for thirty-seven dead
+        # lines while still being counted as coverage of island-edge
+        # crossings. What makes a poured layer a signal layer rather than a
+        # reference is that signals are routed on it, and the board file says
+        # so: count the track on it that belongs to no plane net.
+        routed = 0.0
+        for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
+            layer = re.search(r'\(layer "([^"]+)"\)', block)
+            net = re.search(r"\(net (\d+)\)", block)
+            start = re.search(r"\(start ([-\d.]+) ([-\d.]+)\)", block)
+            end = re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", block)
+            if not (layer and net and start and end) or layer.group(1) != on:
+                continue
+            if net_names.get(net.group(1), "") in PLANES:
+                continue
+            routed += math.dist(
+                (float(start.group(1)), float(start.group(2))),
+                (float(end.group(1)), float(end.group(2))))
+        assert routed > 0, (
+            f"the 5 V island is on {on}, which carries no signal track: that "
+            f"makes it a reference plane with a split in it, and the walk "
+            f"below is what has to run instead of this branch"
         )
         return
 
@@ -673,7 +720,9 @@ def _backward_crosstalk(length, centres, height, swing, edge, velocity):
     return coefficient * swing * share
 
 
-def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_dir, spec):
+def test_nothing_runs_alongside_a_raw_comparator_input(
+    design, segments, board_dir, spec, layer_stack
+):
     """
     A track that decides a trip keeps its distance from one that does not.
 
@@ -693,8 +742,17 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
     from mcu_pins import load_source
 
     description = load_source(board_dir / "layout.py", "cpu1_layout_separation")
-    height = description.BOARD["stack"][0]["thickness"]
-    wanted = SEPARATION_IN_HEIGHTS * height
+    # Each layer sits its own distance from the plane that references it, and
+    # that distance is the whole of the coupling coefficient's denominator.
+    # This took the outer-layer prepreg for every layer, which is harmless
+    # today - every comparator tap is on F.Cu or B.Cu, both 0.1855 mm - and
+    # wrong by a factor of five the moment one is routed on In2 at 0.43. The
+    # `layer_stack` fixture derives it per layer and already exists; this was
+    # the one place still reading stack[0] as though the board were two-sided.
+    height_of = {layer: micro.height for layer, micro in layer_stack.items()}
+    # The geometric net has to be cast at the widest of them, or a run on a
+    # layer further from its plane is discarded before it is ever measured.
+    wanted = SEPARATION_IN_HEIGHTS * max(height_of.values())
 
     # What decides it is millivolts, not millimetres. Three dielectric heights
     # is the geometry worth *looking* at; whether a particular run matters is
@@ -734,21 +792,57 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
         if all(design["parts"][address]["symbol"].startswith(static) for address, _ in nodes)
     }
 
-    # A net is not a foreign aggressor if it is the *same signal* on the other
-    # side of that channel's own series resistor. FAST4_SENSE runs 12.4 mm
-    # beside FAST4 on the back layer, and FAST4 is what FAST4_SENSE becomes
-    # after its 10 ohm: the two carry one waveform, and coupling between them
-    # is the signal arriving twice, not a disturbance. Read from the netlist,
-    # so it covers every channel rather than naming one.
-    same_signal: dict[str, set[str]] = {}
+    # How fast an aggressor can actually switch, which is not the same question
+    # as how fast the fastest thing on the board switches.
+    #
+    # `trip.aggressor_edge` is 1 ns, the sharpest edge anywhere here, and
+    # feeding it to every net overstates the ones that physically cannot rise
+    # that fast. FAST4 is FAST4_SENSE through a 10 ohm into a 10 nF shunt:
+    # its own network holds it to a 220 ns edge, three orders of magnitude off
+    # the figure the model was giving it, and that is the difference between
+    # 9.2 mV and 42 uV on the 12.4 mm the two run together.
+    #
+    # This replaces an exemption that said the same thing topologically - two
+    # nets bridged by a two-terminal resistor are "the same signal" - and said
+    # it far too broadly. Any resistor counted, so a comparator input with a
+    # pull-up to a switching net would have been exempted outright, and the
+    # arithmetic went on treating the exempted aggressor as the fastest edge
+    # on the board while the exemption claimed it was slow. Now the slowness
+    # is measured, from the same netlist, and only slows what is slow.
+    nets_of: dict[str, list[str]] = {}
+    for net, nodes in design["nets"].items():
+        for address, _ in nodes:
+            nets_of.setdefault(address, []).append(net)
+
+    shunt: dict[str, list[str]] = {}
+    series: dict[str, list[str]] = {}
     for address, part in design["parts"].items():
-        if part["symbol"] != "Device:R":
+        ends = nets_of.get(address, [])
+        if len(ends) != 2:
             continue
-        ends = [net for net, nodes in design["nets"].items()
-                if any(a == address for a, _ in nodes)]
-        if len(ends) == 2:
-            same_signal.setdefault(ends[0], set()).add(ends[1])
-            same_signal.setdefault(ends[1], set()).add(ends[0])
+        for near, far in (ends, ends[::-1]):
+            if part["symbol"] == "Device:C" and far in PLANES:
+                shunt.setdefault(near, []).append(address)
+            elif part["symbol"] == "Device:R":
+                series.setdefault(near, []).append(address)
+
+    # Worked out only for the nets actually asked about, and remembered. The
+    # first version read every capacitor's value while building the table,
+    # which made a dozen supply bypasses look "read" to the check that hunts
+    # declared-but-unread parameters - a value used to answer a question
+    # nobody asked is not read, it is touched.
+    known: dict[str, float] = {}
+
+    def slowest_edge(net: str) -> float:
+        """Seconds: the 10-90 % edge this net's own RC permits."""
+        if net not in known:
+            if net not in series or net not in shunt:
+                known[net] = edge         # nothing slows it; as fast as any
+            else:
+                resistance = min(spec(a, "resistance")[0] for a in series[net])
+                capacitance = sum(spec(a, "capacitance")[1] for a in shunt[net])
+                known[net] = max(edge, 2.2 * resistance * capacitance)
+        return known[net]
 
     close = []
     for a_start, a_end, a_layer, a_net, a_width in segments:
@@ -756,8 +850,7 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
             continue
         for b_start, b_end, b_layer, b_net, b_width in segments:
             if (b_layer != a_layer or b_net == a_net or b_net in PLANES
-                    or b_net in inputs or b_net in quiet
-                    or b_net in same_signal.get(a_net, ())):
+                    or b_net in inputs or b_net in quiet):
                 continue
             # Cheap reject before sampling: two segments whose bounding boxes
             # are further apart than the limit cannot be within it.
@@ -782,7 +875,8 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
             if along <= 0.0:
                 continue
             centres = apart + (a_width + b_width) / 2
-            coupled = _backward_crosstalk(along, centres, height, swing, edge, velocity)
+            coupled = _backward_crosstalk(along, centres, height_of[a_layer], swing,
+                                          slowest_edge(b_net), velocity)
             if coupled > hysteresis:
                 close.append(
                     f"  {a_net} on {a_layer} runs {along:.2f} mm alongside "
@@ -791,7 +885,8 @@ def test_nothing_runs_alongside_a_raw_comparator_input(design, segments, board_d
                 )
     assert not close, (
         f"Raw comparator inputs closer than {wanted:.2f} mm "
-        f"({SEPARATION_IN_HEIGHTS} x the {height:g} mm prepreg) to a foreign track:\n"
+        f"({SEPARATION_IN_HEIGHTS} x the {max(height_of.values()):g} mm the "
+        f"furthest signal layer sits from its plane) to a foreign track:\n"
         + "\n".join(sorted(set(close)))
     )
 
@@ -851,6 +946,18 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
     # of each side is sampled whatever the board measures. The old walk went
     # in fives from zero and only reached the far corner because 130 and 110
     # are both multiples of five.
+    # How far a point on the edge may be from the nearest stitch. A ring on a
+    # pitch of `pitch` puts every edge point within half a pitch of a via
+    # along the edge, and the ring's own inset is the other leg of that
+    # triangle. Nothing else goes into it.
+    #
+    # This was `1.5 * pitch` - twenty-one millimetres, three times the
+    # spacing the wavelength argument asks for, from a factor that appeared
+    # nowhere else and was justified nowhere. It hid an eleven-millimetre
+    # bare stretch on the south edge where the generator had skipped two
+    # candidates in a row.
+    allowed = math.hypot(pitch / 2, at_the_edge)
+
     step = 5.0
     bare = []
     for a, b in zip(outline, outline[1:] + outline[:1]):
@@ -861,11 +968,11 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
             here = (a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction)
             if keepout[0] <= here[0] <= keepout[2] and keepout[1] <= here[1] <= keepout[3]:
                 continue
-            if min(math.dist(here, g) for g in grounds) > 1.5 * pitch:
+            if min(math.dist(here, g) for g in grounds) > allowed:
                 bare.append(f"  ({here[0]:.1f}, {here[1]:.1f})")
 
     assert not bare, (
-        f"Pour edge more than {1.5 * pitch:.0f} mm from a ground via at the "
+        f"Pour edge more than {allowed:.1f} mm from a ground via at the "
         f"edge:\n" + "\n".join(sorted(set(bare)))
     )
 
@@ -904,28 +1011,43 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
     description = load_source(board_dir / "layout.py", "cpu1_layout_margins")
     radius, drill = description.VIA[0] / 2, description.VIA[1]
 
-    # Holes get a different figure, and it is not the floor times anything.
-    # Escaping a package on a 0.5 mm pitch puts two vias on that pitch's
-    # diagonal whatever anybody intends, and that diagonal is the tightest
-    # this board can physically be - 0.507 mm hole to hole. Asking for more
-    # would be asking the LQFP-144 to have coarser pins. So the limit is the
-    # diagonal of the finest pitch any footprint here is drawn at, which
-    # KiCad puts in the footprint's own name, and anything tighter than that
-    # is a choice rather than a package.
-    # Holes get the floor and no margin, and that is deliberate.
-    # `fab/pcbway.kicad_dru` says of this figure that hole-to-hole spacing is
-    # "not published at the standard tier" and that the value there "predates
-    # that reading and has no recorded source". Multiplying a fifth onto a
-    # number nobody sourced would be inventing twice; the copper clearance
-    # beside it does take the margin, because 0.1 mm is published.
+    # Holes are held to the spacing this board's own generator builds to, not
+    # to the fab's floor times a factor.
     #
-    # So what is asked of holes is only that they do not sit exactly *on* the
-    # floor - a thousandth of a millimetre, which is below anything a fab
-    # controls and simply means "not equal to". That is enough: it caught the
-    # four pairs at exactly 0.500 mm, and everything else on this board is at
-    # 0.507 or wider, which is where a 0.5 mm pitch package's own escape
-    # diagonal falls anyway.
-    hole_floor = hole + 1e-3
+    # `fab/pcbway.kicad_dru` says of the hole-to-hole figure that it is "not
+    # published at the standard tier" and that the value there "predates that
+    # reading and has no recorded source", so multiplying the design margin
+    # onto it would be inventing twice. The copper clearance beside it does
+    # take the margin, because 0.1 mm is published.
+    #
+    # But the floor plus a thousandth of a millimetre, which is what this
+    # asked for two commits, is not a requirement either - it says only "not
+    # exactly equal", while the function is called "nothing sits on the
+    # fabricator's floor" and its docstring promises a fifth clear of it.
+    #
+    # What sets it is the finest package on the board. Escaping a footprint
+    # whose pads are on a 0.5 mm pitch puts two vias on that pitch's diagonal
+    # whatever anybody intends - 0.707 mm centre to centre, 0.507 mm hole to
+    # hole once the drill is taken off - and asking for more would be asking
+    # the LQFP-144 to have coarser pins. Anything tighter than a package's own
+    # escape diagonal is a choice rather than a package, and that is what this
+    # catches: the four pairs at exactly 0.500 mm were hand-written
+    # coordinates that beat the finest thing the board has to escape.
+    #
+    # The pitch is not written down here. KiCad puts it in the footprint's own
+    # name - `LQFP-144_20x20mm_P0.5mm` - so the board file states it, and a
+    # coarser board moves this on its own.
+    #
+    # Not `VIA_TO_VIA`, which was the previous attempt: that is the separation
+    # the *stitching* generator keeps, 0.95 mm centre to centre, and holding
+    # the whole board to it condemns sixty-odd perfectly ordinary package
+    # escapes. Not `hole + 1e-3` either, which asked only that nothing sit
+    # exactly on the floor while the function is called "nothing sits on the
+    # fabricator's floor".
+    pitches = [float(found) for found in
+               re.findall(r'"[^"]*_P([\d.]+)mm[^"]*"', pcb_text)]
+    assert pitches, "no footprint on this board states a pad pitch in its name"
+    hole_floor = max(hole, min(pitches) * math.sqrt(2) - drill)
 
     tight = []
     for i, (x1, y1, net1) in enumerate(vias):
@@ -934,8 +1056,9 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
             if apart < hole_floor - 1e-6:
                 tight.append(
                     f"  vias on {net1} and {net2} are {apart:.3f} mm hole to "
-                    f"hole at ({x1:g}, {y1:g}), against a {hole:g} mm floor "
-                    f"that nothing may sit exactly on"
+                    f"hole at ({x1:g}, {y1:g}), inside the {hole_floor:.3f} mm "
+                    f"that escaping this board's finest {min(pitches):g} mm "
+                    f"pitch on the diagonal already needs"
                 )
 
     for x, y, net in vias:

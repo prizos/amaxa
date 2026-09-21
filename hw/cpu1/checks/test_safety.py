@@ -10,7 +10,13 @@ Datasheets: TI SCAS298N (SN74LVC541A, June 2014) and SCES794E (SN74LVC1G74,
 January 2015), and the BAT54A data recorded in `parts/SOT23/SOT23.md`.
 """
 
+import sys
+from pathlib import Path
+
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+from symbols import symbol_pin_names  # noqa: E402
 
 BUFFERS = ("safety.buffer1", "safety.buffer2")
 LATCH = "safety.latch"
@@ -266,6 +272,34 @@ def test_the_latch_powers_up_tripped(design, pad_net):
     )
     assert {"FAULT1_N", "FAULT2_N"} <= cathodes, (
         f"a gate-driver fault does not trip the latch; the bus carries {sorted(cathodes)}"
+    )
+
+    # And every supply that supervises itself. NRST is the MCU noticing its
+    # *own* rail has gone, which on the way down is the last thing to happen:
+    # by then the comparators and the threshold DAC have been below their
+    # 2.7 V minimum for ninety microseconds while the buffers were still
+    # driving. A converter's power-good output asserts at the regulation
+    # threshold instead, milliseconds earlier, and on the way up as well.
+    #
+    # Which nets those are is read from the symbols, not listed, so a second
+    # converter with a PGOOD pin has to be wired in the same way or this
+    # fails. The board had one, pulled up, brought to a test pad and reaching
+    # nothing, with the spare half of the very diode pair it needed sitting
+    # unused beside it.
+    supervisors = {
+        net
+        for address, part in design["parts"].items()
+        for pad, name in symbol_pin_names(part["symbol"]).items()
+        if name in ("PGOOD", "PG", "POK", "PWRGD")
+        for net in (pad_net.get((address, pad)),)
+        if net
+    }
+    assert supervisors, "no converter on this board reports whether it is regulating"
+    missing = sorted(supervisors - cathodes)
+    assert not missing, (
+        f"{', '.join(missing)} says when a rail stops regulating and does not "
+        f"reach the trip bus; it carries {sorted(cathodes)}. That leaves NRST "
+        f"as the only supply-related preset, and NRST is late."
     )
 
 

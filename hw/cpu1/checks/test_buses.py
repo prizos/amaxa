@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-from symbols import symbol_pin_names  # noqa: E402
+from symbols import symbol_description, symbol_pin_names  # noqa: E402
 
 # Which declared rail each supply net is, as in test_trip.py: a check that names
 # a rail reads the same number whatever the board does.
@@ -211,32 +211,90 @@ _SUPPLY_NAMES = {
 
 
 def test_each_bus_can_be_terminated_and_is_not_terminated_when_it_arrives(
-    design, terminations
+    design, pads_of, terminations, buses
 ):
     """
-    The path between the two wires passes through a jumper, and the jumper is
-    open.
+    With the jumpers as they ship, nothing of the termination hangs on either
+    wire.
 
     A bus wants two terminations, one at each end. A board that is terminated
     because it was built that way can only ever be an end, and two of them in
-    the middle of a working bus is the fault that looks like a cable problem for
-    a day. Open by default is the only state that is right more often than not:
-    a board added to a bus is usually not the end of it.
+    the middle of a working bus is the fault that looks like a cable problem
+    for a day. Open by default is the only state that is right more often than
+    not: a board added to a bus is usually not the end of it.
+
+    **This used to count jumpers instead of asking what they disconnect**, and
+    a count cannot tell a termination that is isolated from one that is half
+    isolated. CAN's split termination had exactly one jumper, in the CANH leg,
+    and passed - while CANL went on carrying 60.4 ohm in series with the
+    4.7 nF midpoint capacitor straight to ground on every board shipped. One
+    line of the pair loaded and the other not is worse than both loaded: it is
+    differential-to-common-mode conversion on a cable leaving the machine, and
+    at 2 Mbit/s FD it stretched that one edge by a quarter of a bit.
+
+    So the question is the one that matters: walk out from each wire through
+    everything that conducts, with the open jumpers open, and see whether it
+    arrives anywhere. **Anywhere means ground, a rail, or the other wire** -
+    somewhere the signal actually loses energy. A resistor left hanging on one
+    wire with its far end at an open jumper's pad is not a load, which is how
+    RS-485's single 120 ohm is built and why one jumper is right there and
+    wrong on a split termination: CAN's low leg walked from CAN_L through
+    60.4 ohm to the midpoint and straight on through 4.7 nF to ground.
     """
+    conducting = []
+    for address, part in design["parts"].items():
+        symbol = part["symbol"]
+        if symbol.startswith("Jumper:") and "Open" in symbol:
+            continue                      # open as fabricated: not a path
+        pads = pads_of[address]
+        if len(pads) == 2:
+            conducting.append((address, *pads.values()))
+
+    # Where a walk can land and count as a load: ground, or any net a symbol
+    # calls a supply pin. Read from the symbols rather than listed, so a new
+    # rail is a rail here the moment something is powered from it.
+    rails = {GROUND}
+    for address, part in design["parts"].items():
+        names = symbol_pin_names(part["symbol"])
+        for pad, net in pads_of[address].items():
+            if names.get(pad) in ("VCC", "VDD", "VIO", "V+", "V-", "VEE", "VSS", "GND"):
+                rails.add(net)
+
     for bus, path in sorted(terminations.items()):
-        jumpers = [
-            address
-            for address in path
-            if design["parts"][address]["symbol"].startswith("Jumper:")
-        ]
-        assert len(jumpers) == 1, (
-            f"{bus}: {len(jumpers)} jumpers between its two wires, so its "
+        jumpers = [address for address in path
+                   if design["parts"][address]["symbol"].startswith("Jumper:")]
+        assert jumpers, (
+            f"{bus}: nothing between its two wires is a jumper, so its "
             "termination cannot be chosen once the board is built"
         )
-        assert design["parts"][jumpers[0]]["value"] == "open", (
-            f"{bus}: {jumpers[0]} arrives closed, so this board is always an "
-            "end of the bus"
-        )
+        for address in jumpers:
+            assert design["parts"][address]["value"] == "open", (
+                f"{bus}: {address} arrives closed, so this board is always an "
+                "end of the bus"
+            )
+
+        _, _, wires = buses[bus]
+        for wire in wires:
+            partner = {other for other in wires if other != wire}
+            seen, edge = {wire}, [wire]
+            through = []
+            while edge:
+                net = edge.pop()
+                for address, a, b in conducting:
+                    far = b if a == net else a if b == net else None
+                    if far is None or far in seen:
+                        continue
+                    seen.add(far)
+                    through.append(address)
+                    edge.append(far)
+            landed = seen & (rails | partner)
+            hanging = sorted(set(through) & set(path))
+            assert not (landed and hanging), (
+                f"{bus}: with its jumpers open, {wire} still reaches "
+                f"{', '.join(sorted(landed))} through {', '.join(hanging)}. "
+                f"A termination disconnected on one leg loads one line of the "
+                f"pair and not the other, which is worse than loading both."
+            )
 
 
 def test_each_termination_matches_the_cable_it_terminates(spec, terminations, spec_has):
@@ -488,19 +546,23 @@ def test_nothing_unrated_for_a_strike_sits_on_a_bus_terminal(
             }
             assert exposed, f"{net} reaches the connector and nothing else"
             for address in sorted(exposed):
-                # Two terminals and no supply pin is a passive: a termination
-                # resistor, a jumper, a capacitor. It has no junction to punch
-                # through and no datasheet figure to hold it to.
+                # Two terminals is not the question. A termination resistor,
+                # a jumper or a capacitor has no junction to punch through and
+                # no datasheet figure to hold it to; a TVS or a clamp diode on
+                # the same two pads is the part whose whole job is the rating.
                 #
-                # The supply half of that sentence was not implemented - pad
-                # count alone was - so a two-pin part with a rating to state,
-                # a TVS or a clamp diode, was skipped by being small rather
-                # than by being passive. A part that declares no supply pin
-                # *and* has two pads is what the comment always meant.
-                pins = symbol_pin_names(design["parts"][address]["symbol"])
-                powered = {name for name in pins.values()
-                           if name in ("VCC", "VDD", "V+", "V-", "VEE", "GND", "VSS")}
-                if len(pads_of[address]) <= 2 and not powered:
+                # The exemption tried to say that once by also requiring the
+                # part to declare no supply pin, and that clause did nothing:
+                # no two-pin symbol on this board names a pin VCC or GND, so
+                # the exempt set was still "anything small" and a TVS on a bus
+                # terminal was still skipped by being small. The symbol answers
+                # the real question itself - KiCad's Description is the one
+                # machine-readable statement of what a part *is*, and every
+                # junction part on this board says "diode" in it while no
+                # passive does.
+                symbol = design["parts"][address]["symbol"]
+                junction = "diode" in symbol_description(symbol).lower()
+                if len(pads_of[address]) <= 2 and not junction:
                     continue
                 assert spec_has(address, "esd_contact_discharge"), (
                     f"{bus}: {address} sits on {net}, which leaves the board, "
@@ -551,6 +613,19 @@ def test_a_cable_ground_tied_straight_to_the_boards_is_one_the_parts_can_afford(
         part_low, _ = spec(transceiver, "common_mode_low")
         _, part_high = spec(transceiver, "common_mode_high")
         margin, _ = spec("bus", "common_mode_margin")
+        # Both halves, because each says something the other cannot. The width
+        # ratio is the margin the hard tie is justified by; containment is what
+        # makes the ratio mean anything. A part rated 0 to +30 V is 1.58 times
+        # as wide as TIA-485's -7 to +12 and tolerates none of its negative
+        # half, and for two machines whose grounds sit apart - the entire
+        # subject of this check - the negative half is where the offset goes.
+        # The width test alone was the whole check for one commit.
+        assert part_low <= low and part_high >= high, (
+            f"{bus}: its connector's ground pin goes straight to the board's, "
+            f"and {transceiver} tolerates {part_low:g} to {part_high:g} V of "
+            f"offset, which does not cover the {low:g} to {high:g} V its "
+            f"standard requires"
+        )
         assert (part_high - part_low) >= margin * (high - low), (
             f"{bus}: its connector's ground pin goes straight to the board's, "
             f"and {transceiver} tolerates {part_low:g} to {part_high:g} V of "

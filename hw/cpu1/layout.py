@@ -729,6 +729,28 @@ def _buck_5v() -> None:
         (F, [(4.0, 35.5), "buck5.r_pgood:1"]),
     ])
     ROUTES.append(("PGOOD", SIGNAL, F, ["tp_pgood:1", "buck5.r_pgood:1"]))
+    # And on to the trip latch, through the spare half of the diode pair that
+    # already carries NRST. This is a long way round for a signal that starts
+    # three millimetres from the converter, and it is a long way round because
+    # the alternative is worse: the other end of this link is the latch's
+    # preset, and bringing TRIP_SET_N north to meet it instead would add to a
+    # bus whose length is already most of its own trip budget. PGOOD is a DC
+    # level with milliseconds to settle; the bus is not.
+    #
+    # The column at x 37 is the one clear north-south lane on the back layer
+    # between the digital header's escapes and the package.
+    # It goes the long way round, east of the digital header and back along
+    # the inner signal layer, because the direct line is a picket fence: the
+    # gate-driver faults, the ID straps and the STO feedback all break out of
+    # the package eastward between y -7 and -21, and their vias leave gaps of
+    # 0.35 mm where a track needs 0.45. In3 is the layer with 24 segments on
+    # it, and the one crossing of the 5 V spine happens there.
+    path("PGOOD", SIGNAL, [
+        (F, ["buck5.r_pgood:1", (5.5, 41.0)]),
+        (B, [(5.5, 41.0), (56.0, 41.0), (56.0, -35.5)]),
+        (MID, [(56.0, -35.5), (19.5625, -35.5), (19.5625, -29.5)]),
+        (F, [(19.5625, -29.5), "safety.d_reset:2"]),
+    ])
     VIAS.append(("buck5.r_pgood:2", (7.2, 37.5), "3V3", *VIA, SUPPLY))
 
 
@@ -2410,6 +2432,14 @@ def _field_buses() -> None:
 
     # Each chain stacked between its own two lanes, which are a connector pitch
     # apart, so the parts stand on end to fit.
+    # CAN's chain is four parts now that its low leg has a jumper of its own,
+    # and the window it stands in is narrow at both ends: the transceiver's
+    # CAN_L leg crosses at -21.4 above it and the connector's pad row is
+    # below. So the four are given their places rather than a pitch - the two
+    # solder jumpers are half again the size of the 0402s between them, which
+    # a single pitch has to size for and then wastes on the resistors. The
+    # CAN connector moved a millimetre and a half south for the rest of the
+    # room; further south and its courtyard reaches the RS-485 transceiver.
     for prefix, first, names in (
         ("can", -24.0, ("termination_jumper", "termination_upper", "termination_lower")),
         ("rs485", -41.5, ("termination_jumper", "termination")),
@@ -2418,7 +2448,15 @@ def _field_buses() -> None:
             PLACEMENT[f"{prefix}.{name}"] = (CHAIN_X,
                                              round(first - index * 3.5, 4), 90)
             LABELS[f"{prefix}.{name}"] = (-1.6, 0.0)
-    PLACEMENT["can.termination_split"] = (12.5, -29.25, 0)
+    # CAN's low leg has a jumper of its own and it does not go in the column.
+    # A fourth part there has nowhere to stand: the transceiver's CAN_L leg
+    # crosses 2 mm above the top of the chain and the connector's pad row is
+    # 3 mm below the bottom, and the two solder jumpers are half again the
+    # size of the 0402s between them. It sits beside the CAN_L lane instead,
+    # one pad on the lane and the other reached under it on the back layer.
+    PLACEMENT["can.termination_jumper_low"] = (11.3, -30.7, 0)
+    LABELS["can.termination_jumper_low"] = (0.0, -1.6)
+    PLACEMENT["can.termination_split"] = (14.0, _split_tap_y(), 0)
     LABELS["can.termination_split"] = (0.0, -1.6)
 
     for address in ("can.decoupling_vcc", "can.decoupling_vio", "rs485.decoupling"):
@@ -2440,6 +2478,18 @@ def _field_buses() -> None:
 # connector before the other begins.
 INNER_LANE, OUTER_LANE, CHAIN_X = 7.08, 9.62, 8.35
 BUS_HEADER_Y = {"can": -34.0, "rs485": -48.0}
+
+
+def _split_tap_y() -> float:
+    """
+    Halfway between the two halves of CAN's split termination.
+
+    Derived from where the two resistors actually stand, because the chain's
+    pitch changed when its low leg gained a jumper and a hard-coded -29.25 then
+    landed on top of a part rather than in the gap between two.
+    """
+    return round((PLACEMENT["can.termination_upper"][1]
+                  + PLACEMENT["can.termination_lower"][1]) / 2, 4)
 
 
 def _bus_high_is_above(prefix: str) -> bool:
@@ -2483,8 +2533,19 @@ def _field_bus_routes() -> None:
         # The termination taps each lane where it passes.
         ROUTES.append((high, width, F, [
             (high_lane, _point(f"{jumper}:1")[1]), f"{jumper}:1"]))
-        ROUTES.append((low, width, F, [
-            f"{rest[-1]}:2", (low_lane, _point(f"{rest[-1]}:2")[1])]))
+        if prefix == "can":
+            # Down past the connector's row on the back layer, out from under
+            # the lane, and up into the jumper that stands beside it.
+            path("CAN_TERM_LOW", width, [
+                (F, [f"{rest[-1]}:2", (CHAIN_X, -32.2)]),
+                (B, [(CHAIN_X, -32.2), (12.6, -32.2)]),
+                (F, [(12.6, -32.2), "can.termination_jumper_low:2"]),
+            ])
+            ROUTES.append((low, width, F, [
+                "can.termination_jumper_low:1", (low_lane, -30.7)]))
+        else:
+            ROUTES.append((low, width, F, [
+                f"{rest[-1]}:2", (low_lane, _point(f"{rest[-1]}:2")[1])]))
         links = [(f"{jumper}:2", f"{rest[0]}:1")]
         links += [(f"{a}:2", f"{b}:1") for a, b in zip(rest, rest[1:])]
         for one, other in links:
@@ -2494,12 +2555,13 @@ def _field_bus_routes() -> None:
     # The split termination's midpoint capacitor sits outside both lanes, so
     # its one connection goes under the high lane rather than through it.
     mid = "CAN_TERM_MID"
+    tap = _split_tap_y()
     path(mid, _width_for(mid, SIGNAL), [
         # Taken from the gap between the two halves, not from a pad: the via
         # has to land on copper the chain leaves free.
-        (F, ["can.termination_upper:2", (CHAIN_X, -29.25)]),
-        (B, [(CHAIN_X, -29.25), (11.5, -29.25)]),
-        (F, [(11.5, -29.25), "can.termination_split:1"]),
+        (F, ["can.termination_upper:2", (CHAIN_X, tap)]),
+        (B, [(CHAIN_X, tap), (13.0, tap)]),
+        (F, [(13.0, tap), "can.termination_split:1"]),
     ])
 
 
@@ -3450,6 +3512,7 @@ STITCH_PLACES = (
     # millimetres of any of them; the check said so before the board did.
     (-22.3, 8.5), (-28.5, -9.0), (-33.0, -19.5),
     (-31.0, 12.5), (-33.0, -1.0), (-33.0, -7.5), (-33.0, -15.5),
+    (53.0, -34.0),                    # where power good crosses to In3
     (38.0, -42.0),                    # the static signals' way under the header
     (39.5, -15.5),                    # and where that column moved to
 )
@@ -3643,32 +3706,65 @@ def _plane_stitches() -> None:
     # wavelength that decides the spacing.
     #
     # The pitch is a twentieth of a wavelength at 500 MHz in FR4, which is the
-    # usual figure and works out near fourteen millimetres. Candidates that
-    # land on something are skipped rather than nudged: the ring is a
-    # statistical measure, not a net, and a gap in it costs a little of the
-    # effect where a part already fills the space.
+    # usual figure and works out near fourteen millimetres.
+    #
+    # A candidate that lands on something is **nudged along the edge**, not
+    # skipped. Skipping was the first version, on the argument that the ring
+    # is a statistical measure and a gap costs a little of the effect where a
+    # part already fills the space. What that argument never bounded is how
+    # big a gap gets: the board ended up with an eleven-millimetre bare
+    # stretch on the south edge, half as far again as the whole pitch is
+    # meant to allow, and the check did not see it because it was comparing
+    # against one and a half pitches for no stated reason. A nudge keeps the
+    # spacing the wavelength asks for; only a candidate with no clear spot
+    # within half a pitch is given up on.
     inset = STITCH_INSET
     half_w, half_h = BOARD["size"][0] / 2 - inset, BOARD["size"][1] / 2 - inset
     corner = BOARD["corner_radius"]
-    edge: list[tuple[float, float]] = []
+    edge: list[tuple[tuple[float, float], tuple[float, float]]] = []
     for along in range(0, int(2 * (half_w - corner)) + 1, STITCH_PITCH):
         x = -half_w + corner + along
-        edge += [(x, -half_h), (x, half_h)]
+        edge += [((x, -half_h), (1.0, 0.0)), ((x, half_h), (1.0, 0.0))]
     for along in range(0, int(2 * (half_h - corner)) + 1, STITCH_PITCH):
         y = -half_h + corner + along
-        edge += [(-half_w, y), (half_w, y)]
+        edge += [((-half_w, y), (0.0, 1.0)), ((half_w, y), (0.0, 1.0))]
+    # The four corners, which the two loops above start and stop short of. A
+    # corner is where two runs of edge meet, so it is the furthest any point
+    # gets from both of them, and it was the one place the ring left bare.
+    for sx in (-1.0, 1.0):
+        for sy in (-1.0, 1.0):
+            at = (sx * (half_w - corner / 2), sy * (half_h - corner / 2))
+            edge.append((at, (1.0, 0.0)))
 
     x0, y0, x1, y1 = JACK_KEEPOUT
-    for at in edge:
-        if x0 <= at[0] <= x1 and y0 <= at[1] <= y1:
-            continue                      # the jack's cable end: no copper here
-        if not _inside(_pour_outline(), at):
-            continue                      # outside the pour is a via to nothing
-        if not clear(at, at, 0.0, 0.3):
-            continue
-        VIAS.append((None, at, "GND", *VIA, SUPPLY))
-        vias.append(at)
-        placed.setdefault("GND", []).append(at)
+    step = 0.5
+    for at, direction in edge:
+        # Out from the intended spot, alternating sides, so the ring stays as
+        # near its pitch as the copper allows.
+        offsets = [0.0]
+        out = step
+        while out <= STITCH_PITCH / 2:
+            offsets += [out, -out]
+            out += step
+        for offset in offsets:
+            here = (at[0] + direction[0] * offset, at[1] + direction[1] * offset)
+            if x0 <= here[0] <= x1 and y0 <= here[1] <= y1:
+                continue                  # the jack's cable end: no copper here
+            if not _inside(_pour_outline(), here):
+                continue                  # outside the pour is a via to nothing
+            # A mounting hole wants its screw head's worth of clear copper,
+            # which `clear()` does not know about - it reasons about pads and
+            # tracks. The south-east hole sits on the edge, right where this
+            # ring runs.
+            if any(math.dist(here, (hx, hy)) < max(3.5, diameter)
+                   for hx, hy, diameter in BOARD["mounting_holes"]):
+                continue
+            if not clear(here, here, 0.0, 0.3):
+                continue
+            VIAS.append((None, here, "GND", *VIA, SUPPLY))
+            vias.append(here)
+            placed.setdefault("GND", []).append(here)
+            break
 
 
 
