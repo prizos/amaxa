@@ -61,6 +61,12 @@ static void print_banner(const char *reset_cause, int clock_rc, int pwm_rc,
                PWM_HZ, pwm->timer_clock_hz / 1000000U, pwm->auto_reload, pwm->deadtime_ns, pwm->dtg,
                SINE_MHZ / 1000U);
         printf("               outputs PE9/PE8 PE11/PE10 PE13/PE12, break input PE15 (active low)\n");
+        /* The register as it reads back, not as it was written. Everything the
+         * line above says about dead-time and about the outputs being off is a
+         * claim about BDTR, and on an emulator that does not implement BDTR
+         * every one of those claims reads as a harmless zero. Printing it lets
+         * whoever checks this log tell the two cases apart. */
+        printf("               BDTR 0x%08" PRIx32 "\n", pwm->bdtr);
     } else {
         printf("  pwm          init FAILED (%d)\n", pwm_rc);
     }

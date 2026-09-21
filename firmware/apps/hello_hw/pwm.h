@@ -23,6 +23,7 @@ struct pwm_report {
     uint32_t auto_reload;    /* counter peak; the period is twice this (centre-aligned) */
     uint32_t deadtime_ns;    /* dead-time actually programmed */
     uint8_t dtg;             /* TIM1_BDTR.DTG register value */
+    uint32_t bdtr;           /* BDTR read back, so a reader can tell it exists */
 };
 
 struct pwm_stats {
@@ -34,7 +35,7 @@ struct pwm_stats {
     uint32_t breaks;            /* break events since boot */
 };
 
-/* Configures TIM1 and starts switching at 0 % modulation. Returns 0 on success. */
+/* Configures TIM1 with the outputs off. pwm_rearm() turns them on. Returns 0 on success. */
 int pwm_init(const struct pwm_config *config, struct pwm_report *report);
 
 void pwm_set_modulation(uint32_t permille);

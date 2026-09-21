@@ -178,10 +178,22 @@ int pwm_init(const struct pwm_config *config, struct pwm_report *report)
         }
     }
 
+    /* HAL_TIM_PWM_Start sets MOE on any break-capable timer, so the three
+     * calls above leave the bridge armed: at zero modulation that is all six
+     * transistors switching at 50 %, which is not what "an unprogrammed board
+     * is inert" means. The hardware does defend it - the '541 buffers are
+     * disabled by their pull-up and by the trip latch coming out of reset
+     * preset - but the firmware has no business relying on that, and the
+     * status line was reporting OFF only because the emulator does not model
+     * this register. Take the outputs back; pwm_rearm() is how they turn on.
+     */
+    TIM1->BDTR &= ~TIM_BDTR_MOE;
+
     report->timer_clock_hz = timer_clock;
     report->auto_reload = auto_reload;
     report->deadtime_ns = actual_deadtime_ns;
     report->dtg = dtg;
+    report->bdtr = TIM1->BDTR;
     return 0;
 }
 
