@@ -735,12 +735,32 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
     clamps = [address for address, part in design["parts"].items()
               if "diode" in symbol_description(part["symbol"]).lower()
               and pad_net.get((address, "3")) == latch_clear]
-    leaked = 0.0
+    leaked, junctions = 0.0, 0.0
     for address in clamps:
         _, junction = spec(address, "total_capacitance")
         _, ambient = spec("environment", "ambient")
+        junctions += junction
         tau += (r_s_low + r_pu_low_again) * junction
         leaked += _leakage(spec, address, ambient)
+
+    # **The coupling capacitor has to be what makes this a pulse.** Adding the
+    # clamp's junction capacitance into tau above is right - it is in parallel
+    # and it does lengthen the pulse - but it left the check insensitive to
+    # the part the whole argument is about: with `safety.c_clear` set to 0 F
+    # the entire suite stayed green, because 10 pF of BAT54A junction carried
+    # the time constant on its own and the assertion below clears its bound by
+    # three orders of magnitude. A check that passes with the capacitor
+    # removed is not checking the capacitor.
+    #
+    # The comment above says "a few picofarads against nanofarads". That is
+    # the claim, so that is what is asserted - no factor invented, just the
+    # ordering the sentence already states.
+    assert junctions < farads_low, (
+        f"the clamps contribute {junctions * 1e12:.0f} pF and the coupling "
+        f"capacitor {farads_low * 1e12:.0f} pF, so what makes the clear a "
+        f"pulse rather than a level is a diode's junction, not the part put "
+        f"there to do it"
+    )
     low += leaked * r_s_high            # the leak lifts the low level
     assert low < v_il, (
         f"with {leaked * 1e6:.1f} uA of clamp leakage added, {latch_clear} only "

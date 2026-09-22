@@ -250,7 +250,9 @@ def test_the_comparators_can_see_the_whole_signal_range(spec, pad_net, comparato
         )
 
 
-def test_the_thresholds_are_as_accurate_as_the_board_claims(spec, pad_net, comparators):
+def test_the_thresholds_are_as_accurate_as_the_board_claims(
+    design, spec, pad_net, comparators
+):
     """
     What the trip point is worth, worked from where the DAC's reference comes
     from and what the comparator adds.
@@ -284,7 +286,37 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(spec, pad_net, compa
     dac_gain, _ = spec(DAC, "gain_error")
     dac_inl, _ = spec(DAC, "integral_nonlinearity")
 
+    # **And the tap, which lands on the same budget and was spending it
+    # twice.** The comparator does not see the sense voltage: it sees it
+    # through the lead-lag the ADC's own capacitor makes with the power
+    # board's source impedance, so a fast edge arrives low by R_s/(R_s + R)
+    # and the effective trip point sits that much high. That is an error on
+    # the trip point exactly like the five below.
+    #
+    # `test_adc.py::test_the_filter_does_not_load_the_tap_it_sits_beside`
+    # already held that term against `trip.threshold_tolerance` - and so did
+    # this check, for its own five terms, with neither aware of the other.
+    # The two passed independently at 8.6 % and 11.5 % of a 12 % declaration
+    # while together they are 20 %. Summing them here is what makes the
+    # declaration mean one thing.
+    _, source = spec("header", "source_impedance")
+    tapped = []
+    for address, part in design["parts"].items():
+        if not address.startswith("adc.") or not address.endswith(".series"):
+            continue
+        node = pad_net.get((address, "1"))
+        if node not in {pad_net.get((c, "1")) for c in comparators} | {
+                pad_net.get((c, "3")) for c in comparators}:
+            continue
+        tapped.append((node, spec(address, "resistance")[0]))
+    branches: dict[str, float] = {}
+    for node, ohms in tapped:
+        branches[node] = 1.0 / (1.0 / branches.get(node, float("inf")) + 1.0 / ohms)
+    tap = max((source / (source + ohms) for ohms in branches.values()), default=0.0)
+    assert branches, "no comparator shares a node with an input network"
+
     terms = {
+        "the tap the comparator watches, through the ADC filter beside it": tap,
         # The DAC's full scale *is* the supply, so the rail's spread lands on
         # every threshold in proportion.
         "the rail the DAC uses as its reference":

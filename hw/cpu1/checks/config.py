@@ -13,9 +13,36 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 # BLOCKING is what mattered. A board that says it is unfinished now has to say
 # what is unfinished, and a board that says it is finished has to have this
 # empty, so neither statement can drift from the board again.
-COMPLETE = True
+COMPLETE = False
 
 BLOCKING: dict[str, str] = {
+    "the trip point is good to 20 per cent against a 12 per cent "
+    "declaration, and two checks were splitting the budget between them": (
+        "`trip.threshold_tolerance` is 12 %. Two checks spent it "
+        "independently and neither knew about the other:\n\n"
+        "  - `test_the_thresholds_are_as_accurate_as_the_board_claims` summed "
+        "the rail, the comparator and the DAC's three errors to **11.46 %** "
+        "and compared that against 12;\n"
+        "  - `test_the_filter_does_not_load_the_tap_it_sits_beside` computed "
+        "the comparator tap's amplitude error - **8.58 %**, because the ADC's "
+        "own capacitor and the power board's 2 ohm source impedance make a "
+        "lead-lag on the node the comparator watches - and compared *that* "
+        "against the same 12.\n\n"
+        "Both passed. Together they are **20.0 %**, and they land on the same "
+        "quantity: where the trip point actually sits. The tap error is now "
+        "summed into the accuracy check, which is what makes the declaration "
+        "mean one thing, and the check fails.\n\n"
+        "It is a real result, not a bookkeeping artefact: a trip set at a "
+        "quarter of full scale can be a fifth out. Closing it is a decision "
+        "rather than a fix. The tap term is the largest single contributor "
+        "and it is driven by `header.source_impedance`, an assumption about a "
+        "board that does not exist; the DAC's 2.42 % offset and the rail's "
+        "5 % are the next two. Raising the ADC series resistor shrinks the "
+        "tap error and breaks the converter's settling window, so the "
+        "candidates are a tighter rail, a better-referenced DAC, a stated "
+        "source impedance the power board must meet, or a wider declaration "
+        "with the reasoning written down."
+    ),
 }
 
 # Checks that must actually run for this board, common and board-specific.
