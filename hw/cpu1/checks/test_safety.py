@@ -662,9 +662,13 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
         t = tau * ln((V - V_min) / (V - V_IL))
 
     which has to be longer than the latch takes to respond to it at all. The
-    part records 5.9 ns for clear-to-output and nothing for a minimum pulse
-    width, so that is the figure this is held to; on these values the answer
-    is four orders of magnitude clear of it.
+    part records nothing for a minimum pulse width, so what this is held to is
+    its **preset**-to-output time, 5.9 ns - the only propagation figure it
+    gives for an asynchronous input. This docstring used to call it
+    "clear-to-output", which the datasheet does not state and `design.json`
+    does not carry; the same key is the latch's term in the trip budget.
+    On these values the answer is three orders of magnitude clear of it, and
+    that slack is the point rather than a margin anybody sized.
 
     **What it is not held to is an upper bound**, because nothing on this
     board derives one. While the clear is asserted the latch cannot hold a
@@ -680,10 +684,18 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
     pullup = "safety.r_clear_pullup"
     coupling = "safety.c_clear"
 
-    r_s, _ = spec(series, "resistance")
-    _, r_pu = spec(pullup, "resistance")
-    _, farads = spec(coupling, "capacitance")
-    rail_low, _ = spec("rail.3v3", "voltage")
+    # **The rail's high corner, not its low one.** Both terms below get worse
+    # as the rail rises: the divider's low level is a fraction of it, and the
+    # time the node spends under V_IL is ln((V - V_min)/(V - V_IL)), which
+    # shortens as V grows. This read the low end, three lines above a comment
+    # saying "the two ends are taken the way that hurts" - it reported 9.1 us
+    # where the worst corner gives 7.6.
+    #
+    # The three unsuffixed reads that used to be here - `r_s`, `r_pu`,
+    # `farads` - were assigned and never used; every calculation below re-read
+    # the same three parameters under suffixed names. They counted as coverage
+    # because `spec()` had been called.
+    _, rail_high = spec("rail.3v3", "voltage")
     v_il, _ = spec(LATCH, "input_low_voltage_max")
     v_ih, _ = spec(LATCH, "input_high_voltage_min")
     respond, _ = spec(LATCH, "preset_to_output_max")
@@ -692,7 +704,7 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
     # smallest pull-up, so the two ends are taken the way that hurts.
     _, r_s_high = spec(series, "resistance")
     r_pu_low, _ = spec(pullup, "resistance")
-    low = rail_low * r_s_high / (r_s_high + r_pu_low)
+    low = rail_high * r_s_high / (r_s_high + r_pu_low)
     assert low < v_il, (
         f"driving the pin low puts {latch_clear} at {low:.2f} V, and the latch "
         f"calls anything above {v_il:g} V undecided. The series resistor is too "
@@ -730,7 +742,7 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
         f"with {leaked * 1e6:.1f} uA of clamp leakage added, {latch_clear} only "
         f"reaches {low:.2f} V and the latch wants under {v_il:g}"
     )
-    asserted = tau * math.log((rail_low - low) / (rail_low - v_il))
+    asserted = tau * math.log((rail_high - low) / (rail_high - v_il))
     assert asserted > respond, (
         f"the clear is asserted for {asserted * 1e9:.0f} ns and the latch takes "
         f"{respond * 1e9:g} ns to respond to it"
@@ -743,7 +755,7 @@ def test_the_clear_reaches_a_valid_low_and_lets_go_by_itself(design, pad_net, sp
     # would be 4.65 on any board. An assertion that is a restatement of
     # V_IL < V_IH is not a check, and dressing it in three component values
     # made it read like one.
-    released = tau * math.log((rail_low - low) / (rail_low - v_ih))
+    released = tau * math.log((rail_high - low) / (rail_high - v_ih))
     print(f"    clear: {low:.2f} V, asserted {asserted * 1e6:.1f} us, "
           f"valid high at {released * 1e6:.1f} us")
 
@@ -805,12 +817,22 @@ def test_the_clear_does_not_drive_the_latch_past_its_input_rating(
     if not clamps:
         peak, how = bare, "with nothing clamping it"
     else:
-        # Current into the clamp is what the series resistor passes, and the
-        # forward drop at ten milliamps bounds it: the real current is about
-        # three, so the datasheet's 10 mA row is the pessimistic end.
-        # Three milliamps is what the series resistor passes into it.
+        # Current into the clamp is what the series resistor passes - about
+        # three milliamps - and `forward_voltage` interpolates the datasheet's
+        # rows at that current rather than taking the 10 mA row whole, which
+        # the sentence that used to be here said it did.
+        #
+        # **At the cold end of the declared environment, not at 25 degC.** A
+        # Schottky's forward drop has a negative tempco - this board records
+        # -1.8 mV/degC - so the *coldest* the board is specified for is where
+        # the clamp holds the node highest, and that is the corner a rating
+        # check wants. Both sibling checks in this file read
+        # `environment.ambient` for exactly this reason; this one had 25.0
+        # written into the call, so the declared range could move and nothing
+        # here would notice.
+        ambient_low, _ = spec("environment", "ambient")
         into = (bare - rail) / r_s
-        drop = max(forward_voltage(address, into, 25.0) for address in clamps)
+        drop = max(forward_voltage(address, into, ambient_low) for address in clamps)
         peak = rail + drop
         how = f"clamped to the rail by {', '.join(sorted(clamps))}"
 
