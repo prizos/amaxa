@@ -17,17 +17,48 @@ one pair of current thresholds, which is what a symmetric limit means.
 
 ## Two things about this part that are not ideal
 
-**Its reference is its supply.** The MCP4728 can use its own 2.048 V reference
-or VDD, and neither is VREF+. The trip thresholds are therefore ratiometric to
-the 3V3 rail while everything the ADCs measure is ratiometric to VREF+, so the
-rail's ±5 % lands directly on every trip point.
+**Its reference is its supply — so its supply is VREF+.** The MCP4728 has no
+reference pin; it uses its own 2.048 V bandgap or VDD, and that is the whole
+reason this part sits where it does.
 
-That is acceptable for a protective limit — you set it well above the working
-maximum anyway — and it is checked rather than assumed:
-`checks/test_trip.py::test_the_trip_thresholds_are_as_accurate_as_they_claim`
-works the rail band through to a tolerance and compares it against what the
-board declares. Powering the DAC from VREF+ instead would make the ratio exact
-and put I²C switching currents into the ADC reference, which is a worse trade.
+For several revisions it ran from 3V3, which made the trip thresholds
+ratiometric to the logic rail while everything the ADCs measure is ratiometric
+to VREF+. Two different numbers scaled the two halves of the same comparison,
+and the rail's declared ±5 % was the **largest single term** in the trip
+point's error budget: 5.00 % of 11.46, against a 12 % declaration.
+
+This page used to close that paragraph with "powering the DAC from VREF+
+instead would make the ratio exact and put I²C switching currents into the ADC
+reference, which is a worse trade". That was a guess, and it was wrong. The
+trade is now measured: VREF+ carries **7.74 mA of the 12.9 mA** its headroom
+allows, and at the REF3030's own 100 µV/mA maximum load regulation that is
+**0.77 mV — 0.03 % of a threshold**. The rail term went from 5.00 % to 0.20 %,
+which is the reference's own accuracy, and the budget from 11.46 % to
+**7.06 %**. The logic rail still reaches the thresholds, through the
+reference's line regulation, and that term is summed too: 375 µV/V against the
+rail's 0.33 V span is 0.0041 % of full scale.
+
+Both are checked rather than assumed, by
+`test_the_thresholds_are_as_accurate_as_the_board_claims` and by
+`test_power.py::test_the_reference_is_not_loaded_past_what_it_allows`.
+
+**The bus pull-ups had to move with it, and that is a rating.** Microchip's
+absolute maximum for every input and output on this part is VDD + 0.3 V. With
+VDD at the reference's 2.994 V floor, a bus idling at the logic rail's
+3.465 V ceiling is 171 mV outside it. SDA and SCL therefore pull to VREF+ as
+well, which the MCU does not mind — I²C is open-drain, PF0 and PF1 never drive
+high, and 2.994 V clears an STM32's 0.7·VDD input threshold.
+
+![Absolute maximum ratings and the supply figures](evidence/absolute_maximum.png)
+
+**Why not a DAC with a reference pin.** Every quad 12-bit I²C DAC with an
+external VREF input was priced against the distributor this board buys from,
+and all of them are in single-digit stock: MCP47FEB24 and MCP47CVB24 at zero,
+AD5694R at three, MAX5815 at eighteen, LTC2635 at five, DAC53004 at one. The
+DAC7574 has real stock — 784 — and turns out to be VDD-referenced too: "The
+DAC7574 uses VDD and GND to set the output range of the DAC." There is no such
+part to buy. This one, supplied from the reference, puts the same node in the
+same job.
 
 **Its power-up value comes from EEPROM.** Microchip ships the part with the
 factory default loaded, and this board depends on that default being zero - it

@@ -11,6 +11,7 @@ Datasheets: TI SBOS321E (TLV3501, April 2016) and the MCP4728 data recorded in
 """
 
 import math
+import pathlib
 
 import pytest
 
@@ -65,14 +66,47 @@ def pin_map(board_dir):
 # part is actually wired to, which is the difference between a check and a
 # comment. Verified: moving the comparators back to 3V3 fails
 # test_the_comparators_can_see_the_whole_signal_range, and did not before.
-RAILS = {"5V": "rail.5v", "3V3": "rail.3v3"}
+RAILS = {"5V": "rail.5v", "3V3": "rail.3v3", "3V3A": "rail.3v3"}
 
 
-def _supply_of(pad_net, address, pad, spec):
-    """The band of the rail a part's supply pin is on, read from the netlist."""
+def _supply_of(pad_net, address, pad, spec, design=None):
+    """
+    The band of whatever a part's supply pin is on, read from the netlist.
+
+    Two kinds of node can feed a supply pin here and they state their voltage
+    in two different places. A declared rail has a `rail.*` band in the design
+    data. A **reference** states its own output in its part figures, and this
+    board has one - the thresholds hang off it since the DAC's full scale is
+    its supply - so a table of rail names alone would have answered "that is
+    not a rail" and stopped.
+
+    Finding it by symbol rather than by net name is what keeps this derived:
+    move the reference, rename the net, fit a different part, and the band
+    still comes from whatever is actually driving the pin.
+    """
     net = pad_net.get((address, pad))
-    assert net in RAILS, f"{address} pin {pad} is on {net!r}, which is not a declared rail"
-    return net, spec(RAILS[net], "voltage")
+    if net in RAILS:
+        return net, spec(RAILS[net], "voltage")
+    if design is not None:
+        import sys
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tools"))
+        from symbols import symbol_pin_names
+        for source, part in design["parts"].items():
+            if not part["symbol"].startswith("Reference_Voltage:"):
+                continue
+            # Which pad is the output comes from the symbol's own pin names,
+            # not from a number written here. A SOT-23 reference puts OUT on
+            # pin 2 and a SOT-223 one puts it somewhere else, and this check
+            # should not be the reason a part swap needs an edit.
+            out = [number for number, name
+                   in symbol_pin_names(part["symbol"]).items() if name == "OUT"]
+            assert len(out) == 1, f"{source} has {len(out)} pins called OUT"
+            if pad_net.get((source, out[0])) == net:
+                return net, spec(source, "output_voltage")
+    raise AssertionError(
+        f"{address} pin {pad} is on {net!r}, which is neither a declared rail "
+        f"{sorted(RAILS)} nor the output of a reference on this board"
+    )
 
 
 def _thresholds(design, pad_net):
@@ -251,7 +285,7 @@ def test_the_comparators_can_see_the_whole_signal_range(spec, pad_net, comparato
 
 
 def test_the_thresholds_are_as_accurate_as_the_board_claims(
-    design, spec, pad_net, comparators
+    design, spec, spec_has, pad_net, comparators
 ):
     """
     What the trip point is worth, worked from where the DAC's reference comes
@@ -278,7 +312,7 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     those nanoseconds are spent in `trip.budget` where the rest of the chain
     is. Nothing dynamic is charged to this budget.
     """
-    rail, (rail_low, rail_high) = _supply_of(pad_net, DAC, "1", spec)
+    rail, (rail_low, rail_high) = _supply_of(pad_net, DAC, "1", spec, design)
     supply_low, supply_high = spec(DAC, "supply_voltage")
     offset = max(spec(address, "input_offset_voltage")[0] for address in comparators)
     hysteresis = max(spec(address, "input_hysteresis")[0] for address in comparators)
@@ -303,9 +337,9 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     dac_inl, _ = spec(DAC, "integral_nonlinearity")
 
     terms = {
-        # The DAC's full scale *is* its reference, so the reference's spread
-        # lands on every threshold in proportion.
-        "the rail the DAC uses as its reference":
+        # The DAC's full scale *is* whatever its supply pin sits on, so that
+        # node's spread lands on every threshold in proportion.
+        f"{rail}, which is the DAC's full scale":
             (rail_high - rail_low) / 2 / full_scale,
         "the comparator": (offset + hysteresis) / threshold,
         # And the three the part itself declares, which were not summed at all.
@@ -313,6 +347,26 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
         "the DAC's gain error": dac_gain,
         "the DAC's nonlinearity": dac_inl * full_scale / 2 ** bits / threshold,
     }
+    # **And what the rail still does to the threshold, now indirectly.**
+    # Moving the DAC onto the reference did not disconnect the logic rail from
+    # the trip point; it put the reference's line regulation between them.
+    # That term is four decimal places smaller than the rail's own band and it
+    # is not zero, so it is summed rather than waved away - and it is only
+    # here when the supply is something that states a line regulation, which
+    # a plain rail does not.
+    for source, part in design["parts"].items():
+        if not part["symbol"].startswith("Reference_Voltage:"):
+            continue
+        if not spec_has(source, "line_regulation_max"):
+            continue
+        feed = pad_net.get((source, "1"))
+        if feed not in RAILS:
+            continue
+        _, line = spec(source, "line_regulation_max")
+        feed_low, feed_high = spec(RAILS[feed], "voltage")
+        terms[f"{source}'s line regulation, from {feed}"] = (
+            line * (feed_high - feed_low) / full_scale)
+
     total = sum(terms.values())
     # Printed as well as asserted, because 11.46 against 12 is not a margin
     # anyone should have to run the suite to discover, and because which term
@@ -330,7 +384,7 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     )
 
 
-def test_the_dac_resolves_finer_than_the_comparator_can_use(spec, pad_net, comparators):
+def test_the_dac_resolves_finer_than_the_comparator_can_use(design, spec, pad_net, comparators):
     """
     More bits than the comparator's own offset can make use of, which is the
     right way round.
@@ -340,7 +394,7 @@ def test_the_dac_resolves_finer_than_the_comparator_can_use(spec, pad_net, compa
     in the form that would notice if a cheaper part were dropped in.
     """
     bits, _ = spec(DAC, "resolution_bits")
-    _, (_, full_scale) = _supply_of(pad_net, DAC, "1", spec)
+    _, (_, full_scale) = _supply_of(pad_net, DAC, "1", spec, design)
     # The worst of the seven, not the first one's. Naming an address here made
     # the check about one comparator; the fixture already has them all.
     offset = max(spec(address, "input_offset_voltage")[0] for address in comparators)
@@ -618,33 +672,54 @@ def test_a_comparator_pulls_the_trip_bus_to_a_valid_low(
 # DS22187E. `parts/MSOP10/evidence/sources.json` identifies the document.
 # Pin 5, RDY/BSY, is deliberately absent: the datasheet says to leave it
 # floating when it is not used, and this board does not use it.
+# **Microchip's pin table, as functions rather than as net names.** The
+# function of a pin is the datasheet's fact and belongs here; which net this
+# board puts it on is this board's choice and does not. The two used to be one
+# table, and when the DAC's supply moved from the logic rail to VREF+ the
+# entry that caught it was not "a DAC is not allowed on a reference" - it was
+# a string literal saying `3V3`, which is a belief about the board written
+# down inside the thing meant to be checking it.
 DAC_PINS = {
-    "1": "3V3",          # VDD
-    "2": "DAC_SCL",      # I2C serial clock, open drain
-    "3": "DAC_SDA",      # I2C serial data, open drain
-    "4": "GND",          # LDAC, held low so an output follows its register
-    "10": "GND",         # VSS
+    "1": "VDD",
+    "2": "SCL",
+    "3": "SDA",
+    "4": "LDAC",
+    "10": "VSS",
 }
 
 
-def test_the_threshold_dac_is_wired_the_way_its_pin_table_says(design, pad_net):
+def test_the_threshold_dac_is_wired_the_way_its_pin_table_says(design, spec, pad_net, pin_map):
     """
     Every supply and control pin of the threshold DAC is on the right net.
 
     The review note said this part's pinout came from KiCad's symbol and
     LCSC's data because the datasheet could not be read here. It can: the pin
-    table is text. So the netlist is asserted against Microchip's own table,
-    and the four analog outputs are asserted to be four distinct nets rather
-    than named here - which channel drives which threshold is this board's
-    choice, but two thresholds sharing a channel would be a wiring mistake.
+    table is text. So the netlist is asserted against Microchip's own table -
+    which pin is the supply, which two are the bus, which are held low - and
+    what each of those means in copper is derived rather than named.
 
+    The supply has to be a node whose voltage this board states, because the
+    MCP4728's full scale *is* its supply; the bus pins have to be the two the
+    MCU's own I2C pins are on, read from the pin map; the rest are grounded.
     Pin 5 is checked by its absence: the datasheet says to float RDY/BSY when
     it is unused, and a board that ties it anywhere has misread that.
     """
-    wrong = [f"  pin {pin}: on {pad_net.get(('trip.dac', pin))!r}, "
-             f"Microchip's table says {expected!r}"
-             for pin, expected in sorted(DAC_PINS.items())
-             if pad_net.get(("trip.dac", pin)) != expected]
+    wrong = []
+    bus = {p.net_name for p in pin_map.PINS if p.signal.startswith("I2C")}
+
+    for pin, function in sorted(DAC_PINS.items()):
+        net = pad_net.get(("trip.dac", pin))
+        if function == "VDD":
+            # `_supply_of` raises if it is neither a declared rail nor a
+            # reference this board fits, which is the whole assertion.
+            _supply_of(pad_net, "trip.dac", pin, spec, design)
+        elif function in ("SCL", "SDA"):
+            if net not in bus:
+                wrong.append(f"  pin {pin} ({function}): on {net!r}, and the MCU's "
+                             f"I2C pins are on {sorted(bus)}")
+        elif net != "GND":
+            wrong.append(f"  pin {pin} ({function}): on {net!r}, and Microchip's "
+                         f"table says it is held low")
 
     if pad_net.get(("trip.dac", "5")) is not None:
         wrong.append("  pin 5 (RDY/BSY): connected, and the datasheet says to leave it floating")
@@ -659,7 +734,7 @@ def test_the_threshold_dac_is_wired_the_way_its_pin_table_says(design, pad_net):
     )
 
 
-def test_the_thresholds_can_reach_the_top_of_the_signal_range(spec, pad_net):
+def test_the_thresholds_can_reach_the_top_of_the_signal_range(design, spec, pad_net):
     """
     The DAC's full scale covers everything the comparators are asked to trip on.
 
@@ -684,7 +759,7 @@ def test_the_thresholds_can_reach_the_top_of_the_signal_range(spec, pad_net):
     """
     reference, _ = spec("vref.ic", "output_voltage")
     internal, _ = spec(DAC, "internal_reference")
-    rail, (rail_low, _) = _supply_of(pad_net, DAC, "1", spec)
+    rail, (rail_low, _) = _supply_of(pad_net, DAC, "1", spec, design)
 
     assert rail_low >= reference, (
         f"the DAC runs from {rail} at {rail_low:g} V and has to place a "

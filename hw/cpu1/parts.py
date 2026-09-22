@@ -458,10 +458,32 @@ VREF_3V0 = PartSpec(
         "dropout_at_20ma": exact(200e-3),
         "dropout_at_25ma": exact(300e-3),
         "output_current_max": exact(25e-3),
-        # 50 uA maximum, from the features list. It was hard-coded in the
-        # check that uses it, which is a datasheet figure living somewhere
-        # nothing else can see.
-        "quiescent_current_max": exact(50e-6),
+        # 3 uV/mA typical, 100 uV/mA maximum over 0 to 25 mA, from the same
+        # electrical table. It is here because the thresholds now hang off
+        # this node: anything that changes the load changes VREF+, and the
+        # maximum is what bounds it. Stated in volts per amp.
+        "load_regulation_max": exact(0.1),
+        # SBVS032F's Application Information: the part needs no output
+        # capacitor at all, and where one is fitted "special care must be
+        # taken with the combination of low equivalent series resistance (ESR)
+        # capacitors and high capacitance", with 10 uF named as the ceiling.
+        # Every capacitor on this board is a low-ESR ceramic, so the ceiling
+        # is the figure that applies.
+        "output_capacitance_max": exact(10e-6),
+        # 59 uA, not the 50 the features list leads with: the electrical
+        # table gives 50 uA at 25 degC and a boldface 59 over the full -40 to
+        # +125 range, and boldface in this document means "applies over the
+        # specified temperature range". The crop is committed at
+        # evidence/ref3030_electrical.png. It was hard-coded in the check
+        # that uses it before that - a datasheet figure living somewhere
+        # nothing else could see - and it was the 25 degC one.
+        "quiescent_current_max": exact(59e-6),
+        # 120 uV/V typical, 375 maximum. This is the *residual* path from the
+        # logic rail to every trip threshold: the DAC's full scale is this
+        # node, so whatever the rail does to this node it does to the trip
+        # point. It replaced the rail's whole declared 5 % and it is four
+        # decimal places smaller, which is the entire argument for the move.
+        "line_regulation_max": exact(375e-6),
         "supply_bypass": exact(0.47e-6),
         "temperature_drift": exact(75e-6),
     },

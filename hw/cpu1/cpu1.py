@@ -1439,7 +1439,7 @@ def trip_comparators(v3v3, gnd, nets) -> None:
     low-side comparators do not trip at zero and do not need to: nothing can
     run while the other three are asserting.
 
-    **Power-up, not reset.** The MCP4728 has no reset pin, it sits on 3V3
+    **Power-up, not reset.** The MCP4728 has no reset pin, it sits on VREF+
     which does not drop when NRST is asserted, and its only other reset path
     is an I2C general-call that needs the bus working. After a watchdog reset
     or a debugger halt the thresholds are whatever the firmware that just
@@ -1450,7 +1450,31 @@ def trip_comparators(v3v3, gnd, nets) -> None:
     thresholds frozen with nothing on the board able to power-cycle U15.
     """
     dac = part(parts.THRESHOLD_DAC, "trip.dac", "U15")
-    v3v3 += dac["VDD"]
+    # **Its supply is VREF+, not the logic rail, and that is the whole point
+    # of the part being here rather than beside the MCU.** The MCP4728's full
+    # scale *is* its supply - it has no reference pin - so whatever this pin
+    # sits on is what every threshold is a fraction of. On 3V3 that made the
+    # logic rail's declared +-5 % the largest single term in the trip point's
+    # error budget, five per cent of eleven and a half, while every channel
+    # the ADCs convert is ratiometric to VREF+ instead. Thresholds and
+    # measurements were scaled by two different numbers.
+    #
+    # On VREF+ they are scaled by one. A sensor on the power board is
+    # ratiometric to the reference this board exports, the ADC converts
+    # against the same reference, and now the comparator's threshold is a
+    # fraction of it too: a trip set at "a quarter of full scale" means the
+    # same quarter in all three places, and the reference moving takes all
+    # three with it. The error term that was 5 % is the REF3030's own
+    # +-0.2 %, and the budget goes from 11.46 % to about 7.
+    #
+    # The obvious alternative - a DAC with a reference input - was priced
+    # before this was chosen. Every quad 12-bit I2C part with an external
+    # VREF pin (MCP47FEB24, AD5694R, MAX5815, LTC2635, DAC53004) is in
+    # single-digit stock at the distributor this board buys from, and the
+    # DAC7574 that is in stock turns out to be VDD-referenced too. There is
+    # no such part to buy. Supplying this one from the reference gets the
+    # same node doing the same job.
+    nets["VREF+"] += dac["VDD"]
     gnd += dac["VSS"]
     # Latch the outputs as they are written; nothing here needs four thresholds
     # to change at one instant.
@@ -1460,10 +1484,21 @@ def trip_comparators(v3v3, gnd, nets) -> None:
     dac["RDY/~{BSY}"] += NC  # noqa: F821
     nets["DAC_SCL"] += dac["SCL"]
     nets["DAC_SDA"] += dac["SDA"]
+    # **The bus pulls to VREF+ as well, and that is a rating, not a
+    # preference.** DS22187E's absolute maximum for every input and output on
+    # this part is VDD + 0.3 V. With VDD now at the reference's 2.994 V floor,
+    # a bus idling at the logic rail's 3.465 V ceiling is 171 mV over it -
+    # so moving the supply without moving these two would have built a part
+    # outside its absolute maximum on every idle bus cycle.
+    #
+    # The MCU does not mind: I2C is open-drain, PF0 and PF1 never drive high,
+    # and 2.994 V is comfortably above an STM32's 0.7*VDD input threshold.
+    # What it costs is that the bus current now comes out of the reference,
+    # and `test_power.py` counts it there.
     for address, net, ref in (("trip.r_scl_pullup", "DAC_SCL", "R59"),
                               ("trip.r_sda_pullup", "DAC_SDA", "R60")):
         pull_up = part(parts.RES_4K7_0402, address, ref)
-        v3v3 += pull_up[1]
+        nets["VREF+"] += pull_up[1]
         nets[net] += pull_up[2]
 
     thresholds = {}
@@ -1473,10 +1508,16 @@ def trip_comparators(v3v3, gnd, nets) -> None:
         thresholds[name] += dac[f"VOUT{channel}"]
     thresholds["DAC_SPARE"] += part(parts.TEST_PAD, "tp_dac_spare", "TP10")[1]
 
+    # The DAC's own decoupling follows its supply onto VREF+. SBVS032F wants
+    # this watched rather than assumed: "the REF30xx does not require a
+    # capacitor on the output. If a capacitive load is connected, special care
+    # must be taken with the combination of low ESR capacitors and high
+    # capacitance", with 10 uF named as the ceiling. What is on VREF+ is held
+    # against that by `test_the_reference_is_not_loaded_past_what_it_allows`.
     for address, spec, ref in (("trip.dac.decoupling", parts.CAP_100N_0402, "C29"),
                                ("trip.dac.bulk", parts.CAP_1U_0402, "C30")):
         cap = part(spec, address, ref)
-        v3v3 += cap[1]
+        nets["VREF+"] += cap[1]
         gnd += cap[2]
 
     # Each threshold gets a pull, and which way depends on which input it is

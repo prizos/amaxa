@@ -990,6 +990,124 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, pad
     )
 
 
+def test_the_reference_is_not_loaded_past_what_it_allows(
+    design, pad_net, two_pad_parts, spec, spec_has
+):
+    """
+    Everything hanging on VREF+ - on this board and off it - against what the
+    REF3030 can hold up, and against what it says about capacitance.
+
+    The check above bounds what the board *promises* the power board. This one
+    exists because the board now takes some itself: the threshold DAC's supply
+    is VREF+, because the MCP4728's full scale is its supply and a threshold
+    should be a fraction of the same reference the ADC converts against. Its
+    I2C pull-ups had to follow, since Microchip's absolute maximum for every
+    pin on that part is VDD + 0.3 V and a bus idling at the logic rail would
+    have been 171 mV over it.
+
+    So three things are asserted, and all three read the netlist:
+
+      - **the current.** The DAC's own figure, the bus current with both lines
+        held low, and the promise to the connector, against the smaller of
+        what the part can supply and what the 3V3 rail's headroom leaves on
+        the dropout curve. A pull-up that ends at a pin is counted here
+        although the rail check above does not count them, because there are
+        exactly two of them, they are on the node the thresholds are a
+        fraction of, and "only while the bus is low" is not a duty cycle this
+        board states.
+      - **the threshold shift that current causes**, through the part's own
+        load regulation. This is the term that would make moving the DAC here
+        a bad trade if it were large.
+      - **the capacitance.** SBVS032F: the part needs no output capacitor, and
+        where one is fitted "special care must be taken with the combination
+        of low equivalent series resistance (ESR) capacitors and high
+        capacitance", naming 10 uF. Every capacitor on this board is a
+        low-ESR ceramic, and moving the DAC moved its decoupling here too.
+    """
+    out = [number for number, name
+           in symbol_pin_names(design["parts"][REFERENCE]["symbol"]).items()
+           if name == "OUT"]
+    assert len(out) == 1, f"{REFERENCE} has {len(out)} pins called OUT"
+    node = pad_net[(REFERENCE, out[0])]
+
+    nominal, _ = spec(REFERENCE, "output_voltage")
+    items = []
+
+    # What each part on the node says it draws, by the same rule the rail
+    # check uses: a figure is per part, attributed to the pin it comes from.
+    for address, part in design["parts"].items():
+        if address == REFERENCE:
+            continue
+        here = {name.upper() for pad, name in symbol_pin_names(part["symbol"]).items()
+                if pad_net.get((address, str(pad))) == node}
+        for parameter in sorted({p for name in here for p in SUPPLY_PINS.get(name, ())}):
+            if spec_has(address, parameter):
+                items.append((f"{address}.{parameter}", spec(address, parameter)[1]))
+
+    # And every resistor that ends on this node, at the worst case for a
+    # pull-up: its far end held low.
+    for address, part in design["parts"].items():
+        if part["symbol"] != "Device:R":
+            continue
+        pads = [p for (owner, p), n in pad_net.items() if owner == address and n == node]
+        if not pads:
+            continue
+        ohms, _ = spec(address, "resistance")
+        items.append((f"{address} with its far end low", nominal / ohms))
+
+    _, promised = spec("vref", "supply_current")
+    items.append(("vref.supply_current off the connector", promised))
+    quiescent, _ = spec(REFERENCE, "quiescent_current_max")
+    items.append((f"{REFERENCE} quiescent", quiescent))
+
+    drawn = sum(current for _, current in items)
+
+    supply = pad_net[(REFERENCE, "1")]
+    rail_low, _ = spec(f"rail.{supply.lower()}", "voltage")
+    _, output_high = spec(REFERENCE, "output_voltage")
+    curve = sorted(
+        (amps, spec(REFERENCE, f"dropout_at_{name}")[1])
+        for amps, name in ((5e-3, "5ma"), (10e-3, "10ma"),
+                           (20e-3, "20ma"), (25e-3, "25ma")))
+    _, capable = spec(REFERENCE, "output_current_max")
+    headroom_limit = _current_at_dropout(curve, rail_low - output_high)
+    allowed, why = min(
+        (capable, f"{REFERENCE} can supply {capable * 1e3:g} mA"),
+        (headroom_limit,
+         f"{supply} leaves {(rail_low - output_high) * 1e3:.0f} mV of headroom, "
+         f"which this part's dropout curve reaches at {headroom_limit * 1e3:.1f} mA"))
+
+    worst = sorted(items, key=lambda x: -x[1])[:5]
+    assert drawn <= allowed, (
+        f"{node} carries {drawn * 1e3:.2f} mA and {why}. Largest: "
+        + ", ".join(f"{name} {current * 1e3:.2f}" for name, current in worst))
+
+    # What that load does to the reference, and so to every threshold hanging
+    # off it. 100 uV/mA maximum over the part's whole range.
+    regulation, _ = spec(REFERENCE, "load_regulation_max")
+    _, tolerance = spec("trip", "threshold_tolerance")
+    shift = drawn * regulation / nominal
+    assert shift <= tolerance, (
+        f"{drawn * 1e3:.2f} mA at {regulation * 1e6:g} uV/mA moves {node} by "
+        f"{drawn * regulation * 1e3:.2f} mV, {shift * 100:.2f} % of {nominal:g} V, "
+        f"against {tolerance * 100:g} % of threshold tolerance")
+
+    # And the capacitance, at nominal rather than derated: the figure is a
+    # ceiling, so the bias derating that shrinks a capacitor moves this the
+    # safe way and assuming it would be assuming the part's way out.
+    fitted, _ = _capacitance_on(design, two_pad_parts, spec, node, "GND")
+    ceiling, _ = spec(REFERENCE, "output_capacitance_max")
+    assert fitted <= ceiling, (
+        f"{fitted * 1e6:.2f} uF of low-ESR ceramic on {node}, against the "
+        f"{ceiling * 1e6:g} uF SBVS032F names as the ceiling for a capacitive "
+        f"load on this part")
+
+    print(f"    {node}: {drawn * 1e3:.2f} mA of {allowed * 1e3:.1f}, "
+          f"{drawn * regulation * 1e3:.2f} mV of load regulation "
+          f"({shift * 100:.2f} % of a threshold), {fitted * 1e6:.2f} uF of "
+          f"{ceiling * 1e6:g} fitted")
+
+
 # --- ratings across the board ------------------------------------------------
 
 # The highest voltage each net reaches in normal operation. A surge is not in

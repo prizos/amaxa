@@ -16,23 +16,23 @@ count, it says so.
 Two denominators matter, and they give different answers, which is itself the
 finding.
 
-**The 205 checks**, counted by what each one actually reads:
+**The 206 checks**, counted by what each one actually reads:
 
 | | | |
 |---|---|---|
 | run against a circuit simulator | **2** | 1 % |
-| derive a number from the netlist, the routed copper or the stackup | **129** | 63 % |
+| derive a number from the netlist, the routed copper or the stackup | **130** | 64 % |
 | assert structure only — this is wired to that, this exists | **72** | 35 % |
 
-**The 839 declared values** the checks compare against, counted by where the
+**The 843 declared values** the checks compare against, counted by where the
 number came from:
 
 | | | |
 |---|---|---|
 | produced by a simulation | **0** | — |
-| a datasheet figure typed into `parts.py` | **774** | 92 % |
-| ...of those, on a part with at least one committed evidence crop | **307** | 37 % of the 774, *at best* |
-| design intent declared in `cpu1.py` | **65** | 8 % |
+| a datasheet figure typed into `parts.py` | **777** | 92 % |
+| ...of those, on a part with at least one committed evidence crop | **310** | 40 % of the 777, *at best* |
+| design intent declared in `cpu1.py` | **66** | 8 % |
 
 So: the machinery that *checks* is largely real. The numbers it checks
 against are largely typed. A check that reads 22.22 Ω off the netlist,
@@ -124,7 +124,7 @@ buyable, and nothing whatever about any number attached to it.**
 The mechanism this project has for going further is an evidence crop: the
 relevant table or figure cut out of the PDF at 200 dpi and committed beside
 the part, with the source URL and the PDF's sha256 in a sidecar. There are
-**30 crops**, covering 17 of the 41 footprint directories and 21 of the 72
+**32 crops**, covering 17 of the 41 footprint directories and 21 of the 72
 distinct part numbers. At most 307 of the 774 parameters belong to a part that
 has any crop at all — and that is an upper bound, not a count, because a crop
 covers one table and a part may declare figures from several.
@@ -135,6 +135,16 @@ covers one table and a part may declare figures from several.
   figures are three of the five terms in the trip budget. **Zero crops.**
 - `VSSOP8` — the 74LVC1G74 latch, whose propagation delay is the first term in
   that same budget. **Zero crops.**
+
+Two of the gaps this round named have since been closed, and both were closed
+because a number moved onto load-bearing ground rather than because the list
+was worked through: the REF3030's whole electrical table
+(`SOT23/ref3030_electrical.png`) once every trip threshold became a fraction
+of its output, and the MCP4728's absolute maximums
+(`MSOP10/absolute_maximum.png`) once the I²C bus had to be held to them. The
+first of those also caught a figure read from the wrong column — 50 µA of
+quiescent current at 25 °C where the boldface 59 µA over temperature was the
+one that applied.
 
 Every passive package is also uncropped, which matters less — a 10 kΩ ±1 %
 0402's tolerance is not a figure anyone misreads — but the two above are not
@@ -168,15 +178,41 @@ survived being asked "which check reads this?".
 
 ## 5. Two defects in the checks themselves
 
-**A budget spent twice.** `trip.threshold_tolerance` is 12 %. The accuracy
-check summed the rail, the comparator and the DAC's offset, gain and
-nonlinearity to 11.46 % and passed. The filter-loading check computed the
-comparator tap's amplitude error at 8.58 % and compared it against *the same
-12* and passed. They describe one quantity — where the trip point actually
-sits — and together they are **20.0 %**. Summing them is the fix; the result
-is a failing check and an entry in `BLOCKING`, because a trip set at a quarter
-of full scale being a fifth out is a design decision, not a bookkeeping
-artefact. `COMPLETE` is back to `False`.
+**One declaration doing two jobs — and the first fix was wrong.**
+`trip.threshold_tolerance` is 12 %. The accuracy check summed the rail, the
+comparator and the DAC's offset, gain and nonlinearity to 11.46 % and passed.
+The filter-loading check computed the comparator tap's amplitude deficit at
+8.58 % and compared it against *the same 12* and passed. That looked like one
+budget spent twice, so the two were summed — 20.0 % — and filed as a blocker.
+
+Working the dynamics showed the sum was wrong. The 8.58 % is a fraction of the
+*step*; the other five are fractions of the *threshold*. A ramp gets the
+delay, a step gets the deficit, and no one signal gets both. And the deficit
+does not make a trip late: a lead-lag's output jumps immediately to R/(Rs + R)
+of its input, so a fault already 9.38 % over its threshold fires on the
+instant.
+
+| a step this far over the threshold | fires after |
+|---|---|
+| 5.0 % | 69.9 ns |
+| **9.4 %** | **0 ns** |
+| 300 % | 0 ns |
+
+So the real defect was thinner: one declared name was serving as both a DC
+error budget and a dynamic amplitude bound. `trip.prompt_overshoot` — a
+quarter — is the declaration that was missing, and the tap's real cost stays
+where it belongs, as 10.55 ns of the 20 ns reserved for it in `trip.budget`.
+
+**And the thing that came out of examining it.** The largest remaining term
+was the logic rail at 5.00 %, because the MCP4728's full scale *is* its supply
+and its supply was 3V3 — while every channel the ADCs convert is ratiometric
+to VREF+. Thresholds and measurements were scaled by two different numbers.
+The DAC's supply is VREF+ now, its I²C pull-ups with it (Microchip's absolute
+maximum is VDD + 0.3 V, and a bus on the logic rail would have been 171 mV
+outside it), and the budget is **7.06 % of 12** instead of 11.46 %. It cost
+7.74 mA of the reference's 12.9 mA and 0.77 mV of load regulation, both now
+derived and checked; the old part note had rejected the idea as "a worse
+trade" without measuring it.
 
 **A value that could be zero.** Setting `safety.c_clear.capacitance` to 0 F
 left all 203 checks passing. The coupling capacitor is the entire reason the
@@ -208,7 +244,9 @@ and only DRC run against a rule nobody runs can see it.
 In descending order of what it buys:
 
 1. **Crop the two safety-chain parts.** Four of the five terms in the trip
-   budget rest on figures nobody has shown. This is an afternoon.
+   budget rest on figures nobody has shown. This is an afternoon, and the two
+   crops added since this was written show what it is worth: one of them found
+   a figure that had been read off the wrong column.
 2. **Give the trip chain a simulation.** Not because the arithmetic is
    suspect, but because it is the one chain on the board whose failure mode is
    a destroyed bridge, and it is currently one method deep.

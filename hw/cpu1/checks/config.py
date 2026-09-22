@@ -19,7 +19,7 @@ BLOCKING: dict[str, str] = {
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 205
+EXPECTED_CHECKS = 206
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -110,7 +110,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
                 "analog_input_absolute_maximum",
                 "analog_input_injection_current",
                 "current_consumption_scheme"],
-    "MSOP10": ["factory_default"],
+    "MSOP10": ["factory_default", "absolute_maximum"],
     "QFN24": ["package_outline", "front_end"],
     "RJ45HR": ["schematic"],
     "SMB": ["cathode"],
@@ -118,7 +118,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOD123": ["cathode"],
     "SOIC8": ["can_common_mode", "can_esd_ratings",
               "rs485_common_mode", "rs485_esd_ratings"],
-    "SOT23": ["bat54a_common_anode", "bat54a_forward_voltage",
+    "SOT23": ["ref3030_electrical", "bat54a_common_anode", "bat54a_forward_voltage",
               "bat54a_reverse_current", "ref3030_dropout"],
     "SOT23_6": ["tlv3501_delay_vs_load"],
     "TSSOP20": ["lvc541a_current_ratings"],

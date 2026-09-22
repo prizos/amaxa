@@ -1,4 +1,15 @@
 {
+  "absolute_maximum": {
+    "assumes": "",
+    "crop": "213,187,1333,1413",
+    "document": "MCP4728 Quad DAC with Non-Volatile Memory, DS22187E (2010), Microchip",
+    "dpi": 200,
+    "page": 3,
+    "read": "2026-09-23",
+    "sha256": "7e6515c45a02ffe4ad7506f3347cce7714cdd56659ff2fb22b858fc0472f381e",
+    "shows": "The absolute maximum that made the I2C pull-ups move when the DAC's supply moved: 'All inputs and outputs w.r.t VSS ... -0.3V to VDD+0.3V'. With VDD now the reference's 2.994 V floor, a bus idling at the logic rail's 3.465 V ceiling is 171 mV outside it, so SDA and SCL pull to VREF+ as well. Also the supply figure the reference's load budget counts: I_DD 800 uA typical, 1400 uA maximum with all four channels in normal mode.",
+    "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/22187E.pdf"
+  },
   "factory_default": {
     "assumes": "",
     "crop": "80,640,1120,420",

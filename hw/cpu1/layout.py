@@ -1695,6 +1695,71 @@ THRESHOLDS = (
 )
 
 
+
+# The reference down to the threshold DAC, which is what putting the DAC's
+# supply on VREF+ costs in copper.
+#
+# The DAC sits thirty-one millimetres south of the nearest VREF+ track, and
+# both outer layers are full for the whole distance: a scan of every vertical
+# lane between them found one column on F.Cu with any room at all and none on
+# B.Cu. In3.Cu carries twenty-eight segments where F.Cu carries nine hundred
+# and ninety-two, so the lane goes there - which is where it belongs anyway,
+# since In3 is referenced to solid copper on both sides and this is the node
+# every threshold is a fraction of.
+#
+# It starts at the via VREF+ already has east of the package - the run along
+# y = 6.75 is the escape lane outside the pad ring and there is no room on it
+# for a second via - comes south on the inner layer, and turns west under the
+# DAC's passive row. Each pad rises on its own via north of the row, because
+# the row's other pads are half a millimetre away on three different nets and
+# a spine along it would short all three.
+VREF_DAC_START = (-7.7, 6.75)             # the via VREF+ already has
+VREF_DAC_LANE = -6.7                      # the clear column on In3.Cu
+VREF_DAC_TURN = -20.0                     # where it turns west, north of the row
+VREF_DAC_SPUR = -23.0                     # and comes up for the DAC's own pin
+# pad -> where its via sits on the inner layer
+VREF_DAC_RISERS = ("trip.dac.decoupling:1", "trip.dac.bulk:1", "trip.r_scl_pullup:1")
+
+
+def _vref_to_the_dac() -> None:
+    """VREF+ from the reference's own via to the DAC, its bus pulls and its caps."""
+    net = "VREF+"
+    width = _width_for(net, SUPPLY)
+    risers = {pad: (_point(pad)[0], VREF_DAC_TURN) for pad in VREF_DAC_RISERS}
+    west = min(x for x, _ in risers.values())
+    supply = _point("trip.dac:1")
+
+    # The lane, and the branch west under the row. No via at the start: the
+    # one already there goes through every layer, In3 among them.
+    ROUTES.append((net, width, MID, [
+        VREF_DAC_START, (VREF_DAC_LANE, 5.5),
+        (VREF_DAC_LANE, VREF_DAC_TURN), (west, VREF_DAC_TURN)]))
+
+    # Up to each pad on the row, one via each.
+    for pad, at in risers.items():
+        VIAS.append((None, at, net, *VIA))
+        ROUTES.append((net, width, F, [at, pad]))
+
+    # And the DAC's own supply pin, which is south of the row and cannot be
+    # reached across it: the spur drops on the inner layer in the gap between
+    # the bulk capacitor's ground pad and the clock pull-up, and surfaces
+    # clear of the package.
+    spur = (supply[0], VREF_DAC_SPUR)
+    ROUTES.append((net, width, MID, [(supply[0], VREF_DAC_TURN), spur]))
+    VIAS.append((None, spur, net, *VIA))
+    ROUTES.append((net, width, F, [spur, "trip.dac:1"]))
+
+    # The data line's pull-up is the last one, and it cannot come across from
+    # the supply pin: DAC_SDA and DAC_SCL both leave the package eastward on
+    # the front between the two, so anything crossing there crosses them. It
+    # stays on the inner layer to the east of both and rises at its own pad.
+    sda = _point("trip.r_sda_pullup:1")
+    corner = (sda[0], VREF_DAC_SPUR)
+    ROUTES.append((net, width, MID, [spur, corner]))
+    VIAS.append((None, corner, net, *VIA))
+    ROUTES.append((net, width, F, [corner, "trip.r_sda_pullup:1"]))
+
+
 def _trip_supply() -> None:
     """
     5 V from the regulator's island to the comparators, forty millimetres away.
@@ -1858,6 +1923,7 @@ def _trip() -> None:
 
     _trip_supply()
     _trip_routes()
+    _vref_to_the_dac()
 
 
 # The analog supply for the power board's own sensors: 5 V into an LDO, out at

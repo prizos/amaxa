@@ -1,8 +1,9 @@
 # cpu1 — what this board is, and what it does
 
 A design review written after the adversarial round that closed `BLOCKING`,
-then corrected by the one after it — which reopened a blocker and found four
-wrong numbers on this page. See
+then corrected twice: once by the round that found four wrong numbers on this
+page, and once by the round that found the first correction had itself been
+wrong about the trip point. See
 [`ADVERSARIAL-REVIEW.md`](ADVERSARIAL-REVIEW.md) for how much of what follows
 is proven and how much is prose.
 Everything here is measured off the generated board and `build/design.json`
@@ -41,7 +42,7 @@ three, and why the other count was the wrong way to read the diagram.)
 | Rails | 5 V (LM5164, 100 V-class), 3V3 (TPS562200), 3V3A (TLV70233 LDO), VREF+ 3.0 V |
 | To the power board | digital 2×26 (52 pins), analog 2×15 (30 pins) |
 | Comms | USB-C device, CAN FD, RS-485, 100BASE-TX Ethernet |
-| Checks | 205, one failing on purpose (§4); DRC 0 violations, 0 unconnected |
+| Checks | 206, all passing; DRC 0 violations, 0 unconnected |
 
 The part count is dominated by the safety chain (59) and the MCU core (39) —
 which is the right shape for what this board is for.
@@ -82,9 +83,12 @@ be alive.
 1. **Seven external comparators** — TLV3501, 7 ns — watch three phase
    currents at two thresholds each plus the DC link. They run from 5 V so
    their common-mode range covers the whole signal swing.
-2. **Their thresholds come from an MCP4728 DAC that powers up at zero.** An
-   unprogrammed board therefore reads every phase current as over its
-   high-side threshold and **trips as it powers up**, rather than switching.
+2. **Their thresholds come from an MCP4728 DAC that powers up at zero**, and
+   that runs from **VREF+ rather than the logic rail**. An unprogrammed board
+   therefore reads every phase current as over its high-side threshold and
+   **trips as it powers up**, rather than switching — and a programmed one
+   compares a sensor scaled to the 3.0 V reference against a threshold that
+   is a fraction of the same 3.0 V reference. See §4.
 3. **A hardware latch** (74LVC1G74 used as a set-reset, clock and data tied
    low) holds the trip. Only PG5 clears it, and only as an AC-coupled
    *pulse* — a pin stuck low cannot hold the clear asserted, because the
@@ -147,16 +151,23 @@ none of them can be relaxed without breaking another:
 |---|---|
 | corner | 1.27–1.73 MHz, inside the declared 1–2 MHz |
 | settling | 0.37 LSB left in a 236 ns window, of the half-LSB allowed |
-| tap error | **8.58 %** amplitude — see below, this is the open blocker |
+| tap error | 8.58 % off a step, which is 9.38 % of overshoot, not a threshold error |
 | tap delay | 10.6 ns of the 20 the trip budget allows |
 
-**The tap error is this board's one open blocker.** `trip.threshold_tolerance`
-is 12 %, and two checks were each spending all of it: the accuracy check
-summed the rail, the comparator and the DAC's offset, gain and nonlinearity to
-11.46 %, and this tap term came to 8.58 % on its own. Both passed, and both
-describe the same quantity — where the trip point actually sits. They are
-summed now, it comes to **20.0 % against 12 declared**, and the check fails.
-`checks/config.py` carries it in `BLOCKING` and `COMPLETE` is back to `False`.
+**The tap error is not a threshold error, and for one round this document
+said it was.** Two checks looked as though they were spending one 12 %
+declaration — the accuracy sum at 11.46 % and this tap term at 8.58 % — so the
+two were added, giving 20.0 %, and the result was filed as a blocker. That was
+wrong. The 8.58 % is a fraction of the *step*; the other five are fractions of
+the *threshold*; and a ramp gets the delay while a step gets the deficit, so
+no one signal gets both.
+
+More to the point, the deficit does not make a trip late. A lead-lag's output
+jumps immediately to R/(Rs + R) of its input, so a fault already 9.38 % over
+its threshold fires on the instant, with nothing added. What the deficit sets
+is **how far over a fault has to be** to get that, and `trip.prompt_overshoot`
+— a quarter — is what this board now promises about it. The tap's real cost is
+10.55 ns of the 20 ns reserved for it, in §3's table with the rest.
 
 The settling argument is worth stating because it is not the textbook one:
 **ST's Equation 1 rejects every value that works here.** That equation asks
@@ -168,7 +179,36 @@ sharing instead, and says so.
 
 Measurements are ratiometric to a 3.0 V series reference that leaves the board
 on its own connector pin, so what the power board measures and what this board
-converts are scaled by the same number.
+converts are scaled by the same number — **and so is every trip threshold**,
+since the MCP4728's full scale is its supply pin and its supply pin is that
+reference.
+
+### What the trip point is worth
+
+| term | share |
+|---|---|
+| the DAC's offset, 20 mV at a 0.750 V threshold | 2.67 % |
+| the comparator's offset and hysteresis | 1.67 % |
+| the DAC's nonlinearity, 13 LSB | 1.27 % |
+| the DAC's gain error | 1.25 % |
+| **VREF+ itself**, the REF3030's ±0.2 % | 0.20 % |
+| the reference's line regulation, from 3V3 | 0.004 % |
+| **total** | **7.06 % of 12 declared** |
+
+The last two rows are the interesting ones. The DAC ran from 3V3 until
+recently, and then the top row of this table was the **logic rail at 5.00 %** —
+the largest single term, and a number the board was spending on nothing,
+because the thresholds it scaled were being compared against sensors scaled to
+a different reference entirely.
+
+Moving the supply to VREF+ replaced it with the reference's own accuracy and
+its line regulation, which together are 0.204 %, and took the budget from
+11.46 % to 7.06 %. It cost 7.74 mA of the 12.9 mA the reference's headroom
+allows, worth 0.77 mV of load regulation, and it cost the I²C pull-ups moving
+to VREF+ as well — Microchip's absolute maximum for every pin on that part is
+VDD + 0.3 V, and a bus idling on the logic rail would have been 171 mV outside
+it. There is no quad 12-bit I²C DAC with a real reference pin in stock
+anywhere; `parts/MSOP10/MSOP10.md` lists the five that were priced.
 
 ---
 
@@ -242,12 +282,12 @@ and scales the output to this rail.
 
 ## 7. What the checks are, and what they are for
 
-203 of them. The distribution is the interesting part:
+206 of them. The distribution is the interesting part:
 
 | file | checks | |
 |---|---|---|
-| `test_power.py` | 30 | rails, converters, ratings, the resistor fault model |
-| `test_safety.py` | 26 | the trip chain end to end |
+| `test_power.py` | 31 | rails, converters, ratings, the resistor fault model |
+| `test_safety.py` | 28 | the trip chain end to end |
 | `test_ethernet.py` | 21 | the one block with an external standard to satisfy |
 | `test_trip.py` | 17 | thresholds, the DAC, what a trip is worth |
 | `test_core.py` | 15 | the MCU against its own datasheet |
@@ -288,12 +328,11 @@ the suite:
 
 ## 8. What I would not yet bet on
 
-`BLOCKING` has one entry, and it is a design decision rather than a defect:
-the trip point is good to 20.0 % against a 12 % declaration, because two
-checks were spending the same budget. §4 has the detail. Closing it means
-choosing between a tighter rail, a better-referenced DAC, a source impedance
-the power board is required to meet, or a wider declaration with the reasoning
-written down — and that is the user's call, not a fix.
+`BLOCKING` is empty. It held one entry for part of this round — the trip point
+at 20.0 % against a 12 % declaration — and that entry was a mistake of mine
+rather than a defect of the board's: two checks were not spending one budget,
+they were measuring two different things. §4 has it. The reference-supplied
+DAC that came out of examining it is a real improvement and went in anyway.
 
 Everything below is uncertain in the weaker sense: nothing is known to be
 wrong, and nothing has been measured.

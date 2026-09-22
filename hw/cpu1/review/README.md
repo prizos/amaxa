@@ -11,7 +11,7 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
 | **Footprints** | 272 |
 | **Nets** | 197 |
-| **Routing** | 1327 track segments, 602 vias, 4 zones |
+| **Routing** | 1332 track segments, 602 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -469,12 +469,12 @@ schematic after the fact.
 | Net | Nodes | Status |
 |---|--:|---|
 | `GND` | 230 |  |
-| `3V3` | 107 |  |
+| `3V3` | 102 |  |
 | `5V` | 29 |  |
+| `VREF+` | 11 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
 | `USB_VBUS_IN` | 6 |  |
-| `VREF+` | 6 |  |
 | `3V3A` | 5 |  |
 | `TRIPPED` | 5 |  |
 | `TRIP_LEVEL_HIGH` | 5 |  |

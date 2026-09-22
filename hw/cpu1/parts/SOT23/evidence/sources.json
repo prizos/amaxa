@@ -42,5 +42,16 @@
     "sha256": "ffa7c37e7b71c28290a091082bc2fac26bb979dea2c8daa849934bce9c7c0784",
     "shows": "Dropout voltage against load current: about 10 mV per milliamp to 20 mA, reaching 300 mV at the part's full 25 mA. The features list's headline 1 mV is the unloaded figure, which the description says in as many words - 'Unloaded, the REF30xx can be operated with supplies within 1mV of output voltage'. This board has 129 mV of headroom on 3V3, so what it may draw from VREF+ is bounded by this curve and not by the part's 25 mA output capability.",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/83cb04ab27884d1fa99fa603d62ed3e3.pdf"
+  },
+  "ref3030_electrical": {
+    "assumes": "",
+    "crop": "187,60,1433,1867",
+    "document": "TI REF3012, 3020, 3025, 3030, 3033, 3040, SBVS032F (March 2002, revised August 2008), served by LCSC for C38423",
+    "dpi": 200,
+    "page": 3,
+    "read": "2026-09-23",
+    "sha256": "ffa7c37e7b71c28290a091082bc2fac26bb979dea2c8daa849934bce9c7c0784",
+    "shows": "The REF3030's own block and the figures every trip threshold now rests on: 2.994 to 3.006 V with 0.2 % initial accuracy, load regulation 3 uV/mA typical and 100 uV/mA maximum over 0 to 25 mA, line regulation 120/375 uV/V, dropout 1 mV typical and 50 mV maximum, and a quiescent current of 50 uA at 25 C rising to 59 uA over the full temperature range. The 0.2 % is what replaced the logic rail's declared 5 % in the trip point's error budget when the DAC's supply moved onto this node.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/83cb04ab27884d1fa99fa603d62ed3e3.pdf"
   }
 }
