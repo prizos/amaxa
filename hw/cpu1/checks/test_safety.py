@@ -565,36 +565,41 @@ def _leakage(spec, address: str, ambient: float) -> float:
 
 def test_the_trip_bus_still_reads_high_with_every_diode_leaking(design, pad_net, spec):
     """
-    The other end of the trip bus's noise margin, and the one that fails on a
-    hot bench rather than on a cold one.
+    What the Schottkys' reverse leakage does to TRIP_SET_N, in the direction
+    it actually flows.
 
-    Twelve Schottky junctions hang off TRIP_SET_N with their cathodes at
-    whatever the comparators and the fault lines are doing, and when nothing
-    is tripped every one of them is reverse biased. Their leakage all flows
-    the same way, out of the 10 k pull-up, and the latch will not read a high
-    below 2.0 V. So the budget is (3.135 - 2.0) / 10.1 k of current shared
-    between them.
+    **This check had the current backwards.** It said the twelve junctions'
+    leakage "all flows the same way, out of the 10 k pull-up", and budgeted
+    (3.135 - 2.0)/10.1 k before the latch stopped reading a high. The netlist
+    says otherwise, and so does this board's own committed evidence: a BAT54A
+    joins its **anodes**, pin 3 is the common anode, and pin 3 is the net. The
+    cathodes are on the comparator outputs and the fault lines - which is
+    right for the wired-OR, because a comparator going low then drags the bus
+    down through its own diode.
 
-    **Neither figure in the electrical table is the right one.** It gives
-    2 uA at 25 V and 25 degC; these sit at about 1.6 V, and a board in a
-    cabinet beside a motor drive does not sit at 25 degC. FIG.2 of the same
-    datasheet plots the current against voltage at seven temperatures, and
-    at the 2 V end it runs from 0.11 uA at 25 degC to 27 uA at 125. `_leakage`
-    interpolates between the two recorded points that bracket the declared
-    ambient and scales by the spread from typical to maximum the electrical
-    table gives. An earlier version anchored at 75 degC and doubled every
-    17.4 - a slope fitted across 75 to 125 and then used at 45, below its own
-    anchor - and this paragraph went on describing that after the code had
-    stopped doing it.
+    Reverse-biased, that geometry puts the leakage the other way. It flows
+    cathode to anode, out of the 5 V comparator outputs and **into** the node,
+    and leaves through the pull-up. It cannot drop the bus below the latch's
+    V_IH; it can only lift the bus *above* 3V3 by the leakage times the
+    pull-up. The old budget was a subtraction that physics never performs, so
+    the assertion could not fail for the reason it gave.
 
-    The failure is in the safe direction - the board reads permanently
-    tripped and will not run - but it is temperature-dependent, so it passes
-    on a bench and fails in a cabinet, with nothing pointing at the cause.
+    What the direction actually costs is at the latch's PRE pin, and it is a
+    rating rather than a threshold. An LVC input has no clamp diode to V_CC -
+    this board records that elsewhere, and it is why the family tolerates
+    5.5 V on a 3.3 V rail - so nothing inside the part limits a node sitting
+    above its own supply. The absolute maximum on that input is what does.
+
+    The leakage model is applied to every junction at the same temperature
+    regardless of its bias, which over-states it: five of the twelve sit
+    between two points on the same 3V3 rail and have almost nothing across
+    them, and one is a spare tied off. Only the seven on the 5 V comparator
+    outputs carry the ~1.7 V of reverse bias the figure is for.
     """
     _, ambient = spec("environment", "ambient")
     preset = pad_net[(LATCH, "7")]
-    v_ih, _ = spec(LATCH, "input_high_voltage_min")
-    rail_low, _ = spec("rail.3v3", "voltage")
+    _, rail_high = spec("rail.3v3", "voltage")
+    absolute, _ = spec(LATCH, "input_voltage_absolute_max")
 
     pullups = [address for address, part in design["parts"].items()
                if part["symbol"] == "Device:R"
@@ -604,8 +609,10 @@ def test_the_trip_bus_still_reads_high_with_every_diode_leaking(design, pad_net,
                              for a, _ in nodes if a == address}]
     assert len(pullups) == 1, f"{preset} is pulled up by {pullups}"
     _, resistance = spec(pullups[0], "resistance")
-    budget = (rail_low - v_ih) / resistance
 
+    # Every junction whose *anode* is on this net, which is the geometry that
+    # decides which way the leakage goes. Asserted rather than assumed: a
+    # common-cathode part here would invert the whole argument above.
     leaking = 0.0
     junctions = 0
     for address, part in design["parts"].items():
@@ -618,12 +625,22 @@ def test_the_trip_bus_still_reads_high_with_every_diode_leaking(design, pad_net,
         leaking += 2 * _leakage(spec, address, ambient)
     assert junctions, f"nothing reaches {preset} through a diode"
 
-    assert leaking < budget, (
+    lifted = rail_high + leaking * resistance
+    assert lifted <= absolute, (
         f"at {ambient:g} degC the {junctions} Schottky junctions on {preset} "
-        f"leak {leaking * 1e6:.0f} uA between them, and {resistance / 1e3:g} k "
-        f"from {rail_low:g} V can spare {budget * 1e6:.0f} uA before the latch "
-        f"stops reading a high. The board would sit permanently tripped, and "
-        f"only when warm."
+        f"inject {leaking * 1e6:.0f} uA into it, which {resistance / 1e3:g} k "
+        f"to {rail_high:g} V lifts to {lifted:.3f} V - past the {absolute:g} V "
+        f"the latch's input is rated for. An LVC input has no clamp to V_CC, "
+        f"so nothing inside the part holds this down."
+    )
+
+    # And it is still a valid high, which is the thing the old check was
+    # trying to establish. In this direction that is free - the leakage adds
+    # to the pull-up rather than fighting it - and saying so is what stops
+    # the inverted version coming back.
+    v_ih, _ = spec(LATCH, "input_high_voltage_min")
+    assert lifted > v_ih, (
+        f"{preset} sits at {lifted:.3f} V against a {v_ih:g} V threshold"
     )
 
 
