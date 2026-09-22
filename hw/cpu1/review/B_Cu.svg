@@ -2804,6 +2804,10 @@ L69.0250 92.0482
 <path d="M121.0250 97.5482
 L121.0250 21.0482
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.2000; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M106.5250 70.9483
 L106.5250 71.9183
 " />
@@ -2840,6 +2844,10 @@ L111.5650 66.8383
 <path d="M111.5650 66.8383
 L111.5650 65.5682
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.1500; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M76.9250 53.7982
 L84.8250 53.7982
 " />
@@ -2849,6 +2857,10 @@ L84.8250 58.4232
 <path d="M84.8250 58.4232
 L88.0250 58.4232
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.2000; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M106.5250 57.8582
 L106.5250 59.2182
 " />
@@ -2861,6 +2873,10 @@ L111.5650 57.9482
 <path d="M105.5250 57.3483
 L106.5250 57.8582
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.1500; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M89.0250 70.7482
 L89.0250 59.0732
 " />
@@ -2876,6 +2892,10 @@ L89.0250 57.7732
 <path d="M85.6250 53.2982
 L85.6250 57.7732
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.2000; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M105.5250 55.4782
 L106.5250 55.9883
 " />
@@ -2888,6 +2908,10 @@ L111.5650 56.6782
 <path d="M106.5250 55.9883
 L106.5250 56.6782
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.1500; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M84.0250 60.3732
 L86.0250 60.3732
 " />
@@ -2897,6 +2921,10 @@ L84.0250 60.3732
 <path d="M82.5250 64.2982
 L84.0250 64.2982
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.2000; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M106.5250 64.2982
 L111.5650 64.2982
 " />
@@ -2909,6 +2937,10 @@ L106.5250 64.2982
 <path d="M105.5250 62.9582
 L106.5250 63.4682
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.1500; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M85.2250 52.2982
 L87.2250 52.2982
 " />
@@ -3173,7 +3205,7 @@ L96.9250 30.5482
 " />
 </g>
 <g style="fill:none; 
-stroke:#000000; stroke-width:0.1500; stroke-opacity:1; 
+stroke:#000000; stroke-width:0.2500; stroke-opacity:1; 
 stroke-linecap:round; stroke-linejoin:round;">
 <path d="M92.7750 25.3483
 L93.7750 25.3483
@@ -3181,6 +3213,10 @@ L93.7750 25.3483
 <path d="M93.2750 24.7482
 L92.2750 24.7482
 " />
+</g>
+<g style="fill:none; 
+stroke:#000000; stroke-width:0.1500; stroke-opacity:1; 
+stroke-linecap:round; stroke-linejoin:round;">
 <path d="M89.0250 31.1482
 L93.0250 31.1482
 " />

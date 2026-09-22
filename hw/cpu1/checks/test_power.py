@@ -1003,6 +1003,15 @@ def _net_voltages(spec) -> dict[str, float]:
     every safety pull-down, both trip-threshold pulls, both feedback-divider
     bottoms and both USB CC pull-downs among them.
 
+    **`UVLO` used to be on this list at the input voltage, and listing it is
+    what removed the divider's top leg from every bound.** The lockout tap is
+    not at V_IN; it is at the ratio of the two resistors that make it. With it
+    named at 36 V, `buck5.r_uvlo_top` sat between two nets both held at 36 V
+    and dissipated exactly zero at any resistance, while the bottom leg was
+    evaluated at the full 36 V - 26 mW of a 31 mW derated limit - for a split
+    that is really 29.5 V and 6.5 V. Unlisted, the walk finds the other leg
+    and derives both.
+
     The default is the logic rail. Every signal net on this board is driven
     from it - the MCU, the buffers, the latch, the comparators through their
     pull-ups - and the two nets that break that, the field buses, are checked
@@ -1015,7 +1024,7 @@ def _net_voltages(spec) -> dict[str, float]:
     named = {
         "GND": 0.0,
         "VIN": input_high, "VIN_RAW": input_high, "VIN_FUSED": input_high,
-        "RPP_GATE": input_high, "SW_5V": input_high, "UVLO": input_high,
+        "RPP_GATE": input_high, "SW_5V": input_high,
         "5V": v5, "SW_3V3": v5,
         "3V3": v3v3,
     }
@@ -1206,6 +1215,25 @@ def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pa
         worst = 0.0
         near_side = _sources(design, pad_net, spec, voltages, default, net_a, address)
         far_side = _sources(design, pad_net, spec, voltages, default, net_b, address)
+        # **A pull-up's other end can be pulled down, and that is when it
+        # dissipates.** With the default set to the logic rail, a resistor
+        # from 3V3 to an undriven node had the *same* voltage at both ends and
+        # came out at exactly zero watts at any resistance - so 36 of the 101
+        # resistors here passed with their rating set to zero. That is the
+        # same "cannot fail" this check's own docstring says the first version
+        # had, arrived at from the other direction: the old default of 0 V
+        # made a resistor see nothing because neither end was known, and the
+        # new default made it see nothing because both ends agreed.
+        #
+        # Only where one end is a rail. A resistor between two signal nets is
+        # a series element feeding something, and its current is the walk
+        # below; putting the whole rail across a 33 ohm damping resistor is
+        # the false failure this check was written to avoid.
+        if (net_a in voltages) != (net_b in voltages):
+            held = voltages[net_a if net_a in voltages else net_b]
+            near_side = list(near_side) + [(held, 0.0)]
+            far_side = list(far_side) + [(0.0, 0.0)]
+
         for v_near, r_near in near_side:
             for v_far, r_far in far_side:
                 current = abs(v_near - v_far) / (series + r_near + r_far)

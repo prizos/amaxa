@@ -110,6 +110,18 @@ INTENT: dict[str, tuple[float, float]] = {
     # nothing said how much. Five milliamps is fifty millivolts of dropout off
     # the reference's own curve, against the 129 mV of headroom 3V3 leaves at
     # its low corner; the part could give 25 mA and the rail could not.
+    # **Everything the reference supplies**, not only what leaves the board.
+    # The MCU's own VREF+ pin draws from it too - the ADCs during conversion,
+    # the DAC through IDDV(DAC) - and that share was outside this figure and
+    # outside every sum, because the name said "supply" and the comment said
+    # "what the power board may take". Five milliamps is the total the
+    # REF3030 delivers, and the 3V3 rail carries it whole.
+    #
+    # The split between the connector and the MCU is not established: ST
+    # tabulates VREF+ consumption for the DAC and the comparators and not for
+    # the ADCs, which are what dominate it here. The total is what is
+    # budgeted and what the rail check counts, so the gap is in how the 5 mA
+    # is shared rather than in whether it is carried.
     "vref.supply_current": (0.0, 5e-3),
     # The highest voltage a sensor on the far side of the analog connector may
     # ever present to one of the fast inputs, **including while it is

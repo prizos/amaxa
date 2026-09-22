@@ -16,23 +16,26 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 BLOCKING: dict[str, str] = {
-    "an adversarial review of the power and analog path found two things "
-    "still open": (
-        "Each was proven by perturbation before being written down, and none "
-        "is fixed yet:\n\n"
-        "**Thirty-six resistors have a power rating that cannot fail.** A "
-        "pull-up to the logic rail from an undriven node has both ends "
-        "modelled at 3.465 V, so it dissipates exactly zero at any "
-        "resistance. Setting each `max_power` to zero in turn passes for 36 "
-        "of 101. None is near its rating, but the checks cannot say so - and "
-        "the same file's rail budget models a pull-up as drawing current, so "
-        "one file holds two incompatible models.\n\n"
-        "**VDDA and the MCU's own VREF+ current are in no rail's sum.** The "
-        "MCU declares I_DD only; VDDA is fed from 3V3 through a bead and its "
-        "current appears nowhere, and `vref.supply_current` is the off-board "
-        "promise rather than the part's own draw. Magnitude unestablished - "
-        "ST specifies both separately from I_DD and those pages have not "
-        "been read for this board."
+    "sixteen ADC series resistors and three others have a power rating "
+    "nothing can make fail": (
+        "Setting each `max_power` to zero in turn and running the suite, 20 "
+        "of 101 still pass. Sixteen are the ADC channels' series resistors, "
+        "and they are correct: the far end is a capacitor and a sampling "
+        "switch, so there is no DC path and the part genuinely dissipates "
+        "nothing. The others are the Ethernet reset delay, the clear line's "
+        "series resistor and the USB VBUS sense resistor - all series "
+        "elements into high-impedance nodes, all for the same reason.\n\n"
+        "It was 36 before this round. The thirteen 3V3 pull-ups and the "
+        "lockout divider's top leg were failing for a *wrong* reason, and "
+        "those are fixed; what is left is a real property of the board and "
+        "not a hole in the check.\n\n"
+        "It stays here because the rule is that a rating nothing compares "
+        "against is a comment with a float in it, and these nineteen are "
+        "exactly that - recorded so the next person does not have to redo "
+        "the sweep to find out. What would settle them is a fault model this "
+        "board does not have: what an ADC pin's clamp, or the MCU's VBUS "
+        "sense pin, does to the resistor feeding it when the far side is "
+        "driven hard. That is worth having and is not written."
     ),
 }
 
@@ -126,7 +129,8 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "LQFP144": ["power_supply_scheme", "thermal_characteristics",
                 "power_dissipation_at_85c",
                 "analog_input_absolute_maximum",
-                "analog_input_injection_current"],
+                "analog_input_injection_current",
+                "current_consumption_scheme"],
     "MSOP10": ["factory_default"],
     "QFN24": ["package_outline", "front_end"],
     "RJ45HR": ["schematic"],

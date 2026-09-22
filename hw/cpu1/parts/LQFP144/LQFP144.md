@@ -43,6 +43,7 @@ ST's hardware development guide for the part — was not read.
 | HSE load capacitors | 5 to 25 pF typical | Section 6.3.8 |
 | LSE maximum critical gm | 0.5 / 0.75 / 1.7 / 2.7 µA/V by drive | Table 44 |
 | I/O pin current | 20 mA absolute maximum | Table 21 |
+| Supply current | **includes VDDA** | Figure 14, crop in `evidence/` |
 | Input voltage, TT_xx pins | **4.0 V absolute maximum** | Table 20, crop in `evidence/` |
 | Injected current, TT_xx pins | **−5 / +0 mA** | Table 21, crop in `evidence/` |
 

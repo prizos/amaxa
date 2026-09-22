@@ -21,6 +21,17 @@
     "shows": "Table 21, Current characteristics: injected current on FT_xxx, TT_xx, RST and B pins except PA4, PA5 is -5/+0 mA, and note 3 reads verbatim 'Positive injection is not possible on these I/Os and does not occur for input voltages lower than the specified maximum value.' So there is no positive-injection allowance to be inside of, and the 4.0 V of Table 20 is a limit with nothing below it.",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
   },
+  "current_consumption_scheme": {
+    "assumes": "",
+    "crop": "333,160,933,640",
+    "document": "ST STM32H742xI/G STM32H743xI/G datasheet, DocID030538 Rev 3",
+    "dpi": 200,
+    "page": 96,
+    "read": "2026-09-22",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Figure 14, Current consumption measurement scheme: the I_DD ammeter feeds a node that branches to BOTH V_DD and V_DDA. So the I_DD figures in Table 29 - including the 500 mA this board budgets for the MCU at 400 MHz VOS1 with all peripherals enabled - already include the analog supply. VDDA is not a separate load to add to the 3V3 rail's sum. Only V_BAT is metered separately, and this board ties it to the rail.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
   "power_dissipation_at_85c": {
     "assumes": "",
     "crop": "260,1250,1400,480",
