@@ -517,11 +517,18 @@ INTENT: dict[str, tuple[float, float]] = {
     # What has to stand between the cable and the rest of the machine. IEEE
     # 802.3 asks 1500 V rms, and the jack's magnetics are the only barrier.
     "ethernet.isolation": (1500.0, 4000.0),
-    # How far a signal changing layer may be from the nearest capacitor tying
-    # the ground plane to a supply plane. The front of this board is referenced
-    # to ground and the back to the supply islands, so every via between them
-    # leaves a return current to cross, and those capacitors are the only
-    # crossings. The number is the detour, which is the loop, which is what
+    # How far a signal changing layer may be from the nearest thing its return
+    # current can cross on.
+    #
+    # **That is usually a ground via, not a capacitor.** This used to say "the
+    # front of this board is referenced to ground and the back to the supply
+    # islands, so every via between them leaves a return current to cross, and
+    # those capacitors are the only crossings" - which was true of the
+    # four-layer board and is not true of this one. In1 and In4 are both
+    # ground, so a signal going front to back keeps the same reference and
+    # what carries its return is a ground via beside it: 267 of the 279 layer
+    # changes on this board take that path and 12 reach for a capacitor. The
+    # number below is the detour either way, which is the loop, which is what
     # radiates.
     # Ten millimetres, not the five a fast edge would like: the fifteen
     # buffered outputs dip under the digital connector, and the nearest board

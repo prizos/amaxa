@@ -889,10 +889,17 @@ def _island_outline() -> list[tuple[float, float]]:
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
-# Ground on the first and third inner layers, and the supplies on the fourth:
-# 3V3 over the whole board, with the 5 V island cut out of it by priority
-# rather than by outline. KiCad fills the higher priority first and the 3V3
-# pour keeps clear.
+# Ground on the **first and fourth** inner layers, 3V3 over the whole board on
+# the second, and the 5 V island on the back.
+#
+# This comment used to say "ground on the first and third inner layers, and
+# the supplies on the fourth", and then a sentence about KiCad filling the
+# higher priority first so the 3V3 pour keeps clear of the island. Neither
+# survived the move to six layers. The 3V3 pour and the 5 V island are not on
+# the same layer at all, so nothing is cut out of anything by priority and
+# there is no overlap for a priority to resolve - the island has B.Cu to
+# itself. A stale layer table reads as a description of the stackup right up
+# until somebody believes it.
 PLANES = [
     {
         "net": "GND",
@@ -2794,12 +2801,13 @@ def _usb() -> None:
     # that line offset, so they are the same length by construction and the
     # only difference between them is what the corners add.
     #
-    # **It stops short of the package.** Pads 103 and 104 sit in the middle of
-    # the debug escapes - SWDIO steps onto pin 104's line to get past VCAP2's
-    # capacitor - and untangling that is the same job as the rest of the
-    # escapes, which M8 does with the whole board in view. What is drawn here
-    # is the length that decides the pair's impedance; what is missing is the
-    # two millimetres at the end of it.
+    # **It reaches the package, and this paragraph used to say it did not.**
+    # The text here described an unfinished pair - "what is missing is the two
+    # millimetres at the end of it" - and pointed at the debug escapes as the
+    # reason. The routes below already end on `mcu:pin`, and the board bears
+    # it out: USB_DP is 30.97 mm of copper and lands on pad 104. The sentence
+    # outlived the work it described, which is the failure mode of a comment
+    # that says what is left to do.
     centre = [(28.0, -22.0), (28.0, -13.0), (25.0, -10.0)]
     west, east = layout_lib.diff_pair(centre, USB_WIDTH, USB_GAP)
     if west[0][0] > east[0][0]:

@@ -175,6 +175,14 @@ def stitchers(pcb_text, design, plane_layers, plane_outlines) -> list[tuple[floa
         if GROUND not in sides or not joined:
             continue
         here = (float(at.group(1)), float(at.group(2)))
+        # **This filter excludes nothing on this board**, and the docstring
+        # above used to credit it as one of two that narrow the set. Measured:
+        # all 53 placed ground-to-3V3 capacitors are inside, because the 3V3
+        # pour is `_pour_outline()` - the whole board less the jack's notch -
+        # so the only place it could exclude anything is that notch. The other
+        # filter, dropping ground-to-5V capacitors, removes 14 and does the
+        # work. This one is kept for a board whose supply pour is a real
+        # island rather than a full layer, which is what the 5 V one is.
         outline = plane_outlines.get(next(iter(joined)))
         if outline and not _inside(outline, here):
             continue                      # over that supply's track, not its pour
@@ -749,11 +757,19 @@ def test_nothing_runs_alongside_a_raw_comparator_input(
     description = load_source(board_dir / "layout.py", "cpu1_layout_separation")
     # Each layer sits its own distance from the plane that references it, and
     # that distance is the whole of the coupling coefficient's denominator.
-    # This took the outer-layer prepreg for every layer, which is harmless
-    # today - every comparator tap is on F.Cu or B.Cu, both 0.1855 mm - and
-    # wrong by a factor of five the moment one is routed on In2 at 0.43. The
-    # `layer_stack` fixture derives it per layer and already exists; this was
-    # the one place still reading stack[0] as though the board were two-sided.
+    #
+    # **This paragraph used to credit itself with a fix that changes nothing.**
+    # It said reading `stack[0]` for every layer was "wrong by a factor of five
+    # the moment one is routed on In2 at 0.43". Measured, `layer_stack` on this
+    # board is F.Cu 0.1855, In3.Cu 0.175, B.Cu 0.1855 - so `max()` returns
+    # 0.1855, which is `stack[0]`, which is exactly the number it replaced. And
+    # the failure it named cannot happen: the fixture excludes every poured
+    # inner layer, so In2.Cu is not in the dict at all and a tap routed there
+    # would raise a KeyError below rather than silently use 0.43.
+    #
+    # It is kept because it is right in principle - a board with a thicker
+    # inner signal layer than its outer prepreg would need it - and the
+    # sentence now says what it does rather than what it saved.
     height_of = {layer: micro.height for layer, micro in layer_stack.items()}
     # The geometric net has to be cast at the widest of them, or a run on a
     # layer further from its plane is discarded before it is ever measured.

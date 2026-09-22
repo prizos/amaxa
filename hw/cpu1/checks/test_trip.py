@@ -330,8 +330,15 @@ def test_the_dac_has_a_channel_for_every_threshold(design, pad_net, spec):
     """Every distinct threshold has a DAC output of its own, and none is shared."""
     channels, _ = spec(DAC, "channels")
     driven = _thresholds(design, pad_net)
-    assert len(driven) <= channels, (
-        f"{len(driven)} thresholds from a {channels:g}-channel DAC"
+    # `len(driven) <= channels` was asserted here and could not fail from the
+    # netlist: `_thresholds` builds a *set* from exactly four pads, so it is
+    # at most four however the board is wired, and sharing a net only makes it
+    # smaller. Only the spec could break it. What the netlist can say is the
+    # other direction - that all four channels are used and none is shared -
+    # so that is what is asserted.
+    assert len(driven) == channels, (
+        f"{len(driven)} distinct thresholds from a {channels:g}-channel DAC: "
+        f"either a channel is unused or two thresholds share one"
     )
     for net in sorted(driven):
         sources = [

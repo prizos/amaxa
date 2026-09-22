@@ -1395,7 +1395,6 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
             # account of the jumper in the *high* leg.
             left = reaches(net_a, shipped, address) & driven
             right = reaches(net_b, shipped, address) & driven
-            _ = (left, right)
             if left and right:
                 unprotected.append(
                     f"  {address}: {power:.1f} W if {transceiver}'s bus is driven "
@@ -1888,14 +1887,28 @@ def test_every_resistor_has_a_worst_case_something_states(
                     f"{far} pulled to ground with {default:.3f} V reaching "
                     f"{near} through {upstream:.0f} ohm"))
 
-            # A net with nothing on it but a test point carries nothing, and
-            # saying so is a case rather than an absence.
+            # **A test point is a thing somebody touches.** This used to say
+            # a net carrying nothing but a test pad carries no current, which
+            # is true of the board sitting on a bench and not of the board
+            # being worked on: a pad exists to have a probe, a clip or a
+            # solder bridge put on it, and the one accident it invites is a
+            # short to ground. So the case is the driven end across the whole
+            # resistor - which is what a series resistor into a test pad is
+            # *for*.
+            #
+            # It was the last rating on this board that nothing could make
+            # fail, and it failed for the right reason: the model said the net
+            # was inert because of what is on the schematic, when what decides
+            # it is what a person does to it.
             others = {owner for (owner, _), net in pad_net.items()
                       if net == far and owner != address}
             if others and all(
                     design["parts"][owner]["symbol"].startswith("Connector:TestPoint")
                     for owner in others):
-                cases.append((0.0, f"{far} reaches nothing but a test point"))
+                cases.append((
+                    default**2 / ohms,
+                    f"{far} is a test pad, so {default:.3f} V across the whole "
+                    f"resistor if it is shorted to ground"))
 
         if not cases:
             unmodelled.append(f"  {address}: between {net_a} and {net_b}")

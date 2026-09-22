@@ -111,7 +111,11 @@ def test_every_pwm_pin_arrives_at_a_buffer_input(design, pad_net, pin_map):
             inputs[source] = inputs.get(source, 0) + 1
     wrong = []
     for p in pin_map.PINS:
-        if not p.name.startswith(("PWM1_", "PWM2_")) or p.name == "PWM_ENABLE_N":
+        # `PWM_ENABLE_N` used to be excluded here as well. It cannot match:
+        # nothing in the pin map starts with `PWM1_` or `PWM2_` and is called
+        # `PWM_ENABLE_N`, so the second clause never ran. A condition that
+        # cannot fire reads as a case somebody thought about.
+        if not p.name.startswith(("PWM1_", "PWM2_")):
             continue
         if inputs.get(p.net_name, 0) != 1:
             wrong.append(f"  {p.net_name}: on {inputs.get(p.net_name, 0)} buffer inputs")

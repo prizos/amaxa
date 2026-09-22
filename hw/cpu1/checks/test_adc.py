@@ -135,10 +135,11 @@ def test_the_slow_channels_roll_off_much_lower(spec, networks, pad_net):
     see `test_a_board_id_strap_settles_before_anything_reads_it`.
     """
     low, high = spec("adc", "slow_corner")
-    outside = []
+    outside, considered = [], 0
     for channel, (series, shunt) in sorted(networks.items()):
         if _band_of(channel) != "slow":
             continue
+        considered += 1
         _, source = spec("header", "source_impedance")
         resistance = spec(series, "resistance")
         capacitance = spec(shunt, "capacitance")
@@ -146,6 +147,7 @@ def test_the_slow_channels_roll_off_much_lower(spec, networks, pad_net):
         corner_high = _corner(resistance[0], capacitance[0])
         if not (low <= corner_low and corner_high <= high):
             outside.append(f"  {channel}: {corner_low:.0f} to {corner_high:.0f} Hz")
+    assert considered, "no slow channel was measured, so this proves nothing"
     assert not outside, (
         f"Slow channels outside {low:g} to {high:g} Hz:\n" + "\n".join(outside)
     )
@@ -206,10 +208,11 @@ def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_ne
         f"instant step this check models it as"
     )
 
-    problems = []
+    problems, considered = [], 0
     for channel, (series, shunt) in sorted(networks.items()):
         if pad_net.get((series, "2")) not in sampled:
             continue
+        considered += 1
         resistance, _ = spec(series, "resistance")
         capacitance, _ = spec(shunt, "capacitance")
         droop = c_adc / (c_adc + capacitance)
@@ -219,6 +222,12 @@ def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_ne
                 f"  {channel}: {residual / lsb:.2f} LSB left at the end of the "
                 f"window, from {droop / lsb:.1f} LSB of charge sharing"
             )
+    # A guard, because the loop above skips anything that is not a sampled
+    # pin and a rename in the pin map would empty it silently. The sibling
+    # corner checks had the same hole.
+    assert considered, (
+        "no sampled channel was measured, so this check proves nothing"
+    )
     assert not problems, (
         f"Channels not settled to {allowed:g} LSB in {sample * 1e9:.0f} ns:\n"
         + "\n".join(problems)
@@ -372,8 +381,9 @@ def _band_of(channel: str) -> str:
         return "slow"
     if channel.startswith("board_id"):
         return "strap"                    # a DC level, not a bandwidth
-    if channel == "dac_test":
-        return "neither"                  # an output, and the only one
+    # There was a `dac_test` branch here and it was unreachable: the
+    # `networks` fixture keys on a `.shunt` part and `adc.dac_test` has none,
+    # so that channel never reaches this function at all.
     raise AssertionError(
         f"{channel} is neither fast nor slow by its name, so no corner band "
         f"claims it. Name it so, or give it a band of its own"
