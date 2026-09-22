@@ -1,8 +1,24 @@
 """
 The MCU against the rails it is given.
 
-Only the logic rail exists as a design value so far; VDDA and VREF+ join when the
-MCU core lands, and each one gets checked against the part's own limits here.
+**This file's own promise came due and nobody noticed.** It used to end "VDDA
+and VREF+ join when the MCU core lands, and each one gets checked against the
+part's own limits here". The core landed; they never joined, and this file
+still holds one check.
+
+They are checked, but elsewhere and for other reasons:
+
+  - VDDA against the part's supply range is the same 1.62 to 3.6 V as VDD, so
+    the logic rail's check below covers it - VDDA is that rail less the bead,
+    which only makes it smaller.
+  - VDDA's *drop* across that bead, and VREF+ against VDDA, are in
+    `test_power.py::test_the_reference_is_below_the_analog_supply_it_sits_under`,
+    which is where the reference's own tolerance already was.
+
+So the sentence is gone rather than the checks being moved here to satisfy
+it. What is worth keeping is the shape of the mistake: a docstring that
+describes future work reads as a description of present work the moment that
+future arrives.
 """
 
 

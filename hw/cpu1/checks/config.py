@@ -83,15 +83,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
     ("trip.fast4_high.decoupling", "capacitance"): (
         "as can.decoupling_vcc: a bypass whose presence is checked and whose value nothing states"
     ),
-    ("core.vdda.bead", "dc_resistance"): (
-        "its drop is VDDA's current times 0.9 ohm, and VDDA's current is not in "
-        "the datasheet pages read for this board, so there is nothing to bound "
-        "it against. Expected to be millivolts; measured at bring-up"
-    ),
-    ("core.vdda.bead", "max_current"): (
-        "100 mA against VDDA's current, which is not stated in the datasheet "
-        "pages read; the same gap as its DC resistance"
-    ),
     ("power.fuse", "interrupt_rating"): (
         "50 A against the fault current the supply can deliver, which is a "
         "property of whatever is wired to the terminal and not of this board. "

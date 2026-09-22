@@ -782,7 +782,9 @@ def test_the_power_good_pull_up_is_in_the_range_the_part_allows(design, two_pad_
 # --- the reference -----------------------------------------------------------
 
 
-def test_the_reference_is_below_the_analog_supply_it_sits_under(spec):
+def test_the_reference_is_below_the_analog_supply_it_sits_under(
+    design, pad_net, spec
+):
     """
     VREF+ never exceeds VDDA, which is the logic rail through a ferrite.
 
@@ -792,9 +794,28 @@ def test_the_reference_is_below_the_analog_supply_it_sits_under(spec):
     """
     _, reference_high = spec(REFERENCE, "output_voltage")
     rail_low, _ = spec("rail.3v3", "voltage")
-    assert reference_high < rail_low, (
-        f"the reference reaches {reference_high:g} V and the analog supply "
-        f"falls to {rail_low:g} V"
+
+    # **The bead's drop, which this used to describe and not compute.** The
+    # docstring said VDDA is "3V3 less a few millivolts across the bead" and
+    # then compared against the bare rail. ST states no VDDA-only current, so
+    # there is nothing in the datasheet to multiply by - but this board bounds
+    # it anyway: the bead is rated 100 mA and this board runs nothing past
+    # half of any thermal rating, so 50 mA through 0.9 ohm is the most it can
+    # drop whatever the MCU's analog section draws. Both of the bead's figures
+    # were on the unread list for want of exactly this.
+    beads = [address for address, part in design["parts"].items()
+             if part["symbol"] == "Device:FerriteBead_Small"
+             and {pad_net.get((address, "1")),
+                  pad_net.get((address, "2"))} == {"3V3", "VDDA"}]
+    assert len(beads) == 1, f"VDDA reaches 3V3 through {beads}"
+    _, carries = spec(beads[0], "max_current")
+    _, ohms = spec(beads[0], "dc_resistance")
+    vdda_low = rail_low - carries * _derating(spec) * ohms
+
+    assert reference_high < vdda_low, (
+        f"the reference reaches {reference_high:g} V and VDDA falls to "
+        f"{vdda_low:.3f} V - the rail's {rail_low:g} V less {carries * _derating(spec) * ohms * 1e3:.0f} mV "
+        f"across {beads[0]} at the most this board will run it at"
     )
 
 
