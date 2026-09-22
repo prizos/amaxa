@@ -20,7 +20,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 
-from symbols import symbol_pin_names  # noqa: E402
+from symbols import symbol_pin_names, symbol_pin_types  # noqa: E402
 
 BUCK_5V = "buck5.ic"
 BUCK_3V3 = "buck3v3.ic"
@@ -1401,63 +1401,92 @@ PASSIVES = {"Device", "Connector", "Jumper", "TestPoint", "Diode", "Switch"}
 # Which declared parameter belongs to which supply pin. Not a table of values -
 # a part states its own current; this says which of a multi-supply part's pins
 # that current comes out of, which the symbol alone cannot say.
+_DRAWN = ("supply_current_max", "supply_current_max_at_25c",
+          "supply_current_typical", "quiescent_current", "quiescent_current_max")
 SUPPLY_PINS = {
-    "VCC": ("supply_current_max", "supply_current_typical", "quiescent_current",
-            "quiescent_current_max"),
-    "VDD": ("supply_current_max", "supply_current_typical", "quiescent_current",
-            "quiescent_current_max"),
-    "V+": ("supply_current_max", "supply_current_typical", "quiescent_current",
-           "quiescent_current_max"),
+    "VCC": _DRAWN,
+    "VDD": _DRAWN,
+    "V+": _DRAWN,
     "IN": ("quiescent_current",),
     "VIO": ("io_supply_current_max",),
     "VDDIO": ("supply_current_typical", "io_supply_current_max"),
 }
 
+# A parameter whose name says the datasheet did not guarantee it over the
+# board's conditions. `loads.unguaranteed_margin` is added to these and to
+# nothing else, so a figure that *is* a maximum over temperature is taken at
+# face value and one that is not carries its own uncertainty into the sum.
+UNGUARANTEED = ("_typical", "_at_25c")
 
-def _resistor_chains(design, pad_net):
-    """
-    Every maximal run of two-pad resistors, as (end net, end net, ohms).
 
-    A chain rather than a resistor, because what draws from a rail is the
-    whole series path to wherever it ends - a feedback divider is two parts
-    and one current, and a buffered output is a series resistor and a
-    pull-down and one current.
+# What a pin of this type can do to the net it sits on. A part *drives* a net
+# only through one of these; an `input` or a `power_in` sits on a net and
+# sources nothing into it. The netlist cannot say which is which - a node is a
+# node - so this comes from the symbol, and it is the difference between a
+# buffer's output and a converter's feedback pin.
+DRIVING = {"output", "bidirectional", "tri_state", "open_collector", "open_emitter"}
+SUPPLY = {"power_in"}
+
+
+def _paths_to_ground(design, pad_net, spec):
     """
-    edges = []
+    net -> (series ohms, forward volts) for the lowest-resistance DC path from
+    that net down to ground.
+
+    Dijkstra from GND outwards over every two-pad part that conducts DC: a
+    resistor contributes its resistance, a diode or an LED contributes its
+    forward drop and no resistance. Lowest resistance is what carries the most
+    current, which is the corner a budget wants.
+
+    **A walk rather than a chain.** The first version of this took maximal
+    runs of resistors and stopped wherever three met, which silently dropped
+    `GATE_ENABLE_OUT` - series resistor, pull-down and the gate kill's drain
+    resistor all on one net - and never reached the indicator LEDs at all,
+    because their path to ground goes through a diode. Between them that was
+    5 mA of continuous 3V3 draw in no sum.
+    """
+    import heapq
+
+    edges: dict[str, list] = {}
     for address, part in design["parts"].items():
-        if part["symbol"] != "Device:R":
-            continue
         a, b = pad_net.get((address, "1")), pad_net.get((address, "2"))
-        if a and b:
-            edges.append((address, a, b))
-
-    degree = collections.Counter()
-    for _, a, b in edges:
-        degree[a] += 1
-        degree[b] += 1
-
-    chains, seen = [], set()
-    for address, a, b in edges:
-        if address in seen:
+        if not (a and b) or a == b:
             continue
-        run, ends = {address}, []
-        for start, other in ((a, b), (b, a)):
-            net, previous = start, address
-            # A net with exactly two resistors on it is a junction inside a
-            # chain, whatever else sits there: a divider's tap carries a
-            # sense pin as well, and that pin takes no DC. Anything with one
-            # resistor or three is where the chain ends.
-            while degree[net] == 2:
-                nxt = next((e for e in edges
-                            if e[0] != previous and net in (e[1], e[2])), None)
-                if nxt is None:
-                    break
-                run.add(nxt[0])
-                previous, net = nxt[0], nxt[2] if nxt[1] == net else nxt[1]
-            ends.append(net)
-        seen |= run
-        chains.append((ends[0], ends[1], run))
-    return chains
+        if part["symbol"] == "Device:R":
+            ohms, drop = spec(address, "resistance")[0], 0.0
+        elif part["symbol"] in ("Device:LED", "Device:D"):
+            ohms, drop = 0.0, spec(address, "forward_voltage")[1]
+        else:
+            continue
+        edges.setdefault(a, []).append((b, ohms, drop))
+        edges.setdefault(b, []).append((a, ohms, drop))
+
+    best: dict[str, tuple[float, float]] = {}
+    queue = [(0.0, 0.0, "GND")]
+    while queue:
+        ohms, drop, net = heapq.heappop(queue)
+        if net in best:
+            continue
+        best[net] = (ohms, drop)
+        for far, more, volts in edges.get(net, ()):
+            if far not in best:
+                heapq.heappush(queue, (ohms + more, drop + volts, far))
+    best.pop("GND", None)
+    return best
+
+
+def _drivers_of(design, pad_net, net, pin_types):
+    """Every part that can source current into `net`, with the rails it runs from."""
+    out = []
+    for address, part in design["parts"].items():
+        types = pin_types(part["symbol"])
+        drives = any(pad_net.get((address, str(pad))) == net and kind in DRIVING
+                     for pad, kind in types.items())
+        if not drives:
+            continue
+        out.append((address, {pad_net.get((address, str(pad)))
+                              for pad, kind in types.items() if kind in SUPPLY}))
+    return out
 
 
 def test_each_rail_carries_no_more_than_it_is_budgeted(
@@ -1500,7 +1529,15 @@ def test_each_rail_carries_no_more_than_it_is_budgeted(
     may supply - are read from the block that owns them, so they stay in the
     sum without anyone re-typing them.
     """
-    chains = _resistor_chains(design, pad_net)
+    import functools
+
+    pin_types = functools.lru_cache(maxsize=None)(
+        lambda symbol: symbol_pin_types(symbol))
+    paths = _paths_to_ground(design, pad_net, spec)
+    rail_nets = {rail_net for rail_net, _ in RAILS}
+    drivers = {source: _drivers_of(design, pad_net, source, pin_types)
+               for source in paths}
+    _, margin = spec("loads", "unguaranteed_margin")
     problems = []
     for net, rail in RAILS:
         _, volts = spec(rail, "voltage")
@@ -1519,8 +1556,14 @@ def test_each_rail_carries_no_more_than_it_is_budgeted(
                 continue
             wanted = {parameter for name in here for parameter in SUPPLY_PINS.get(name, ())}
             for parameter in sorted(wanted):
-                if spec_has(address, parameter):
-                    items.append((f"{address}.{parameter}", spec(address, parameter)[1]))
+                if not spec_has(address, parameter):
+                    continue
+                draws = spec(address, parameter)[1]
+                if parameter.endswith(UNGUARANTEED):
+                    draws *= 1.0 + margin
+                    items.append((f"{address}.{parameter}+{margin * 100:g}%", draws))
+                else:
+                    items.append((f"{address}.{parameter}", draws))
 
             # A driver whose own figure is the unloaded one, plus what it
             # pushes into the cable. Only where the part says both, which is
@@ -1542,32 +1585,33 @@ def test_each_rail_carries_no_more_than_it_is_budgeted(
                 items.append((f"{block}.supply_current",
                               spec(block, "supply_current")[1]))
 
-        # Every resistor chain that ends at ground, charged to whichever rail
-        # can drive its other end: the rail itself, or a part that runs from
-        # the rail and drives that net.
-        # What can *drive* a net down to ground: a part with a supply pin on
-        # this rail. Not a passive - a resistor sitting on the rail is part of
-        # the chain, not a source for it, and counting it as one charged the
-        # 3V3 feedback divider to both rails at once.
-        on_rail = {
-            address for address, part in design["parts"].items()
-            if part["symbol"].partition(":")[0] not in PASSIVES
-            and any(pad_net.get((address, str(pad))) == net
-                    for pad, name in symbol_pin_names(part["symbol"]).items()
-                    if name.upper() in SUPPLY_PINS)
-        }
-        for end_a, end_b, run in chains:
-            for source, sink in ((end_a, end_b), (end_b, end_a)):
-                if sink != "GND":
+        # Everything with a DC path to ground, charged to the rail that holds
+        # its far end up: the rail itself where the path ends on it, or a part
+        # that runs from this rail and *drives* that net.
+        #
+        # "Drives" is a pin type, not a connection. Asking only whether a part
+        # powered from this rail touched the net charged the 3V3 feedback
+        # divider to both rails at once - the CAN transceiver's V_IO pin sits
+        # on 3V3 and its V_CC on 5 V, so every 3V3 chain looked driven from
+        # 5 V, at a voltage that never appears across it. A converter's
+        # feedback pin and a comparator's inputs did the same thing.
+        for source, (ohms, drop) in sorted(paths.items()):
+            if ohms <= 0.0:
+                continue
+            if source in rail_nets:
+                if source != net:
+                    continue                      # the other rail's own path
+                name = source
+            else:
+                powered = [address for address, supplies in drivers.get(source, ())
+                           if net in supplies]
+                if not powered:
                     continue
-                driven = source == net or any(
-                    address in on_rail and address not in run
-                    for address, _ in design["nets"].get(source, []))
-                if not driven:
-                    continue
-                ohms = sum(spec(a, "resistance")[0] for a in run)
-                items.append(("+".join(sorted(run)), volts / ohms))
-                break
+                name = f"{source} from {powered[0]}"
+            across = volts - drop
+            if across <= 0.0:
+                continue
+            items.append((f"{name} through {ohms:.0f} ohm", across / ohms))
 
         total = sum(current for _, current in items)
         if total > budget:

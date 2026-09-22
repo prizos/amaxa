@@ -111,6 +111,48 @@ def symbol_pin_names(reference: str, library_dir: Path | None = None) -> dict[st
     raise SymbolNotFound(f"{reference}: extends forms a loop")
 
 
+def symbol_pin_types(reference: str, library_dir: Path | None = None) -> dict[str, str]:
+    """
+    Pin number -> electrical type, for a symbol named `Library:Symbol`.
+
+    KiCad writes the type as the first token of a pin: `(pin power_in line ...`.
+    It is the only place that records whether a pin can *drive* the net it sits
+    on, which the netlist cannot say - a net has nodes, and a node is a node
+    whether it is a buffer's output or a converter's feedback input.
+
+    Types are KiCad's own spelling: `input`, `output`, `bidirectional`,
+    `tri_state`, `passive`, `power_in`, `power_out`, `open_collector`,
+    `open_emitter`, `unspecified`, `no_connect`, `free`.
+    """
+    library_dir = library_dir or KICAD_SYMBOL_DIR
+    library_name, _, symbol_name = reference.partition(":")
+    if not symbol_name:
+        raise SymbolNotFound(f"{reference!r} is not of the form Library:Symbol")
+
+    path = library_dir / f"{library_name}.kicad_sym"
+    if not path.is_file():
+        raise SymbolNotFound(f"no symbol library {path}")
+
+    text = path.read_text()
+    seen: set[str] = set()
+    while symbol_name not in seen:
+        seen.add(symbol_name)
+        block = _find_symbol(text, symbol_name)
+        types = {}
+        for chunk in block.split("(pin ")[1:]:
+            kind = re.match(r"([a-z_]+)", chunk)
+            number = re.search(r'\(number "([^"]+)"', chunk)
+            if kind and number:
+                types[number.group(1)] = kind.group(1)
+        if types:
+            return types
+        parent = re.search(r'\(extends "([^"]+)"', block)
+        if not parent:
+            return {}
+        symbol_name = parent.group(1)
+    raise SymbolNotFound(f"{reference}: extends forms a loop")
+
+
 def footprint_pads(path: Path) -> set[str]:
     """
     The pad *numbers* of a footprint that carry copper.

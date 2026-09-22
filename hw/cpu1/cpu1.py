@@ -81,7 +81,19 @@ INTENT: dict[str, tuple[float, float]] = {
     # the PHY's 102 mA is a *typical* - its datasheet has no maximum supply
     # current anywhere - and the comparators' 5 mA is a 25 degC figure rather
     # than one over temperature. Both are recorded at their parts.
-    "rail.3v3.current": (0.0, 0.8),
+    # **850 mA, not 800.** The derived sum is 810 mA - 785 of measured load
+    # plus the quarter `loads.unguaranteed_margin` puts on the PHY's typical -
+    # so 800 no longer covers it. Widening the band rather than arguing the
+    # margin away is the honest way round.
+    #
+    # What decides how far is not this converter. The TPS562200's own current
+    # limit is 2.5 A; the binding part is the LM5164 upstream, which carries
+    # this rail reflected through the 3V3 buck's efficiency *plus* the 5 V
+    # rail's own budget. At 850 mA that is 930 mA of its 1.0 A rating, and at
+    # 900 it would be 973 - nearly all of it, for headroom nothing has asked
+    # for. So the band sits 40 mA above the derived load and the converter
+    # keeps 70, which is the way round that leaves room where it is useful.
+    "rail.3v3.current": (0.0, 0.85),
     "rail.5v.voltage": (4.75, 5.25),
     # The 5 V rail's own loads, on the same terms: the check adds them up and
     # prints them. The reference's 25 mA used to be itemised here and is not
@@ -235,6 +247,23 @@ INTENT: dict[str, tuple[float, float]] = {
     # in `test_a_trip_stops_the_outputs_inside_the_budget`, and spent out of
     # the budget like every other term. Four tenths is the ceiling on it.
     "trip.reserved_share": (0.0, 0.4),
+    # What to add to a load figure the datasheet does not guarantee. Two of
+    # the largest entries on this board's rails are not maximums: the
+    # LAN8742A's 102 mA is a *typical* - its datasheet has no maximum supply
+    # current anywhere, Table 5.5 has no MIN/TYP/MAX columns at all - and the
+    # TLV3501's 5 mA is a maximum at 25 degC only, with supply current over
+    # temperature appearing solely as a curve.
+    #
+    # A budget that adds those in as though they were guaranteed is a budget
+    # that closes on paper. A quarter is what this board adds instead, and it
+    # is a judgement rather than a measurement - the same species as
+    # `capacitors.bias_derating` beside it, and the same instruction: it is
+    # there to be replaced by a measurement on the first assembled board.
+    #
+    # It is applied by name: a parameter called `*_typical`, or one that says
+    # `_at_25c`, gets it. A figure that is a real maximum over the full
+    # temperature range does not, because there is nothing to add to.
+    "loads.unguaranteed_margin": (0.0, 0.25),
     # What DC bias takes off a Class II ceramic, as a coefficient on the
     # fraction of its rating the part is operated at: a capacitor sitting at
     # a fifth of its rated voltage is assumed to have lost a fifth of its

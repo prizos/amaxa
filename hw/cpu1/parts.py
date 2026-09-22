@@ -784,7 +784,7 @@ COMPARATOR = PartSpec(
         # over the range, and supply current against temperature exists only
         # as Figure 12. Seven of these are the largest single entry on the
         # 5 V rail, so the caveat is the rail budget's caveat too.
-        "supply_current_max": exact(5e-3),
+        "supply_current_max_at_25c": exact(5e-3),
         # 20 mV of overdrive, over the whole temperature range. The 5 mV figure
         # is half as fast again, which is what the tap network in M6 has to
         # deliver against.
