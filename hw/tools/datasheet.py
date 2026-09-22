@@ -82,6 +82,13 @@ def fetch(args) -> int:
     if not body.startswith(b"%PDF"):
         sys.exit(f"{args.url} did not return a PDF (starts {body[:16]!r})")
     out.write_bytes(body)
+    # Beside the PDF, where it came from. `evidence` reads this rather than
+    # believing whatever URL it is handed: a crop was twice committed with the
+    # URL of a different datasheet - pasted from a command a few lines earlier
+    # - and the check that guards evidence cannot see it, because it asks that
+    # the field is filled in and not that it points at the right document.
+    out.with_suffix(".source.json").write_text(json.dumps(
+        {"url": args.url, "sha256": _sha256(out)}, indent=1) + "\n")
     print(f"{out}  {len(body)} bytes\nsha256 {_sha256(out)}")
     return 0
 
@@ -113,6 +120,19 @@ def page(args) -> int:
 
 def evidence(args) -> int:
     pdf = _pdf(args.name)
+    # The URL is taken from what the fetch recorded, not from the argument.
+    # Where both exist and disagree, the argument is wrong by construction -
+    # the bytes being cropped are the ones in the cache.
+    beside = pdf.with_suffix(".source.json")
+    if beside.is_file():
+        fetched = json.loads(beside.read_text())["url"]
+        if args.url and args.url != fetched:
+            sys.exit(f"--url says\n  {args.url}\nbut {pdf.name} was fetched from\n"
+                     f"  {fetched}\nCrop the document you mean, or re-fetch.")
+        args.url = fetched
+    elif not args.url:
+        sys.exit(f"{pdf.name} predates the source record; pass --url and re-fetch "
+                 f"to have it remembered")
     part = HW / args.board / "parts" / args.lib
     if not part.is_dir():
         sys.exit(f"no part library at {part}")
@@ -169,7 +189,8 @@ def main() -> int:
     e.add_argument("--dpi", type=int, default=200)
     e.add_argument("--crop", help="x,y,w,h in pixels at this dpi")
     e.add_argument("--title", required=True, help="the document, as it names itself")
-    e.add_argument("--url", required=True)
+    e.add_argument("--url", default="", help="only needed for a PDF fetched "
+                   "before the cache recorded its source")
     e.add_argument("--shows", required=True, help="what the figure settles")
     e.add_argument("--assumes", default="", help="what it does not settle, and is taken on convention")
     e.set_defaults(func=evidence)

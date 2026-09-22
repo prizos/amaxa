@@ -248,6 +248,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOT23": ["bat54a_common_anode", "bat54a_forward_voltage",
               "bat54a_reverse_current", "ref3030_dropout"],
     "SOT23_6": ["tlv3501_delay_vs_load"],
+    "TSSOP20": ["lvc541a_current_ratings"],
     "TC2030": ["pad_signals"],
     "XTAL5032_4P": ["parameters"],
     "XTAL_MC306": ["internal_connection"],

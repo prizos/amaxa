@@ -36,7 +36,9 @@ served by LCSC for C113281. At V_CC = 3.3 V ± 0.3 V, −40 to +85 °C.
 | Disable time, OE to Y | 1.5 to 7 ns | §7.7 |
 | Output-to-output skew | 1 ns | §7.7 |
 | Input thresholds | V_IH 2.0 V, V_IL 0.8 V | §7.3 |
-| Output current | 25 mA per output, 50 mA per part | §11.1 |
+| Output current, recommended | 24 mA per output at V_CC = 3 V | §7.3 |
+| Output current, absolute maximum | ±50 mA per output | §7.1 |
+| Package current, absolute maximum | ±100 mA through V_CC or GND | §7.1 |
 
 The 1 ns skew is why a bridge's high and low sides go through the *same*
 package: between two parts the bound is each one's own 1.5 to 5.1 ns window,
@@ -56,3 +58,17 @@ makes for its LDO, and for the same reason: the footprint and the numbering are
 what the board is built from.
 
 **Footprint.** KiCad stock `Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm`, unmodified.
+
+
+## The package current was recorded as half what it is
+
+This note used to read "25 mA per output, 50 mA per part". Neither figure was
+right and the second was wrong in a way that mattered: §7.1 gives ±50 mA as
+the continuous current *per output* and ±100 mA as the continuous current
+through V_CC or GND, which is the package total. The 50 was the per-output
+number read as a package one.
+
+It was load-bearing. The gate lines' pull-downs were sized down from 10 k to
+1.2 k for the trip budget, and the floor that stopped them going lower was
+"eight outputs on one package against half of 50 mA". Against the real 100 mA
+that floor is half what was used. See `evidence/lvc541a_current_ratings.png`.

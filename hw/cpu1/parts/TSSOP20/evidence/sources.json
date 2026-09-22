@@ -1,0 +1,13 @@
+{
+  "lvc541a_current_ratings": {
+    "assumes": "",
+    "crop": "60,300,1570,560",
+    "document": "TI SN54LVC541A, SN74LVC541A Octal Buffers/Drivers, SCAS298N (January 1993, revised June 2014), served by LCSC for C113281",
+    "dpi": 200,
+    "page": 4,
+    "read": "2026-09-22",
+    "sha256": "17a630f61943db2ee11e487c0871be6dfcfa50748b308b420d7ca34e0c051087",
+    "shows": "Absolute Maximum Ratings: continuous output current +-50 mA, and continuous current through VCC or GND +-100 mA. The second is the package total; the first is per output. The review note recorded '50 mA per part', which is neither - it is the per-output figure read as a package one, and it was the floor used for the gate-line pull-down resistance.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/d165a1c51de346ea942fce9f45b4f954.pdf"
+  }
+}

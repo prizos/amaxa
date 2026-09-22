@@ -525,8 +525,17 @@ BUF_OCTAL = PartSpec(
         "disable_time_max": exact(7e-9),
         "enable_time_max": exact(7e-9),
         "output_skew_max": exact(1e-9),
-        "output_current_max": exact(25e-3),          # per output, recommended
-        "total_output_current_max": exact(50e-3),
+        # 24 mA per output at V_CC = 3 V, from the recommended operating
+        # conditions - not 25, which was a rounding of it.
+        "output_current_max": exact(24e-3),
+        # **100 mA, not 50.** The absolute maximums give continuous output
+        # current as +-50 mA *per output* and continuous current through V_CC
+        # or GND as +-100 mA, which is the package figure. The note recorded
+        # "50 mA per part", which is the per-output number read as a package
+        # one - and it was the floor the gate-line pull-downs were sized
+        # against, so the constraint that choice was made under was the wrong
+        # one by a factor of two. See TSSOP20/evidence.
+        "total_output_current_max": exact(100e-3),
         "input_low_voltage_max": exact(0.8),
         "input_high_voltage_min": exact(2.0),
     },
