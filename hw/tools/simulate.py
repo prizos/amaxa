@@ -167,7 +167,16 @@ def main() -> int:
             continue
 
         unchecked = set(results) - set(expected)
+        # **A band may be a function of the design rather than a number.**
+        # Some of these are genuinely independent judgements - half an LSB is
+        # where a measurement stops being limited by the filter - but others
+        # follow arithmetically from values the design already states, and
+        # writing those out as constants makes them numbers somebody widens
+        # when a component changes. Either end may be a callable taking the
+        # design's `values` mapping; it is called here, once the deck has run.
         for measurement, (low, high, why) in sorted(expected.items()):
+            low = low(values) if callable(low) else low
+            high = high(values) if callable(high) else high
             if measurement not in results:
                 failures.append(f"{name}.{measurement}: the deck did not measure it")
                 continue

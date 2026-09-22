@@ -126,7 +126,7 @@ RES_1K_0402 = PartSpec(
 )
 # Between the gate-kill FET's drain and the line it pulls down. It bounds what
 # the FET draws from a '541 output that has not let go yet: 3.465 V across
-# 33 + 33 + 150 ohm is 16 mA against the buffer's 24 mA per output.
+# 33 + 150 ohm is 19 mA against the buffer's 24 mA per output.
 RES_150R_0402 = PartSpec(
     **_R0402, mpn="0402WGF1500TCE", lcsc="C25082", value="150R",
     params={"resistance": pm(150, 0.01), "max_power": exact(0.0625)},
@@ -758,17 +758,25 @@ HEADER_2X15 = PartSpec(
     params={"current_rating": exact(3.0)},
 )
 
-# Series into every fast ADC channel. Ten ohms and not a hundred: with the
-# capacitor doing the filtering, the resistor's only other job is putting back
-# what the converter's sampling capacitor takes, and it has 236 ns to do it.
-RES_10R_0402 = PartSpec(
-    **_R0402, mpn="0402WGF100JTCE", lcsc="C25077", value="10R",
-    params={"resistance": pm(10, 0.01), "max_power": exact(0.0625)},
+# Series into every fast ADC channel, and the one number on this board that
+# three constraints meet at. The capacitor has to roll off what the converter
+# would alias, stay big enough to give back what the 4 pF sampling capacitor
+# takes inside 236 ns - and stay *small* enough that the lead-lag it forms
+# with the power board's 2 ohm source impedance does not move the comparator
+# tap that shares the node. Ten ohms and 10 nF met the first two and failed
+# the third by 17 %. Twenty-two and 4.7 nF meet all three with room.
+RES_22R_0402 = PartSpec(
+    **_R0402, mpn="0402WGF220JTCE", lcsc="C25092", value="22R",
+    params={"resistance": pm(22, 0.01), "max_power": exact(0.0625)},
 )
 
-CAP_10N_0402 = PartSpec(
-    **_C0402, manufacturer="YAGEO", mpn="CC0402KRX7R9BB103", lcsc="C60133", value="10nF",
-    params={"capacitance": pm(10e-9, 0.10), "max_voltage": exact(50.0)},
+# The comparator-only path to the DC link. Nothing samples this node - PB2 is
+# a comparator input, not an ADC one - so the reservoir requirement that fixes
+# the channels above does not apply, and the network can be the one a tap
+# actually wants: a kilohm against the 2 ohm upstream is a 0.2 % step error.
+CAP_100P_0402 = PartSpec(
+    **_C0402, manufacturer="FH", mpn="0402CG101J500NT", lcsc="C1546", value="100pF",
+    params={"capacitance": pm(100e-12, 0.05), "max_voltage": exact(50.0)},
 )
 
 RES_4K7_0402 = PartSpec(

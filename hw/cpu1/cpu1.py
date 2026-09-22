@@ -234,12 +234,13 @@ INTENT: dict[str, tuple[float, float]] = {
     # here rather than worked out from the parts: the parts are chosen to fit
     # inside it. Two check files used to carry their own copy of the number.
     "trip.budget": (0.0, 50e-9),
-    # How much of that budget is kept back for a filter this board has not
-    # drawn. The comparators tap the sense nets raw - nothing sits between the
-    # connector and their inputs - and a tap network with a corner worth
-    # having will cost tens of nanoseconds when it lands. Four tenths is what
-    # the parts already chosen leave over, and saying so here makes it a
-    # reservation somebody owns rather than a fraction inside a check.
+    # How much of that budget the tap network in front of the comparators may
+    # cost. This used to say "kept back for a filter this board has not
+    # drawn", which was wrong twice over: the filter was drawn - the ADC's own
+    # capacitor sits on the node the comparators watch - and it was costing
+    # 20 ns of the 20 without anybody having measured it. It is measured now,
+    # in `test_a_trip_stops_the_outputs_inside_the_budget`, and spent out of
+    # the budget like every other term. Four tenths is the ceiling on it.
     "trip.reserved_share": (0.0, 0.4),
     # How much of a part's own rating this board will use. Half is what a
     # 0402 in still air is worth, and it applies to every rating that is a
@@ -1440,9 +1441,9 @@ def adc_inputs(v3v3, gnd, nets) -> None:
     resistor_ref, capacitor_ref = 61, 40
     for name in fast + slow:
         quick = name in fast
-        series = part(parts.RES_10R_0402 if quick else parts.RES_1K_0402,
+        series = part(parts.RES_22R_0402 if quick else parts.RES_1K_0402,
                       f"adc.{name.lower()}.series", f"R{resistor_ref}")
-        shunt = part(parts.CAP_10N_0402 if quick else parts.CAP_100N_0402,
+        shunt = part(parts.CAP_4N7_0402 if quick else parts.CAP_100N_0402,
                      f"adc.{name.lower()}.shunt", f"C{capacitor_ref}")
         resistor_ref += 1
         capacitor_ref += 1
@@ -1451,11 +1452,19 @@ def adc_inputs(v3v3, gnd, nets) -> None:
         gnd += shunt[2]
 
     # The DC link again, into the MCU's own comparator. A second path to the
-    # same fact, taken from the same place the external comparators take it:
-    # ahead of everything, so it is fast, and independent of them so a fault in
-    # one is not a fault in both.
-    series = part(parts.RES_10R_0402, "adc.comp_fast4.series", f"R{resistor_ref}")
-    shunt = part(parts.CAP_10N_0402, "adc.comp_fast4.shunt", f"C{capacitor_ref}")
+    # same fact, taken from the same place the external comparators take it,
+    # and independent of them so a fault in one is not a fault in both.
+    #
+    # **A kilohm and 100 pF, not the channel network.** PB2 is a comparator
+    # input: nothing samples it, so it needs no reservoir against a sampling
+    # capacitor, and the network can be what a tap actually wants. The old
+    # copy of the channel network made FAST4 the *worst* tap on the board
+    # rather than the best-protected one - two 10 ohm branches in parallel are
+    # 4.95, which took a step 29 % low and delayed a ramp by 40 ns. The
+    # redundancy was costing accuracy and time. In parallel with the channel's
+    # 22 ohm this contributes 0.5 ohm of loading and 100 pF of delay.
+    series = part(parts.RES_1K_0402, "adc.comp_fast4.series", f"R{resistor_ref}")
+    shunt = part(parts.CAP_100P_0402, "adc.comp_fast4.shunt", f"C{capacitor_ref}")
     resistor_ref += 1
     capacitor_ref += 1
     nets["FAST4_SENSE"] += series[1]

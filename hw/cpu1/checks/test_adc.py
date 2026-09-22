@@ -151,7 +151,7 @@ def test_the_slow_channels_roll_off_much_lower(spec, networks, pad_net):
     )
 
 
-def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_net):
+def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_net, pin_map):
     """
     What the converter's own sampling capacitor costs, and whether the resistor
     puts it back in time.
@@ -171,6 +171,14 @@ def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_ne
 
     The worst case is the shortest sampling time firmware will use, the largest
     sampling capacitor and the smallest external one.
+
+    **Only the pins that are sampled.** A network ending at a comparator input
+    or a DAC output has no sampling switch behind it and takes no charge, so
+    there is nothing to settle; asking the question anyway would force a
+    reservoir onto a node whose whole job is to be fast. Which pins those are
+    comes from the pin map's own signal names, not from a list here - the list
+    this replaced named `dac_test` and would have gone on exempting it after
+    the pin moved.
     """
     sample, _ = spec("adc", "sampling_time")
     bits, _ = spec("adc", "resolution_bits")
@@ -178,10 +186,11 @@ def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_ne
     c_adc, _ = spec(MCU, "adc_sample_capacitance")
     _, source = spec("header", "source_impedance")
     lsb = 1.0 / 2 ** bits
+    sampled = {p.net_name for p in pin_map.PINS if p.signal.startswith("ADC")}
 
     problems = []
     for channel, (series, shunt) in sorted(networks.items()):
-        if channel == "dac_test":
+        if pad_net.get((series, "2")) not in sampled:
             continue
         resistance, _ = spec(series, "resistance")
         capacitance, _ = spec(shunt, "capacitance")
@@ -251,34 +260,40 @@ def test_the_filter_does_not_load_the_tap_it_sits_beside(design, pad_net, networ
     Being on the unfiltered side of an RC is not the same as being unfiltered.
 
     The check above asserts a topological fact - no comparator sits past a
-    series resistor - and the design comments call the taps "ahead of
+    series resistor - and the design comments used to call the taps "ahead of
     everything, so it is fast". But the capacitor is a shunt branch on the
     *same node*, and the power board drives that node through an impedance the
     board itself declares. So the tap is a lead-lag network, not a clean tap:
 
         H(s) = (1 + sRC) / (1 + s(Rs + R)C)
 
-    which is unity at DC - so nothing static notices - and R/(Rs + R) to a
-    step, recovering with (Rs + R)C.
+    unity at DC, so nothing static notices. Two things follow, and they are
+    not the same thing:
 
-    On this board that is 9.9/(2 + 9.9) = 0.832: a fast fault edge arrives at
-    the comparator **twenty per cent** below where it really is, so the
-    effective trip point sits twenty per cent above where the DAC set it, for
-    the 131 ns the node takes to recover. The trip budget is 50 ns, so the
-    comparator decides deep inside that window, and `trip.threshold_tolerance`
-    is twelve per cent.
+      - **amplitude**, R/(Rs + R) to a step, so a fast edge arrives low and
+        the effective trip point sits that much high. This is what the series
+        resistor fixes, and only the series resistor: it is a ratio.
+      - **time**, because the same network delays a *ramp* - which is what a
+        rising fault current is - by exactly Rs*C, whatever R is. This is
+        what the capacitor fixes, and only the capacitor.
 
-    **FAST4 is worst because it was made redundant.** It carries a second
-    independent network for the DC-link over-voltage channel, and two 10 ohm
-    branches in parallel are 4.95, which takes the step to 0.712 - a forty per
-    cent error, recovering over 153 ns. The redundancy cost it accuracy.
+    At 10 ohm and 10 nF the first was 17 % against a 12 % threshold tolerance
+    and the second was 20 ns, the entire share of the trip budget reserved for
+    a filter nobody had noticed was already fitted. FAST4 was worse on both
+    because it carried a second identical network for redundancy: two 10 ohm
+    branches in parallel are 4.95 ohm and 20 nF, so 29 % and 40 ns. The
+    redundancy cost it accuracy and time.
 
-    The whole term is driven by `header.source_impedance`: at zero it
-    disappears. It is the power board's promise that creates it, which is why
-    it is checked here against the accuracy the board declares.
+    At 22 ohm and 4.7 nF the first is 8.3 % and the second 9.4 ns, and the
+    second network is 1 kohm and 100 pF - which it can be because PB2 is a
+    comparator input with nothing sampling it, so it needs no reservoir. Both
+    numbers are worked out here from the parts and held against what the board
+    declares, rather than printed.
     """
     _, source = spec("header", "source_impedance")
     _, tolerance = spec("trip", "threshold_tolerance")
+    _, budget = spec("trip", "budget")
+    _, reserved = spec("trip", "reserved_share")
 
     watched = set()
     for address, part in design["parts"].items():
@@ -301,25 +316,20 @@ def test_the_filter_does_not_load_the_tap_it_sits_beside(design, pad_net, networ
         parallel = 1.0 / sum(1.0 / r for r, _ in rc)
         total = sum(c for _, c in rc)
         error = source / (source + parallel)
+        delay = source * total
         if error > tolerance:
             wrong.append(
-                f"  {node}: {len(rc)} branch(es) of {parallel:.2f} ohm and "
-                f"{total * 1e9:.0f} nF, so a step arrives {error * 100:.0f}% low "
-                f"and the trip point sits that much high for "
-                f"{(source + parallel) * total * 1e9:.0f} ns")
-    # **Reported, and recorded in BLOCKING.** All four fast trip channels fail
-    # this and none of them can be fixed by choosing a different value: the
-    # 10 ohm and 10 nF are what the converter's own charge injection and the
-    # 1-2 MHz corner between them fix, and the source impedance is the power
-    # board's promise. Making the tap clean wants R much larger than Rs -
-    # 100 ohm with 1 nF holds the same corner and brings the error to 2 % -
-    # but a 1 nF reservoir against the converter's 4 pF sampling capacitor
-    # leaves 1.5 LSB in the window where half of one is allowed. It is a
-    # three-way tension between the converter, the comparator and the
-    # connector, and it needs a decision rather than a value.
-    for line in sorted(wrong):
-        print("    tap loaded -" + line)
-    assert branches, "no comparator shares a node with an input network"
+                f"  {node}: {len(rc)} branch(es) of {parallel:.2f} ohm, so a step "
+                f"arrives {error * 100:.1f}% low and the trip point sits that "
+                f"much high, against {tolerance * 100:g}% of threshold tolerance")
+        if delay > reserved * budget:
+            wrong.append(
+                f"  {node}: {total * 1e9:.2f} nF behind {source:g} ohm delays a "
+                f"ramp by {delay * 1e9:.1f} ns, against the "
+                f"{reserved * budget * 1e9:.0f} ns of the {budget * 1e9:g} ns trip "
+                f"budget reserved for the tap")
+    assert not wrong, (
+        "The ADC filter loads the comparator tap beside it:\n" + "\n".join(wrong))
 
 
 def _is_fast(channel: str) -> bool:

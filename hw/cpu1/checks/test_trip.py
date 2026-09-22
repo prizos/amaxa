@@ -200,11 +200,13 @@ def test_the_whole_trip_path_fits_the_budget(spec, comparators):
         f"{spent * 1e9:.1f} ns of a {trip_budget * 1e9:g} ns budget before the "
         "signal has even been filtered"
     )
-    # And the rest is kept for a filter that is not drawn yet. The comparators
-    # tap the sense nets raw on this board - nothing sits between the
-    # connector and their inputs - so this is reserved headroom rather than a
-    # measurement, and `trip.reserved_share` is where that is owned. It used
-    # to be a bare 0.6 here.
+    # And the rest has to cover the tap network in front of the comparators,
+    # which `trip.reserved_share` is the ceiling on. This comment used to say
+    # the taps were raw and the reservation was headroom for a filter not yet
+    # drawn; the filter was there all along, as the ADC's own capacitor on the
+    # node a comparator watches. What it costs is measured in
+    # `test_a_trip_stops_the_outputs_inside_the_budget` and held under this
+    # share by `test_the_filter_does_not_load_the_tap_it_sits_beside`.
     _, reserved = spec("trip", "reserved_share")
     assert spent < trip_budget * (1.0 - reserved), (
         f"{spent * 1e9:.1f} ns leaves only {(trip_budget - spent) * 1e9:.1f} ns "

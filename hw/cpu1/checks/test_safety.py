@@ -911,7 +911,6 @@ def test_a_trip_stops_the_outputs_inside_the_budget(
     # nothing was counting it.
     _, far_side = spec("header", "gate_line_capacitance")
     _, rail = spec("rail.3v3", "voltage")
-    rail_low, _ = spec("rail.3v3", "voltage")
     _, threshold = spec("header", "gate_line_low")
 
     # **Through the transistor, not the pull-down.** The kill line is the one
@@ -949,33 +948,49 @@ def test_a_trip_stops_the_outputs_inside_the_budget(
     _, drive = spec(LATCH, "output_current_max")
     falling += gate * turn_on / drive
 
-    assert spent + slowest + loading + falling < trip_budget, (
+    # **And the tap, which used to be a reservation rather than a number.**
+    # The budget held back 40 % for "a filter this board has not drawn". It
+    # had been drawn all along: the ADC's own capacitor is a shunt branch on
+    # the node the comparator watches, and with the power board's source
+    # impedance in front of it that is a lead-lag. A ramp through it comes out
+    # delayed by exactly Rs*C - independent of the series resistor, which is
+    # why raising R fixes the amplitude error and not this.
+    _, source = spec("header", "source_impedance")
+    watched = set()
+    for address, part in design["parts"].items():
+        if part["symbol"].startswith("Comparator:"):
+            watched |= {pad_net.get((address, "1")), pad_net.get((address, "3"))}
+    shunts: dict[str, float] = {}
+    for address in design["parts"]:
+        if not address.startswith("adc.") or not address.endswith(".shunt"):
+            continue
+        node = pad_net.get((f"{address[:-len('.shunt')]}.series", "1"))
+        if node in watched:
+            shunts[node] = shunts.get(node, 0.0) + spec(address, "capacitance")[1]
+    assert shunts, "no comparator shares a node with an input network"
+    tap_node = max(shunts, key=shunts.get)
+    tap = source * shunts[tap_node]
+
+    assert spent + slowest + loading + falling + tap < trip_budget, (
         f"{spent * 1e9:.1f} ns for the latch and buffer, {slowest * 1e9:g} ns "
         f"for the comparator at its datasheet's own load, and {loading * 1e9:.1f} "
         f"ns more for the {loaded * 1e12:.0f} pF on {trip_bus} - "
-        f"{junctions} Schottky junctions and the copper between them - and "
+        f"{junctions} Schottky junctions and the copper between them - "
+        f"{tap * 1e9:.1f} ns for the {shunts[tap_node] * 1e9:.2f} nF on "
+        f"{tap_node} behind {source:g} ohm, and "
         f"{falling * 1e9:.1f} ns to turn {fet} on and pull {worst} below "
         f"{threshold:g} V, against a {trip_budget * 1e9:g} ns budget"
     )
 
-    # And what that leaves the tap network M6 has still to draw. **Reported,
-    # and recorded in BLOCKING**, because the answer is that there is nothing
-    # left: the budget closes with a few hundred picoseconds to spare and the
-    # 40 % held back for the filter is entirely spent by the gate line's fall.
-    #
-    # It cannot be fixed here. Getting the discharge under five nanoseconds
-    # wants 244 ohm pull-downs, which is 114 mA out of one '541 against its
-    # 50 mA total - four times over. The line's fall is really the far side's
-    # problem: a gate driver with its own input pull-down solves it and this
-    # board cannot assume one, so the requirement goes to the power board the
-    # same way the analog clamps did.
+    # The whole chain, printed on every run, so the next thing that lands in
+    # it lands against a number rather than against a fraction.
     _, reserved = spec("trip", "reserved_share")
-    left = trip_budget - (spent + slowest + loading + falling)
+    left = trip_budget - (spent + slowest + loading + falling + tap)
     print(f"    trip chain: {spent * 1e9:.1f} + {slowest * 1e9:g} + "
-          f"{loading * 1e9:.1f} + {falling * 1e9:.1f} ns = "
+          f"{loading * 1e9:.1f} + {tap * 1e9:.1f} + {falling * 1e9:.1f} ns = "
           f"{(trip_budget - left) * 1e9:.1f} of {trip_budget * 1e9:g}, "
-          f"leaving {left * 1e9:.1f} ns against the {reserved * trip_budget * 1e9:.0f} "
-          f"held for the tap filter")
+          f"leaving {left * 1e9:.1f} ns; the tap spends {tap * 1e9:.1f} of the "
+          f"{reserved * trip_budget * 1e9:.0f} it may")
 
 
 # --- everything else on the connector ----------------------------------------
