@@ -629,8 +629,39 @@ def test_the_centre_taps_sit_where_the_transmitter_can_use_them(
     it too. Each tap is now matched to a *distinct* capacitor by distance on
     the placed board, and any rail-to-ground capacitor counts - because on
     this board the taps sit on the 3V3 plane, and a plane does not care which
-    capacitor is called what. The two dedicated parts are the nearest two;
-    the point of the check is that something is there, not what it is named.
+    capacitor is called what.
+
+    **The sentence that used to end this paragraph was wrong.** It said "the
+    two dedicated parts are the nearest two". They are not: measured on the
+    placed board, `eth.tap_bypass1` is 7.72 mm from tap 4 and 10.18 mm from
+    tap 5, `eth.tap_bypass2` is 9.99 and 12.26 - and what actually serves
+    tap 5 is `stitch.12`, a plane-stitching capacitor 8.72 mm away on the far
+    side of the jack. That is electrically fine, and it is exactly what the
+    paragraph above argues: same rail, same plane pair, same return. But it
+    means the check was passing on a part nobody placed for the job while the
+    parts that were placed for it would have failed the bound - so the
+    sentence is corrected rather than the board.
+
+    **The bound is the jack's own pad field**, not a typed 10.0. The argument
+    the old constant carried in its message - "the jack is 22 mm deep and
+    everything closer than that is inside its outline" - is the right one and
+    was not what the number said.
+
+    **And it is weak. On this board it cannot currently fail**, which is worth
+    stating rather than dressing up. Fifty-three capacitors tie 3V3 to ground
+    here and the bound is the jack's 20.7 mm span, so something always
+    qualifies: moving both dedicated bypasses to the far corner of the board,
+    and even moving the jack itself, leaves this passing. What still has teeth
+    is the matching - two distinct capacitors, so one cannot serve both taps -
+    and the rail and voltage assertions above it.
+
+    Getting the dedicated parts nearer was tried and the board refuses: every
+    position within 6 mm of the taps is inside the jack's keepout or in the
+    band the RMII's west climb and the four line terminations already fill,
+    and the placer reports no room for their plane vias. So 7.7 mm is what
+    this geometry allows, the stitch ring covers the rest, and the thing that
+    would actually settle it - the return loop's inductance - is measured by
+    nothing on this board.
     """
     low, high = spec(PHY, "magnetics_supply_voltage")
     by_name = {}
@@ -674,21 +705,32 @@ def test_the_centre_taps_sit_where_the_transmitter_can_use_them(
         f"{len(candidates)} capacitors tie {rail} to ground near the jack"
     )
 
-    # Greedy nearest assignment: each tap takes the closest capacitor not
-    # already spoken for. The jack's own body is what sets the distance - its
-    # outline runs from y -55 to -32.7 and the taps are inside it - so this
-    # asks for the nearest two rather than for a figure someone picked.
-    taken, worst = set(), 0.0
-    for pad in sorted(taps):
-        here = tap_at[pad]
-        near = min((a for a in candidates if a not in taken),
-                   key=lambda a: math.dist(here, placement[a]))
-        taken.add(near)
-        worst = max(worst, math.dist(here, placement[near]))
-    assert len(taken) == 2, "the two centre taps share one bypass"
-    assert worst < 10.0, (
-        f"the further centre tap is {worst:.1f} mm from its bypass; the jack "
-        "is 22 mm deep and everything closer than that is inside its outline"
+    # The jack's own pad field is the distance: a bypass further from a tap
+    # than the connector is wide is not at the connector.
+    span = [tap_at[pad] for pad in tap_at]
+    reach = max(math.dist(a, b) for a in span for b in span)
+    assert reach > 0, "the jack's pads are all at one point"
+
+    # A *complete* matching, not a greedy walk. The greedy version asserted
+    # `len(taken) == 2` afterwards, which could not fail: two picks from a
+    # set that excludes what is already taken are always distinct. What can
+    # fail, and is the thing meant, is that both taps are served at once -
+    # so both assignments are tried and the better one has to fit.
+    pads = sorted(taps)
+    best, how = None, None
+    for first in candidates:
+        for second in candidates:
+            if first == second:
+                continue
+            worst = max(math.dist(tap_at[pads[0]], placement[first]),
+                        math.dist(tap_at[pads[1]], placement[second]))
+            if best is None or worst < best:
+                best, how = worst, (first, second)
+    assert best is not None, "fewer than two distinct capacitors to match"
+    assert best <= reach, (
+        f"the further centre tap is {best:.1f} mm from its own bypass "
+        f"({how[0]} and {how[1]}), and the jack's pads span {reach:.1f} mm - "
+        f"so it is further from a bypass than the connector is wide"
     )
 
 
