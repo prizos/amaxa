@@ -72,6 +72,9 @@ coordinates ([`layout.py`](layout.py), with helpers in
 VDDA's filter, both crystals, debug, the indicators and the button are placed by
 hand, near the pins they serve.
 
+See [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) for an account of what the board
+is and does, written after the adversarial round that emptied `BLOCKING`.
+
 ## Where it stands
 
 Everything on this board is drawn, routed and checked: 203 checks, DRC with
