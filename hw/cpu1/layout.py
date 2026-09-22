@@ -1248,7 +1248,11 @@ STATIC_CLIMB = (-7.5, -2.5)
 
 # The two off the south edge cross the package on the front, where the band's
 # own tracks cannot be in their way, and drop into the two lines nearest them.
-STATIC_SOUTH = {"RELAY1": (4.0, 0.75), "RELAY2": (4.6, 1.25)}
+# Each with its own turn height, not a shared 9.0. With both turning at the
+# same y, RELAY1's diagonal set off from beside RELAY2's pad stub and passed
+# it at 0.112 mm edge to edge - 12 um above the fabricator's 0.1 mm floor, so
+# DRC passed it and nothing else was measuring track to track at all.
+STATIC_SOUTH = {"RELAY1": (4.0, 0.75, 8.2), "RELAY2": (4.6, 1.25, 9.0)}
 
 # The two off the north edge never enter the band. They go out on the front at
 # their own pin's height, cross the field-bus escapes on the back, and come
@@ -1305,10 +1309,10 @@ def _static_mcu() -> None:
                 f"{MCU}:{pin}", (start, _point(f"{MCU}:{pin}")[1]),
                 (finish, slot), drop]))
         else:
-            column_x, out = STATIC_SOUTH[net]
+            column_x, out, turn = STATIC_SOUTH[net]
             drop = (column_x, slot)
             ROUTES.append((net, width, F, [
-                f"{MCU}:{pin}", (out, 9.0), (column_x, 7.0), drop]))
+                f"{MCU}:{pin}", (out, turn), (column_x, 7.0), drop]))
         VIAS.append((None, drop, net, *VIA))
 
         deepest, tail = _static_lane(net, lane)

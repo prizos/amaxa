@@ -989,6 +989,26 @@ def test_the_plane_edges_are_stitched(vias, board_dir):
     )
 
 
+def _segment_gap(a_start, a_end, b_start, b_end) -> float:
+    """Closest approach of two line segments, centreline to centreline."""
+    if _crosses(a_start, a_end, b_start, b_end):
+        return 0.0
+    return min(point_to_segment(a_start, b_start, b_end),
+               point_to_segment(a_end, b_start, b_end),
+               point_to_segment(b_start, a_start, a_end),
+               point_to_segment(b_end, a_start, a_end))
+
+
+def _crosses(p1, p2, p3, p4) -> bool:
+    """Whether two segments properly intersect."""
+    def side(a, b, c):
+        return ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+
+    d1, d2 = side(p3, p4, p1), side(p3, p4, p2)
+    d3, d4 = side(p1, p2, p3), side(p1, p2, p4)
+    return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0))
+
+
 def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, pcb_text):
     """
     No copper within a fifth of the fabricator's minimum, and no hole inside
@@ -1092,6 +1112,33 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
                     f"  a {track} track passes {gap:.3f} mm from a {net} via at "
                     f"({x:g}, {y:g}), against a {copper:g} mm floor"
                 )
+
+    # **And track to track, which this never measured.** The sentence at the
+    # top says "no copper within a fifth of the fabricator's minimum" and the
+    # two loops above cover via-to-via and via-to-track only. The population
+    # it was written for - "hand-written coordinates, which nothing held to
+    # anything but DRC" - is mostly tracks, and DRC passes anything above the
+    # fab's own 0.1 mm, so a pair 12 um above the floor was invisible.
+    #
+    # Same layer and different nets only: two segments of one net touch by
+    # design, and copper on different layers is a stackup question rather
+    # than an etch one.
+    by_layer: dict[str, list] = {}
+    for start, end, layer, track, width in segments:
+        by_layer.setdefault(layer, []).append((start, end, track, width))
+    for layer, here in by_layer.items():
+        for i, (a_start, a_end, a_net, a_width) in enumerate(here):
+            for b_start, b_end, b_net, b_width in here[i + 1:]:
+                if a_net == b_net:
+                    continue
+                gap = _segment_gap(a_start, a_end, b_start, b_end) \
+                    - a_width / 2 - b_width / 2
+                if gap < copper * over - 1e-9:
+                    tight.append(
+                        f"  {a_net} and {b_net} run {gap:.3f} mm apart on "
+                        f"{layer} near ({a_start[0]:g}, {a_start[1]:g}), "
+                        f"against a {copper:g} mm floor"
+                    )
     assert not tight, (
         f"Copper within {over:g} times the fabricator's floor:\n"
         + "\n".join(sorted(set(tight)))
