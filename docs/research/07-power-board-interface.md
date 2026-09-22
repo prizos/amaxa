@@ -49,7 +49,7 @@ These suit control loops up to ~50 kHz. They are too slow for a trip under 1 µs
 2. **Digital-board comparators with DAC thresholds set per type.**
    - Comparator plus trip takes ≤~90 ns on C2000-class MCUs.
    - A hardware latch disables every output, and only firmware can clear it.
-- **Safe state:** PWM outputs go to a hardware-enforced safe state before firmware runs (buffer with output enable, pull-downs). There is also a watchdog path that cuts PWM.
+- **Safe state:** PWM outputs go to a hardware-enforced safe state before firmware runs (buffer with output enable, pull-downs). **There is no separate watchdog device**, and `hw/cpu1` does not have one: this line used to claim "a watchdog path that cuts PWM" and there is no such net. What exists instead is the MCU's own independent watchdog, whose timeout is a reset, and `NRST` is one of the four cathodes on the trip bus — so a watchdog expiry presets the latch through the same diode a brown-out does. It is a real path; it is not a separate part, and a power board should not expect one.
 
 ### `GATE_ENABLE` is a master kill, and the timing rests on it
 
@@ -64,13 +64,23 @@ going low, and **only `GATE_ENABLE` gets there in time**:
 | line | falls in | how |
 |---|---|---|
 | `GATE_ENABLE` | **3.4 ns** | a MOSFET shorts it to ground the moment the latch trips |
-| the fourteen PWM lines | ~200 ns | their own 10 kΩ pull-downs, once the buffers let go |
+| the fourteen PWM lines | **32–39 ns bare, up to 188 ns loaded** | their own 10 kΩ pull-downs, once the buffers let go |
+
+Both rows are derived from the netlist and the routed copper by
+`test_the_pwm_lines_really_are_the_second_layer_the_interface_promises`, and
+the PWM row has two ends because it depends on the power board. With nothing
+attached the lines fall in 32–39 ns — the board's own copper is only a couple
+of picofarads. With the 10 pF a gate driver's input pin may present, the
+slowest reaches 188 ns. **That loaded corner is where the "~200 ns" this
+document used to state came from**, quoted for three revisions as though it
+were the figure rather than one end of a band.
 
 So: **the power board must disable every gate driver from `GATE_ENABLE`
 alone.** A design that treats it as advisory and gates on the PWM lines has a
-200 ns hole where the digital board believes it has stopped and the bridge is
-still being commanded. The PWM lines are a real second layer and they are not
-the first one.
+hole of tens to a couple of hundred nanoseconds — depending on its own input
+capacitance, which the digital board cannot know — where this board believes
+it has stopped and the bridge is still being commanded. The PWM lines are a
+real second layer and they are not the first one.
 
 There was no resistor that made the PWM lines fast enough: the budget wanted
 pull-downs under 600 Ω and the 3V3 rail's own budget wanted over 1.4 kΩ, and

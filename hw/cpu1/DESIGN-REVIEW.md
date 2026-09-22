@@ -1,6 +1,10 @@
 # cpu1 — what this board is, and what it does
 
-A design review written after the adversarial round that closed `BLOCKING`.
+A design review written after the adversarial round that closed `BLOCKING`,
+then corrected by the one after it — which reopened a blocker and found four
+wrong numbers on this page. See
+[`ADVERSARIAL-REVIEW.md`](ADVERSARIAL-REVIEW.md) for how much of what follows
+is proven and how much is prose.
 Everything here is measured off the generated board and `build/design.json`
 rather than recalled; where a number is an assumption rather than a
 measurement it says so.
@@ -20,8 +24,9 @@ stops the outputs without firmware — then hands all of it across two pin
 headers to a purely analog power board that does not exist yet. It is
 130 × 110 mm, six copper layers, 272 parts, 197 nets. The whole board exists
 to make one guarantee cheap to believe: **nothing reaches a gate driver unless
-firmware has deliberately allowed it, and several independent things can take
-that permission away in tens of nanoseconds.**
+firmware has deliberately allowed it, and three independent things can take
+that permission away in tens of nanoseconds.** (Three, not six — §3 says which
+three, and why the other count was the wrong way to read the diagram.)
 
 ---
 
@@ -30,13 +35,13 @@ that permission away in tens of nanoseconds.**
 | | |
 |---|---|
 | MCU | STM32H743ZIT6, LQFP-144, 400 MHz |
-| Board | 130 × 110 mm, 6 layers, 272 footprints, 603 vias, 1327 track segments |
+| Board | 130 × 110 mm, 6 layers, 272 footprints, 602 vias, 1327 track segments |
 | Stackup | F / **In1 GND** / In2 3V3 / **In3 signal** / In4 GND / B, 0.1855 mm outer prepreg |
 | Input | 9–36 V, fused, reverse-polarity FET, TVS |
 | Rails | 5 V (LM5164, 100 V-class), 3V3 (TPS562200), 3V3A (TLV70233 LDO), VREF+ 3.0 V |
 | To the power board | digital 2×26 (52 pins), analog 2×15 (30 pins) |
 | Comms | USB-C device, CAN FD, RS-485, 100BASE-TX Ethernet |
-| Checks | 203, all passing; DRC 0 violations, 0 unconnected |
+| Checks | 205, one failing on purpose (§4); DRC 0 violations, 0 unconnected |
 
 The part count is dominated by the safety chain (59) and the MCU core (39) —
 which is the right shape for what this board is for.
@@ -54,8 +59,16 @@ ground and splits nothing.
 
 ## 3. The safety chain, which is the point of the board
 
-Six independent things stop the outputs, and they compose rather than
-alternate.
+Six mechanisms stop the outputs. They are **not** six independent ones, and
+the difference is the honest way to read the diagram: five of the six meet at
+the latch. A latch that failed would take the comparators, the DAC's
+thresholds, the buffers' second enable and the gate kill with it.
+
+What is genuinely independent is three things: that latch chain;
+`PWM_ENABLE_N`, which the MCU drives straight into the buffers' first enable
+and which touches no part of the latch; and the pull-down on every buffered
+output at the connector, which is passive and needs nothing on this board to
+be alive.
 
 ```
  comparator ──┐
@@ -110,8 +123,13 @@ resistor could do the job: the budget wanted a pull-down under 600 Ω and the
 This is the part a power board has to read. `GATE_ENABLE` is the signal the
 trip's timing rests on — **the power board must disable every gate driver
 from that one pin.** The fourteen PWM lines are a second layer that arrives
-about 200 ns later, through their 10 kΩ pull-downs. That is the Infineon MADK
-convention, and until recently this board had never said so.
+**32–39 ns later with nothing attached, and up to 188 ns later** into the
+10 pF a gate driver's input pin may present, through their 10 kΩ pull-downs.
+Both ends are derived by
+`test_the_pwm_lines_really_are_the_second_layer_the_interface_promises`; the
+"about 200 ns" that stood in three files was the loaded end, quoted as though
+it were the figure and computed nowhere. That is the Infineon MADK convention,
+and until recently this board had never said so.
 
 ---
 
@@ -129,8 +147,16 @@ none of them can be relaxed without breaking another:
 |---|---|
 | corner | 1.27–1.73 MHz, inside the declared 1–2 MHz |
 | settling | 0.37 LSB left in a 236 ns window, of the half-LSB allowed |
-| tap error | 8.3 % amplitude against 12 % of threshold tolerance |
+| tap error | **8.58 %** amplitude — see below, this is the open blocker |
 | tap delay | 10.6 ns of the 20 the trip budget allows |
+
+**The tap error is this board's one open blocker.** `trip.threshold_tolerance`
+is 12 %, and two checks were each spending all of it: the accuracy check
+summed the rail, the comparator and the DAC's offset, gain and nonlinearity to
+11.46 %, and this tap term came to 8.58 % on its own. Both passed, and both
+describe the same quantity — where the trip point actually sits. They are
+summed now, it comes to **20.0 % against 12 declared**, and the check fails.
+`checks/config.py` carries it in `BLOCKING` and `COMPLETE` is back to `False`.
 
 The settling argument is worth stating because it is not the textbook one:
 **ST's Equation 1 rejects every value that works here.** That equation asks
@@ -152,12 +178,17 @@ converts are scaled by the same number.
 9–36 V ─ fuse ─ P-FET ─ TVS ─┬─ LM5164 ─ 5 V ─┬─ TPS562200 ─ 3V3 ─ bead ─ VDDA
                              │                ├─ TLV70233 ─ 3V3A ─→ analog header
                              │                └─ comparators, CAN
-                             └─ (100 V-class, because a 36 V TVS clamps near 58)
+                             └─ (100 V-class: the SMBJ40A clamps at 64.5 V)
 ```
 
-The 100 V buck is not overkill. A 36 V stand-off TVS clamps near 58 V, and a
-60 V part would have about 3 % of margin against that — which is the
+The 100 V buck is not overkill. The TVS fitted is an **SMBJ40A**: 40 V
+stand-off, 51.1 V breakdown, and **64.5 V of clamping voltage at its peak
+pulse current**, all three read off its datasheet and held by a check. A 60 V
+buck would be *under* that clamp, not merely close to it — which is the
 regulator defect this project already made once on `led12`.
+
+An earlier draft of this page said "a 36 V stand-off TVS clamps near 58 V".
+That was the part the plan proposed, not the part on the board.
 
 ### The rails, derived from the netlist
 
@@ -257,8 +288,15 @@ the suite:
 
 ## 8. What I would not yet bet on
 
-`BLOCKING` is empty, which means nothing known is unfinished. That is not the
-same as nothing being uncertain.
+`BLOCKING` has one entry, and it is a design decision rather than a defect:
+the trip point is good to 20.0 % against a 12 % declaration, because two
+checks were spending the same budget. §4 has the detail. Closing it means
+choosing between a tighter rail, a better-referenced DAC, a source impedance
+the power board is required to meet, or a wider declaration with the reasoning
+written down — and that is the user's call, not a fix.
+
+Everything below is uncertain in the weaker sense: nothing is known to be
+wrong, and nothing has been measured.
 
 **Assumptions carried deliberately, each declared in one place and each
 wanting a measurement on the first assembled board:**
@@ -287,21 +325,31 @@ bound is the jack's own 20.7 mm span), and the pair's plane-reference check
 (every routable layer on this stackup is backed by ground). Both are kept
 because they are the assertions that *would* fail on a different stackup.
 
-**Not covered by anything:** pad-to-track and pad-to-pad clearance are
-measured by no check here — only by DRC, against the fabricator's floor rather
-than against this board's own margin.
+**Not covered by anything, and it costs something:** pad-to-track and
+pad-to-pad clearance are measured by no check here — only by DRC, against the
+fabricator's 0.100 mm floor rather than against this board's own 0.120 mm
+target. Raise the DRC rule to 0.120 and **13 violations appear**, 0.100 to
+0.117 mm, every one of them involving a pad. The track-to-track figure above
+is honest and it is not the whole picture.
 
 ---
 
 ## 9. The honest summary
 
 The board is finished in the sense that matters — drawn, routed, checked,
-reproducible, and buildable with the network unplugged — and every claim it
-makes about itself is now cashed by something that reads the board rather than
-a comment. The five `BLOCKING` entries it started this round with are gone,
-and the last one went by building the fault model it said was missing, which
-immediately found a real defect: a gate-kill drain resistor at 174 % of its
-derated rating, in a part I had added myself six commits earlier.
+reproducible, and buildable with the network unplugged. The five `BLOCKING`
+entries it started the previous round with are gone, and the last one went by
+building the fault model it said was missing, which immediately found a real
+defect: a gate-kill drain resistor at 174 % of its derated rating, in a part I
+had added myself six commits earlier.
+
+The sentence that used to end this paragraph — "every claim it makes about
+itself is now cashed by something that reads the board" — was not true, and
+the round after it proved that by finding a "200 ns" in three files that
+nothing computed, a pull-up in the pin map that is on a different net, a DAC
+"reset" that is a power-up, a watchdog path with no net, and four wrong
+figures on this page. Those are fixed and three of them now have checks.
+[`ADVERSARIAL-REVIEW.md`](ADVERSARIAL-REVIEW.md) counts what is still prose.
 
 What it has not had is a power board to talk to, or a reflow oven. Every
 number in section 8 is waiting on those two things.

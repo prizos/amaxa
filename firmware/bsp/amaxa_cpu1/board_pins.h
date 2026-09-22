@@ -367,7 +367,7 @@
 #define PIN_PWM_ENABLE_N_PORT GPIOG
 #define PIN_PWM_ENABLE_N_PIN GPIO_PIN_4
 
-/* TRIP_CLEAR_N: GPIO output on PG5, pin 90. the only way to clear the trip latch; pulled up, so a reset pin does not clear it */
+/* TRIP_CLEAR_N: GPIO output on PG5, pin 90. the only way to clear the trip latch, and it reaches it through a series resistor and a coupling capacitor. Nothing holds this pin itself: the resistor that keeps CLR high sits on the latch's side of that capacitor, so a pin left high-impedance by reset does nothing and a pin stuck low becomes a 7.6 us pulse rather than a held clear */
 #define PIN_TRIP_CLEAR_N_PORT GPIOG
 #define PIN_TRIP_CLEAR_N_PIN GPIO_PIN_5
 
@@ -381,7 +381,7 @@
 #define PIN_DAC_SCL_PIN GPIO_PIN_1
 #define PIN_DAC_SCL_AF GPIO_AF4_I2C2
 
-/* GATE_ENABLE: GPIO output on PD7, pin 123. the gate kill: the power board disables every driver from this one pin, and a trip pulls it low in 3 ns through Q2. The PWM lines are a second layer and arrive 200 ns later */
+/* GATE_ENABLE: GPIO output on PD7, pin 123. the gate kill: the power board disables every driver from this one pin, and a trip pulls it low in 3.4 ns through Q2. The PWM lines are a second layer, 32 ns behind it bare and up to 188 ns behind it into 10 pF */
 #define PIN_GATE_ENABLE_PORT GPIOD
 #define PIN_GATE_ENABLE_PIN GPIO_PIN_7
 

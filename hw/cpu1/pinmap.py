@@ -176,13 +176,19 @@ PINS = [
 
     # --- safety chain and power-board control ----------------------------------------
     Pin("PG4", "GPIO", "PWM_ENABLE_N", "out", note="pulled up on the board, so off until driven"),
-    Pin("PG5", "GPIO", "TRIP_CLEAR_N", "out", note="the only way to clear the trip latch; pulled up, so a reset pin does not clear it"),
+    Pin("PG5", "GPIO", "TRIP_CLEAR_N", "out", note="the only way to clear the "
+        "trip latch, and it reaches it through a series resistor and a "
+        "coupling capacitor. Nothing holds this pin itself: the resistor that "
+        "keeps CLR high sits on the latch's side of that capacitor, so a pin "
+        "left high-impedance by reset does nothing and a pin stuck low "
+        "becomes a 7.6 us pulse rather than a held clear"),
     Pin("PF0", "I2C2_SDA", "DAC_SDA", note="trip-threshold DAC"),
     Pin("PF1", "I2C2_SCL", "DAC_SCL"),
     Pin("PD7", "GPIO", "GATE_ENABLE", "out",
         note="the gate kill: the power board disables every driver from this "
-             "one pin, and a trip pulls it low in 3 ns through Q2. The PWM "
-             "lines are a second layer and arrive 200 ns later"),
+             "one pin, and a trip pulls it low in 3.4 ns through Q2. The "
+             "PWM lines are a second layer, 32 ns behind it bare and up to "
+             "188 ns behind it into 10 pF"),
     # Two relay drives, not a pre-charge and a main contactor. Which one is
     # which - if the power board has relays at all - is that board's
     # business, read from the ID straps and configured in firmware.

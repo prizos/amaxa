@@ -1260,14 +1260,19 @@ def safety_chain(v3v3, gnd, nets) -> None:
     # Q2 pulls GATE_ENABLE_OUT down as soon as the latch trips, through 150 ohm
     # that bounds what it takes from a buffer output which has not let go yet:
     # 3.465 V across the 33 ohm series and this 150 is 19 mA, against the 24 mA
-    # the '541 wants to stay inside per output. The line then falls in 3.3 ns
-    # rather than 205, and turning Q2 on costs 2.5 ns in front of that.
+    # the '541 wants to stay inside per output. The line then falls in 3.4 ns
+    # rather than the 209 the same line takes through its 10 k pull-down, and
+    # turning Q2 on costs 2.5 ns beside that rather than in front of it.
     #
     # **This makes GATE_ENABLE the signal the trip's timing rests on**, and
     # that is a statement about the interface, not just about this board: the
     # power board has to disable every gate driver from this one pin, and the
-    # fourteen PWM lines are a second layer that arrives 200 ns later. The pin
-    # map says so now. It is the Infineon MADK convention - `docs/research/07`
+    # fourteen PWM lines are a second layer that arrives 32 ns later with
+    # nothing attached and up to 188 ns later into the 10 pF a gate driver's
+    # input may present. Both ends are derived by
+    # `test_the_pwm_lines_really_are_the_second_layer_the_interface_promises`;
+    # the "200 ns" that stood here for three revisions was the loaded end,
+    # never computed. The pin map says so now. It is the Infineon MADK convention - `docs/research/07`
     # records "active-low gate kill" - but this board had never said it.
     gate_kill = part(parts.FET_GATE_KILL, "safety.q_gate_kill", "Q2")
     kill_drain = part(parts.RES_150R_0805, "safety.r_gate_kill_drain", "R100")

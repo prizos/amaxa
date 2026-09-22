@@ -1142,6 +1142,156 @@ def test_a_trip_stops_the_outputs_inside_the_budget(
           f"{reserved * trip_budget * 1e9:.0f} it may")
 
 
+def test_the_pwm_lines_really_are_the_second_layer_the_interface_promises(
+    design, pad_net, spec, board_capacitance
+):
+    """
+    Every buffered PWM line falls later than the gate-kill line does.
+
+    The interface note, the pin map and `cpu1.py` all say the same sentence:
+    `GATE_ENABLE` is what the trip's timing rests on, and the fourteen PWM
+    lines are "a second layer that arrives about 200 ns later". Three files
+    said it and nothing computed it. It was a plausible number - 10 kOhm into
+    a gate driver's input is a couple of hundred nanoseconds - but plausible
+    is what the rest of this board stopped accepting.
+
+    Both ends are derived here. The gate line falls through the kill
+    transistor's channel and its drain resistor; a PWM line falls through its
+    pull-down alone, because the buffer that was driving it is in high
+    impedance by then and its series resistor is on the other side of that.
+    The capacitance is the board's own copper, measured off the routed
+    layout, plus what a power board presents - and the only figure this
+    project has for that is `header.gate_line_capacitance`, which is the same
+    kind of load: a gate driver's input pin.
+
+    The assertion is the *ordering*, at the corner that most nearly breaks it:
+    the fastest PWM line against the slowest gate line. If that ever inverted,
+    the sentence in the interface note would be backwards and a power board
+    trusting it would release its gates while the PWM was still asserted.
+    """
+    _, rail = spec("rail.3v3", "voltage")
+    _, threshold = spec("header", "gate_line_low")
+    far_low, far_high = spec("header", "gate_line_capacitance")
+    swing = math.log(rail / threshold)
+
+    # The gate line, at its slowest: the biggest resistance it can have into
+    # the most capacitance a power board may present.
+    kill = [address for address, part in design["parts"].items()
+            if part["symbol"].startswith("Transistor_FET:Q_NMOS")]
+    assert len(kill) == 1, f"expected one gate-kill transistor, found {kill}"
+    fet = kill[0]
+    line = pad_net[(fet, "3")]
+    series = _through_resistor(design, pad_net, line)
+    assert len(series) == 1, f"the drain reaches {series}"
+    drain_r, killed = series[0]
+    loaded = board_capacitance(killed) + far_high
+    driven = killed[:-4] + "_B"
+    if driven in design["nets"]:
+        loaded += board_capacitance(driven)
+    gate_fall = (spec(fet, "on_resistance_at_2v5")[1]
+                 + spec(drain_r, "resistance")[1]) * loaded * swing
+
+    # And every PWM line at its fastest: the smallest pull-down into the least
+    # copper, with nothing attached at the far end.
+    falls: dict[str, float] = {}
+    for address, channel, source, drain in _buffer_channels(design, pad_net):
+        if source == "GND" or drain is None:
+            continue
+        damping = _through_resistor(design, pad_net, drain)
+        if len(damping) != 1:
+            continue
+        _, far = damping[0]
+        pull_downs = [
+            (a, n) for a, n in _through_resistor(design, pad_net, far) if n == "GND"
+        ]
+        if len(pull_downs) != 1:
+            continue
+        if far == killed:
+            continue  # the gate line itself, whose fall is the transistor's above
+        resistance, _ = spec(pull_downs[0][0], "resistance")
+        falls[far] = resistance * (board_capacitance(far) + far_low) * swing
+    assert len(falls) >= 14, f"only {len(falls)} buffered lines have a fall time"
+
+    soonest = min(falls, key=falls.get)
+    assert falls[soonest] > gate_fall, (
+        f"{soonest} falls below {threshold:g} V in {falls[soonest] * 1e9:.0f} ns "
+        f"and {killed} takes {gate_fall * 1e9:.0f} ns, so the PWM lines are not "
+        f"the second layer the interface note promises - they are the first, "
+        f"and a power board that waited for {killed} would release its gates "
+        f"with PWM still asserted"
+    )
+
+    # And the other end of the same band, which is where the "about 200 ns"
+    # in the documents came from: the same lines with the most capacitance a
+    # power board may present hung on them. The figure was the loaded corner
+    # quoted as if it were the number. Both ends are printed so neither can
+    # be mistaken for the other again.
+    loaded_falls = {
+        net: spec(_pull_down_of(design, pad_net, net), "resistance")[1]
+             * (board_capacitance(net) + far_high) * swing
+        for net in falls
+    }
+    slowest = max(loaded_falls, key=loaded_falls.get)
+    print(f"    second layer: {len(falls)} buffered lines fall in "
+          f"{falls[soonest] * 1e9:.0f}-{max(falls.values()) * 1e9:.0f} ns with "
+          f"nothing attached and up to {loaded_falls[slowest] * 1e9:.0f} ns "
+          f"({slowest}) into the {far_high * 1e12:g} pF a power board may "
+          f"present, against {gate_fall * 1e9:.1f} ns for {killed} through {fet}")
+
+
+def _pull_down_of(design, pad_net, net):
+    """The one resistor from `net` to ground, which the caller has checked exists."""
+    return next(a for a, n in _through_resistor(design, pad_net, net) if n == "GND")
+
+
+def test_every_pull_the_pin_map_claims_is_on_that_pin(design, pad_net, pin_map, spec):
+    """
+    A pin map note that says a pin is pulled has a resistor on *that* pin's net.
+
+    This is prose being held to the copper, and it exists because one note was
+    not. `PG5` said "the only way to clear the trip latch; pulled up, so a
+    reset pin does not clear it". There is a pull-up, and it is not on PG5: it
+    is on `TRIP_CLEAR_LATCH_N`, the far side of the coupling capacitor, where
+    it holds the latch's CLR high. PG5 itself reaches only a series resistor
+    and that capacitor. The sentence described a mechanism the board does not
+    have, and because a note is not a field nothing compared it to anything.
+
+    Two notes in the table make this claim and one of them was wrong, which is
+    the ratio that justifies the check rather than a correction.
+
+    Only a resistor counts. A clamp diode holds a node too, and on the clear
+    line it is a diode that does most of the holding - but "pulled up" in a
+    pin map is read by a firmware engineer as "this pin rests high with the
+    GPIO in analog mode", and a diode does not promise that.
+    """
+    supplies = {"3V3", "3V3A", "5V", "VREF"}
+    problems = []
+    for pin in pin_map.PINS:
+        note = pin.note.lower()
+        wants_up = "pulled up" in note or "pull-up on" in note
+        wants_down = "pulled down" in note or "pull-down on" in note
+        if not (wants_up or wants_down):
+            continue
+        net = pin.net_name
+        if net not in design["nets"]:
+            problems.append(f"{pin.pin}: claims a pull and {net} is not a net")
+            continue
+        reached = {n for _, n in _through_resistor(design, pad_net, net)}
+        if wants_up and not reached & supplies:
+            problems.append(
+                f"{pin.pin} ({net}): the note says pulled up, and through a "
+                f"resistor this net reaches {sorted(reached) or 'nothing'}"
+            )
+        if wants_down and "GND" not in reached:
+            problems.append(
+                f"{pin.pin} ({net}): the note says pulled down, and through a "
+                f"resistor this net reaches {sorted(reached) or 'nothing'}"
+            )
+    assert not problems, "Pin map notes against the copper:\n" + "\n".join(
+        f"  {p}" for p in problems
+    )
+
+
 # --- everything else on the connector ----------------------------------------
 
 
