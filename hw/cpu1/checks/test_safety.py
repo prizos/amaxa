@@ -1025,13 +1025,29 @@ def test_a_trip_stops_the_outputs_inside_the_budget(
     falling = (channel + drain) * loaded_line * math.log(rail / threshold)
     worst = killed
 
-    # And the gate itself, because TRIPPED has to charge it before any of that
-    # starts - and TRIPPED is also what disables both buffers, so this delay
-    # is in front of the 7 ns they take, not beside it.
-    _, gate = spec(fet, "input_capacitance")
-    _, turn_on = spec(fet, "gate_threshold_max")
-    _, drive = spec(LATCH, "output_current_max")
-    falling += gate * turn_on / drive
+    # **And the gate, which is charged rather than merely threshold-crossed,
+    # and which happens beside the buffers rather than in front of them.**
+    #
+    # This term used to be C_iss times V_GS(th) over the drive current. Both
+    # halves were wrong. C_iss is a lone typical measured at V_DS = 16 V,
+    # where the capacitance is at its smallest; and stopping at the threshold
+    # while the fall above assumes the on-resistance quoted at 2.5 V is two
+    # different gate voltages in one calculation. Q_gs + Q_gd is the charge
+    # the datasheet gives for driving the gate through its plateau, and it
+    # needs no bias point.
+    #
+    # The *ordering* was wrong too, in the other direction. The comment here
+    # said this delay "is in front of the 7 ns they take". It is not: the
+    # same TRIPPED edge starts the buffers disabling and starts charging this
+    # gate, so the two run together. The line reaches a valid low once the
+    # slower of them has finished - which is why the contention this causes
+    # is a rating question, handled in
+    # `test_the_gate_kill_stays_inside_its_ratings`, rather than a timing one.
+    _, q_gs = spec(fet, "gate_charge_gate_source")
+    _, q_gd = spec(fet, "gate_charge_gate_drain")
+    drive = min(spec(LATCH, "output_current_max"))
+    turn_on = (q_gs + q_gd) / drive
+    spent = latch + max(buffer_off, turn_on)
 
     # **And the tap, which used to be a reservation rather than a number.**
     # The budget held back 40 % for "a filter this board has not drawn". It
@@ -1063,8 +1079,10 @@ def test_a_trip_stops_the_outputs_inside_the_budget(
         f"{junctions} Schottky junctions and the copper between them - "
         f"{tap * 1e9:.1f} ns for the {shunts[tap_node] * 1e9:.2f} nF on "
         f"{tap_node} behind {source:g} ohm, and "
-        f"{falling * 1e9:.1f} ns to turn {fet} on and pull {worst} below "
-        f"{threshold:g} V, against a {trip_budget * 1e9:g} ns budget"
+        f"{falling * 1e9:.1f} ns to pull {worst} below {threshold:g} V once "
+        f"{fet} is on - which takes {turn_on * 1e9:.1f} ns of gate charge, "
+        f"beside the buffers' {buffer_off * 1e9:g} ns rather than after it - "
+        f"against a {trip_budget * 1e9:g} ns budget"
     )
 
     # The whole chain, printed on every run, so the next thing that lands in
@@ -1213,7 +1231,11 @@ def test_the_gate_kill_stays_inside_its_ratings(design, pad_net, spec):
 
     _, rail = spec("rail.3v3", "voltage")
     _, channel = spec(fet, "on_resistance_at_2v5")
-    _, drain_ohms = spec(drain_resistor, "resistance")
+    # The *low* end: both quantities below are currents through this
+    # resistor, so its smallest value is the corner that hurts. This read the
+    # high end, which meant a wider-tolerance part would have been checked at
+    # the end that cannot bite.
+    drain_ohms, _ = spec(drain_resistor, "resistance")
 
     # The line's own series resistor, back towards whichever buffer drives it.
     upstream = [(address, far) for address, far in
@@ -1228,6 +1250,25 @@ def test_the_gate_kill_stays_inside_its_ratings(design, pad_net, spec):
         f"holding {killed} down takes {contention * 1e3:.1f} mA from the buffer "
         f"through {to_buffer:g} + {drain_ohms:g} ohm, against {allowed * 1e3:g} mA "
         f"per output"
+    )
+
+    # The gate ends up at the rail, because it is a capacitive load and draws
+    # no DC current once charged - so the latch's output sits at V_CC rather
+    # than at the V_OH its 24 mA rating is quoted at. What that has to clear
+    # is not the threshold but the voltage the assumed on-resistance belongs
+    # to: an R_DS(on) figure quoted at 2.5 V says nothing about a gate held
+    # at 2.0, and the fall time above is computed from it.
+    rail_low, _ = spec("rail.3v3", "voltage")
+    _, needs_gate = spec(fet, "on_resistance_gate_voltage")
+    _, threshold_max = spec(fet, "gate_threshold_max")
+    assert rail_low >= needs_gate, (
+        f"the gate is driven to {rail_low:g} V and {fet}'s on-resistance is "
+        f"specified at {needs_gate:g} V, which the trip budget's fall time "
+        f"assumes"
+    )
+    assert rail_low > threshold_max, (
+        f"the gate is driven to {rail_low:g} V against a {threshold_max:g} V "
+        f"maximum threshold - at that margin the part may not turn on at all"
     )
 
     _, standoff = spec(fet, "drain_source_voltage_max")

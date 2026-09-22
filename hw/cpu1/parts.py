@@ -452,7 +452,21 @@ FET_GATE_KILL = PartSpec(
     params={
         "gate_threshold_max": exact(1.0),        # V_GS(TH) max, V_DS=V_GS, 250 uA
         "on_resistance_at_2v5": exact(0.5),      # R_DS(on) max at V_GS = 2.5 V
-        "input_capacitance": exact(60.67e-12),   # C_iss typical
+        # The gate voltage that resistance is quoted at, as a number rather
+        # than as part of a parameter's name - so a check can charge the gate
+        # to the voltage its own assumed resistance belongs to.
+        "on_resistance_gate_voltage": exact(2.5),
+        # **Charge, not capacitance.** C_iss is 60.67 pF with neither a
+        # minimum nor a maximum column - a lone typical - and it is measured
+        # at V_DS = 16 V, where a MOSFET's input capacitance is at its
+        # smallest. Neither is a figure to build a trip budget on. Q_gs and
+        # Q_gd are what the datasheet gives for driving the gate through its
+        # plateau, and their sum over the drive current is a turn-on time that
+        # needs no bias point. Both are typicals as well, and Q_gd is quoted
+        # at a 10 V drain swing against this board's 3.5 V, so using it whole
+        # is the conservative end.
+        "gate_charge_gate_source": exact(93.6e-12),
+        "gate_charge_gate_drain": exact(116.6e-12),
         "drain_source_voltage_max": exact(20.0),
         "drain_current_max": exact(0.8),
     },
