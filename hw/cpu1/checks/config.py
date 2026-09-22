@@ -16,20 +16,10 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 BLOCKING: dict[str, str] = {
-    "an adversarial review of the power and analog path found four things "
+    "an adversarial review of the power and analog path found two things "
     "still open": (
         "Each was proven by perturbation before being written down, and none "
         "is fixed yet:\n\n"
-        "**The bootstrap capacitor is the one datasheet minimum the bias "
-        "model is withheld from.** `conftest.py` says 'every datasheet "
-        "minimum on this board is held against this rather than against the "
-        "number printed on the reel'; the bootstrap check sits eight lines "
-        "above one that does and compares the label. `buck3v3.c_bst` is a "
-        "100 nF +-10 % part against a datasheet value of exactly 100 nF, so "
-        "90 nF passes a 100 nF requirement before bias takes anything - and "
-        "the board's own model puts it near 62 nF at the voltage it sits "
-        "at. That is the identical argument the VCAP check makes at "
-        "length.\n\n"
         "**Thirty-six resistors have a power rating that cannot fail.** A "
         "pull-up to the logic rail from an undriven node has both ends "
         "modelled at 3.465 V, so it dissipates exactly zero at any "
@@ -37,11 +27,6 @@ BLOCKING: dict[str, str] = {
         "of 101. None is near its rating, but the checks cannot say so - and "
         "the same file's rail budget models a pull-up as drawing current, so "
         "one file holds two incompatible models.\n\n"
-        "**`analog.input_voltage_max` is 4.0 against a 4.0 limit.** The "
-        "board's promise to the power board was set exactly equal to ST's "
-        "absolute maximum, so that assertion is true by construction, in a "
-        "file whose sibling declares a 25 % surge margin because 'a quarter "
-        "is the least that is worth calling protection'.\n\n"
         "**VDDA and the MCU's own VREF+ current are in no rail's sum.** The "
         "MCU declares I_DD only; VDDA is fed from 3V3 through a bead and its "
         "current appears nowhere, and `vref.supply_current` is the off-board "

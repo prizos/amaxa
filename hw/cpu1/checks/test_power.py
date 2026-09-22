@@ -735,6 +735,19 @@ def test_each_converter_has_its_bootstrap_and_input_capacitance(
 
     The bootstrap is the one value where more is not safer: it supplies the
     high-side gate driver and the datasheet bounds it at both ends.
+
+    **The two parts state it differently, and that decides whether the bias
+    model applies.** The LM5164 gives a range and says why either end is
+    fatal - below it "is not sufficient to drive the internal gate", above it
+    "stresses the internal VCC regulator and damages the device" - so the
+    *effective* capacitance at the 5 V its internal regulator puts across the
+    part is the thing that has to be in range, and it is held to that here.
+    The TPS562200 says "connect a 0.1 uF capacitor between VBST and SW",
+    which specifies a part to fit rather than a minimum to exceed: no 100 nF
+    part can deliver 100 nF effective, its own tolerance forbids it before
+    bias takes anything, so reading it as a floor would reject every part
+    that satisfies it. Its band is compared against the nominal, and that
+    difference is written down here rather than left to be noticed.
     """
     problems = []
     for regulator, switch, bootstrap, supply in (
@@ -748,6 +761,17 @@ def test_each_converter_has_its_bootstrap_and_input_capacitance(
                 f"  {regulator}: {found[0] * 1e9:.1f} to {found[1] * 1e9:.1f} nF "
                 f"of bootstrap, outside {wanted[0] * 1e9:g} to {wanted[1] * 1e9:g} nF"
             )
+        _, bst_bias = spec(regulator, "bst_voltage_max")
+        if wanted[0] < wanted[1]:
+            worth, _ = _capacitance_on(
+                design, two_pad_parts, spec, bootstrap, switch,
+                effective=effective_capacitance, bias=bst_bias)
+            if worth < wanted[0]:
+                problems.append(
+                    f"  {regulator}: {worth * 1e9:.2f} nF of bootstrap at "
+                    f"{bst_bias:g} V of bias, against the {wanted[0] * 1e9:g} nF "
+                    f"its datasheet calls the least that will drive the gate"
+                )
         minimum, _ = spec(regulator, "input_capacitance_min")
         block = regulator.rpartition(".")[0]
         # The bias here is the supply the capacitor sits on, which for the

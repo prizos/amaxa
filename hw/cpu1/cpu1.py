@@ -137,7 +137,21 @@ INTENT: dict[str, tuple[float, float]] = {
     # derives this band's ceiling from that rail rather than taking it on
     # trust. What remains on the power board is narrower and ordinary: do not
     # drive these pins from the 12-15 V aux.
-    "analog.input_voltage_max": (0.0, 4.0),
+    # **3.366 V, which is the rail this board hands out, not ST's 4.0.** It
+    # was 4.0 - set exactly equal to the absolute maximum above, so the
+    # assertion that the promise is inside the pin's rating was true by
+    # construction and could not fail. Zero margin on an absolute maximum, in
+    # a repository whose surge check declares a quarter because "a quarter is
+    # the least that is worth calling protection".
+    #
+    # The number is now derived rather than chosen: it is the analog
+    # regulator's nominal output at the top of its own accuracy, which is the
+    # most anything powered from this board can rail to, and
+    # `test_no_analog_input_may_be_presented_more_than_its_pin_allows` checks
+    # that it still equals that. So the promise to the power board is "do not
+    # present more than the rail I give you", and it leaves 0.634 V to the
+    # silicon's limit instead of nothing.
+    "analog.input_voltage_max": (0.0, 3.366),
     # How far the analog rail may sit from its nominal 3.3 V by the time it
     # reaches the connector. The sensors on the far side are ratiometric to
     # VREF+ so their *reading* does not depend on this, but their own headroom

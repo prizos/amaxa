@@ -367,6 +367,15 @@ BUCK_100V = PartSpec(
         "feedback_ripple_target": exact(20e-3),
         "feedback_ripple_min": exact(12e-3),
         "bst_capacitance": between(1.5e-9, 2.5e-9),
+        # §6.3.2: the internal VCC subregulator is "powered from VIN with a
+        # nominal output of 5V", and an internal diode from VCC replenishes
+        # the bootstrap capacitor - so 5 V is what sits across it. Unlike the
+        # 3V3 converter's, this part's capacitance is bounded at *both* ends
+        # and the datasheet says why: lower "is not sufficient to drive the
+        # internal gate", higher "stresses the internal VCC regulator and
+        # damages the device". That makes the effective value a real
+        # requirement rather than a part to fit.
+        "bst_voltage_max": exact(5.0),
         "input_capacitance_min": exact(2.2e-6),
         "pgood_pullup": between(10e3, 100e3),
     },
@@ -386,6 +395,11 @@ BUCK_3V3 = PartSpec(
         "switching_frequency": exact(650e3),
         "current_limit_min": exact(2.5),
         "bst_capacitance": exact(100e-9),
+        # What the bootstrap capacitor sits at, for the bias model. §6.1's
+        # recommended operating conditions cap V_BST with respect to SW at
+        # 6 V (absolute maximum 6.5), and it is the driver supply riding on
+        # the switch node, so 6 V is the worst case the part permits.
+        "bst_voltage_max": exact(6.0),
         "input_capacitance_min": exact(10e-6),
         "output_capacitance": between(20e-6, 68e-6),   # Table 2, V_out = 3.3 V
         "inductance": between(2.2e-6, 4.7e-6),         # Table 2, V_out = 3.3 V

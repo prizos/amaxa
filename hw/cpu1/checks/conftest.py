@@ -30,9 +30,17 @@ def effective_capacitance(spec):
     capacitor is worth at that DC bias, in farads.
 
     Nominal, less its tolerance, less `capacitors.bias_derating` times the
-    fraction of its rated voltage the bias represents. Every datasheet
-    minimum on this board is held against this rather than against the
-    number printed on the reel.
+    fraction of its rated voltage the bias represents.
+
+    **Not every datasheet figure is held against it**, and this used to claim
+    they all were. A figure that is a *minimum* is - the converters' input
+    capacitance, the 3V3 output window's floor, the LM5164's bootstrap range,
+    the analog regulator's, ST's CEXT. A figure that specifies a part to fit
+    rather than a floor to clear is not, because no part can deliver its own
+    nominal once tolerance is taken off and reading it as a floor would
+    reject every part that satisfies it: TI's "connect a 0.1 uF capacitor"
+    for the TPS562200's bootstrap is the example, and the check there says so
+    beside the one that does apply the model.
     """
     _, coefficient = spec("capacitors", "bias_derating")
 

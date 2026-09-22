@@ -415,6 +415,20 @@ def test_no_analog_input_may_be_presented_more_than_its_pin_allows(
         f"the analog rail reaches {rails_to:.3f} V and the pins take "
         f"{limit:g} V - a sensor running from it rails to its own supply"
     )
+    # The promise *is* the rail, not a number beside it. It used to be 4.0,
+    # exactly ST's absolute maximum, so `presented <= limit` compared a value
+    # with itself; tying it to the regulator makes it a derivation and leaves
+    # the silicon's limit a real margin away.
+    assert abs(presented - rails_to) < 1e-9, (
+        f"the connector is documented to present {presented:g} V and the "
+        f"analog rail reaches {rails_to:.3f} V - the promise is meant to be "
+        f"the rail this board hands out, so that a sensor running from it "
+        f"cannot exceed it"
+    )
+    assert presented < limit, (
+        f"the promise is {presented:g} V against a {limit:g} V absolute "
+        f"maximum, which leaves nothing"
+    )
     assert rails_to <= presented, (
         f"the rail this board supplies reaches {rails_to:.3f} V, above the "
         f"{presented:g} V the connector is documented to present. The band is "
