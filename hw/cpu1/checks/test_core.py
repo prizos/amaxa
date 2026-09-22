@@ -217,7 +217,9 @@ def test_each_vcap_pin_has_its_regulator_capacitor(
     assert not wrong, "Core regulator capacitors:\n" + "\n".join(wrong)
 
 
-def test_every_capacitor_is_rated_for_the_node_it_sits_on(design, two_pad_parts, spec):
+def test_every_capacitor_is_rated_for_the_node_it_sits_on(
+    design, two_pad_parts, spec, net_voltages
+):
     """
     Each capacitor against the highest voltage **its own nets** reach.
 
@@ -232,16 +234,10 @@ def test_every_capacitor_is_rated_for_the_node_it_sits_on(design, two_pad_parts,
     that is not a declared rail is a signal net, and on this board a signal
     net is driven from the logic rail.
     """
-    _, input_high = spec("input", "voltage")
-    _, v5 = spec("rail.5v", "voltage")
-    _, v3v3 = spec("rail.3v3", "voltage")
-    rails = {
-        "GND": 0.0,
-        "VIN": input_high, "VIN_RAW": input_high, "VIN_FUSED": input_high,
-        "RPP_GATE": input_high, "SW_5V": input_high, "UVLO": input_high,
-        "5V": v5, "SW_3V3": v5, "3V3A": v3v3,
-        "3V3": v3v3,
-    }
+    # The one copy, in conftest.py. This used to be a second table written out
+    # beside `test_power.py`'s, and the two had already drifted: this one knew
+    # about 3V3A and listed UVLO, that one did not and had stopped.
+    rails, v3v3 = net_voltages
 
     weak = []
     for address, part in sorted(design["parts"].items()):

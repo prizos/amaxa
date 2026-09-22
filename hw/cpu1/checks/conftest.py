@@ -24,6 +24,41 @@ def _layout(board_dir):
 
 
 @pytest.fixture(scope="session")
+def net_voltages(spec):
+    """
+    (named net -> the volts it sits at, the default for everything else).
+
+    **One copy.** This table was written out twice - once in `test_power.py`
+    for what a resistor dissipates and once in `test_core.py` for what a
+    capacitor has to stand off - and the two had already drifted apart: one
+    knew about `3V3A` and the other did not, one listed `UVLO` and the other
+    stopped. `cpu1.py` says of `trip.budget` and of `layout.decoupling_reach`
+    that two copies of a number is the defect this repository does not
+    accept, and this was two copies of ten of them.
+
+    The default is the logic rail. Every signal net on this board is driven
+    from it - the MCU, the buffers, the latch, the comparators through their
+    pull-ups - and the two that break it, the field buses, are checked against
+    their transceivers' own declared fault voltage instead.
+
+    `UVLO` is deliberately *not* here. It is a divider tap, not the input
+    voltage, and naming it at V_IN is what once left the lockout divider's top
+    leg with zero volts across it and no bound at all. Unnamed, the walk finds
+    the other leg and derives both.
+    """
+    _, input_high = spec("input", "voltage")
+    _, v5 = spec("rail.5v", "voltage")
+    _, v3v3 = spec("rail.3v3", "voltage")
+    return {
+        "GND": 0.0,
+        "VIN": input_high, "VIN_RAW": input_high, "VIN_FUSED": input_high,
+        "RPP_GATE": input_high, "SW_5V": input_high,
+        "5V": v5, "SW_3V3": v5,
+        "3V3": v3v3, "3V3A": v3v3,
+    }, v3v3
+
+
+@pytest.fixture(scope="session")
 def effective_capacitance(spec):
     """
     `effective_capacitance(address, bias)` -> the low end of what that

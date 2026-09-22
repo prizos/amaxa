@@ -990,55 +990,15 @@ def _phy_lines(design) -> set:
             if address == jack and pad in ("1", "2", "3", "6")}
 
 
-def _net_voltages(spec) -> dict[str, float]:
+def _net_voltages(net_voltages):
     """
-    The rails, and what to assume a node is driven from.
+    The rails, and what to assume a node is driven from - from the one copy.
 
-    Returns both, because the default is the half that mattered. An unnamed
-    net used to come back as 0 V through the caller's `.get(net, 0.0)`, so a
-    resistor touching nothing on this list dissipated nothing and could not
-    fail its rating however small it was. **This docstring claimed that was
-    fixed and it was not**; the sentence was written, the `return` was not
-    changed, and thirty-two resistors went on being evaluated at zero volts -
-    every safety pull-down, both trip-threshold pulls, both feedback-divider
-    bottoms and both USB CC pull-downs among them.
-
-    **`UVLO` used to be on this list at the input voltage, and listing it is
-    what removed the divider's top leg from every bound.** The lockout tap is
-    not at V_IN; it is at the ratio of the two resistors that make it. With it
-    named at 36 V, `buck5.r_uvlo_top` sat between two nets both held at 36 V
-    and dissipated exactly zero at any resistance, while the bottom leg was
-    evaluated at the full 36 V - 26 mW of a 31 mW derated limit - for a split
-    that is really 29.5 V and 6.5 V. Unlisted, the walk finds the other leg
-    and derives both.
-
-    The default is the logic rail. Every signal net on this board is driven
-    from it - the MCU, the buffers, the latch, the comparators through their
-    pull-ups - and the two nets that break that, the field buses, are checked
-    against their transceivers' own declared fault voltage instead by
-    `test_a_bus_termination_survives_the_fault_its_transceiver_declares`.
+    This used to hold the table itself, and `test_core.py` held a second one
+    that had already drifted from it. Both read `net_voltages` in
+    `conftest.py` now; the reasoning that used to live here lives there.
     """
-    _, input_high = spec("input", "voltage")
-    _, v5 = spec("rail.5v", "voltage")
-    _, v3v3 = spec("rail.3v3", "voltage")
-    named = {
-        "GND": 0.0,
-        "VIN": input_high, "VIN_RAW": input_high, "VIN_FUSED": input_high,
-        "RPP_GATE": input_high, "SW_5V": input_high,
-        "5V": v5, "SW_3V3": v5,
-        "3V3": v3v3,
-    }
-    # Everything else is a signal net, and on this board a signal net is
-    # driven from the logic rail - the MCU, the buffers, the latch, the
-    # comparators through their pull-ups. Defaulting to 0 V, which is what
-    # this did, meant a resistor touching none of the names above dissipated
-    # nothing and could not fail its rating however small it was: thirty-seven
-    # of the eighty-five resistors on this board took that path. Defaulting to
-    # the logic rail is the smallest honest assumption, and the two nets that
-    # break it - the field buses, which a fault drives to tens of volts - are
-    # checked against their transceivers' own declared fault voltage by
-    # `test_a_bus_termination_survives_the_fault_its_transceiver_declares`.
-    return named, v3v3
+    return net_voltages
 
 
 def _through_resistor(design, pad_net, net):
@@ -1077,7 +1037,9 @@ def _sources(design, pad_net, spec, voltages, default, net, exclude):
     return [(voltages.get(far, default), spec(a, "resistance")[0]) for a, far in onward]
 
 
-def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
+def test_no_resistor_runs_above_half_its_rating(
+    design, two_pad_parts, spec, net_voltages
+):
     """
     Every resistor **between two nets whose voltage is known**, derated by half.
 
@@ -1102,7 +1064,7 @@ def test_no_resistor_runs_above_half_its_rating(design, two_pad_parts, spec):
     including both field buses' terminations. Those are now checked against
     their transceivers' own fault voltage, which is the case that mattered.
     """
-    voltages, _ = _net_voltages(spec)
+    voltages, _ = _net_voltages(net_voltages)
     hot = []
     for address, (net_a, net_b) in sorted(two_pad_parts.items()):
         if design["parts"][address]["symbol"] != "Device:R":
@@ -1169,7 +1131,7 @@ def test_the_ripple_coupling_capacitor_holds_through_a_transient(design, two_pad
     )
 
 
-def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pad_net, spec):
+def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pad_net, spec, net_voltages):
     """
     A resistor in series feeding another resistor to a rail, at the current
     that divider actually passes.
@@ -1201,7 +1163,7 @@ def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pa
     pull-down off a driven node, which is every shape on this board. Swapping
     one 10 k pull-down for a 33 ohm now reports 367.5 mW on a 62.5 mW part.
     """
-    voltages, default = _net_voltages(spec)
+    voltages, default = _net_voltages(net_voltages)
     hot = []
     for address, (net_a, net_b) in sorted(two_pad_parts.items()):
         if design["parts"][address]["symbol"] != "Device:R":
@@ -1244,8 +1206,7 @@ def test_no_series_resistor_runs_above_half_its_rating(design, two_pad_parts, pa
 
 
 def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
-    design, two_pad_parts, pad_net, spec, spec_has
-):
+    design, two_pad_parts, pad_net, spec, spec_has, net_voltages):
     """
     The field buses' terminations, against the voltage their own part says the
     bus can be driven to - but only where the copper actually completes.
@@ -1285,7 +1246,7 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
     termination directly, or close a jumper in the design, and the arithmetic
     that was only ever a comment is what fails.
     """
-    voltages, _ = _net_voltages(spec)
+    voltages, _ = _net_voltages(net_voltages)
 
     # What a direct current can actually flow through: a resistor or a bridged
     # jumper. Not a capacitor, and not a jumper that is open as fabricated.

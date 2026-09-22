@@ -188,6 +188,24 @@ def test_every_network_settles_inside_the_sampling_window(spec, networks, pad_ne
     lsb = 1.0 / 2 ** bits
     sampled = {p.net_name for p in pin_map.PINS if p.signal.startswith("ADC")}
 
+    # **What makes "instantly, by sharing" true.** The model above treats the
+    # charge transfer from the external capacitor into the sampling capacitor
+    # as instantaneous and then recovers it through the series resistor. The
+    # thing that would break that is the converter's own sampling-switch
+    # resistance, which sits between the two: it makes the sharing an
+    # exponential of its own, with a time constant of R_ADC times the series
+    # combination of the two capacitors. `mcu.adc_sample_resistance` was read
+    # into a failure message in another check and compared against nothing on
+    # this board, and this is the thing it decides.
+    r_adc, _ = spec(MCU, "adc_sample_resistance")
+    sharing = r_adc * c_adc                      # C_adc dominates the series pair
+    assert sharing * 10 < sample, (
+        f"the converter's own {r_adc:g} ohm sampling switch shares charge into "
+        f"its {c_adc * 1e12:g} pF in {sharing * 1e9:.2f} ns, against a "
+        f"{sample * 1e9:.0f} ns window - at that ratio the sharing is not the "
+        f"instant step this check models it as"
+    )
+
     problems = []
     for channel, (series, shunt) in sorted(networks.items()):
         if pad_net.get((series, "2")) not in sampled:
