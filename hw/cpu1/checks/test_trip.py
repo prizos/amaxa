@@ -482,7 +482,9 @@ def test_the_board_sends_out_its_reference_and_an_analog_supply(design, pad_net,
     )
 
 
-def test_the_analog_supply_is_decoupled_where_it_leaves(design, pad_net, spec, position):
+def test_the_analog_supply_is_decoupled_where_it_leaves(
+    design, pad_net, spec, position, effective_capacitance
+):
     """
     A bulk capacitor and a high-frequency one on 3V3A, as every rail here has -
     and enough of the first for the regulator to be stable.
@@ -498,12 +500,15 @@ def test_the_analog_supply_is_decoupled_where_it_leaves(design, pad_net, spec, p
     assert len(regulator) == 1, f"the analog supply comes from {regulator}"
     _, needs = spec(regulator[0], "output_capacitance_min")
 
+    # At the bias they sit at, not at the number on the reel - the regulator
+    # asks for an *effective* 0.1 uF and says so in those words.
+    _, out_bias = spec(regulator[0], "output_voltage")
     found = []
     for address, part in design["parts"].items():
         if part["symbol"] != "Device:C":
             continue
         if {pad_net.get((address, "1")), pad_net.get((address, "2"))} == {"3V3A", "GND"}:
-            found.append(spec(address, "capacitance")[0])
+            found.append(effective_capacitance(address, out_bias))
     assert len(found) >= 2, f"3V3A has {len(found)} capacitors on it"
     assert max(found) >= 5 * min(found), (
         f"3V3A's capacitors are {[f'{c * 1e6:.2f} uF' for c in sorted(found)]}, which is "
@@ -532,7 +537,8 @@ def test_the_analog_supply_is_decoupled_where_it_leaves(design, pad_net, spec, p
         f"nothing on {supply} sits within {reach:g} mm of {regulator[0]}, so "
         f"its input capacitor is the rail's rather than its own"
     )
-    across = sum(spec(address, "capacitance")[0] for address in near)
+    _, in_bias = spec("rail.5v", "voltage")
+    across = sum(effective_capacitance(address, in_bias) for address in near)
     assert across >= wants, (
         f"{across * 1e6:.2f} uF within {reach:g} mm of {regulator[0]} against "
         f"the {wants * 1e6:g} uF it asks for at its input"

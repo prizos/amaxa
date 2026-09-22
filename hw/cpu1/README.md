@@ -81,8 +81,18 @@ offline` building with every network call refused, both firmware BSPs
 compiling, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` empty.
 
 **It is not ready to order, and `checks/config.py` says why.** One entry in
-`BLOCKING`: the converters' capacitance is checked at nominal, and nothing on
-this board knows what DC bias does to it.
+`BLOCKING`: nothing adds up what a rail actually carries. Each rail's current
+is a declared band that the converter, the fuse and the inductors are sized
+against, and what is *on* the rail is a prose comment summed by hand. It has
+already failed once - fifteen pull-downs taken from 10 k to 1.2 k added 43 mA
+and pushed 3V3 to 806 mA against its own 800, and no check moved.
+
+The converters' capacitance against DC bias was the entry before it. That one
+is closed: `capacitors.bias_derating` states what a Class II ceramic loses as
+a coefficient on the fraction of its rating it is operated at, every datasheet
+minimum on the board is held against the derated value, and the parts that
+could not meet theirs went up in voltage rating - which is what lowers the
+field - rather than up in count.
 
 The analog inputs' over-voltage was a third and is not any more. The board
 used to hand the power board's sensors 5 V through a bead and take their

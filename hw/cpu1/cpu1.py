@@ -250,6 +250,33 @@ INTENT: dict[str, tuple[float, float]] = {
     # in `test_a_trip_stops_the_outputs_inside_the_budget`, and spent out of
     # the budget like every other term. Four tenths is the ceiling on it.
     "trip.reserved_share": (0.0, 0.4),
+    # What DC bias takes off a Class II ceramic, as a coefficient on the
+    # fraction of its rating the part is operated at: a capacitor sitting at
+    # a fifth of its rated voltage is assumed to have lost a fifth of its
+    # capacitance. It is applied to every minimum a datasheet asks for and to
+    # no maximum, because a capacitor does not gain.
+    #
+    # **It is an assumption, and it is written here so that it is one thing
+    # somebody owns rather than a silence.** The effect is real and large -
+    # the Ethernet reset capacitor's delay is already argued with its
+    # capacitance "derated to a third by its own DC bias" - and the data that
+    # would settle it is not obtainable: Samsung's CL21/CL31 datasheets, TDK's
+    # C-series catalogue and Murata's GRM catalogue were all fetched and read,
+    # and not one of them plots capacitance against bias for the part it
+    # describes. That data lives in each maker's online tool, which
+    # `make offline` cannot reach and which is not a document to cite.
+    #
+    # A flat derating was the first attempt and it was worse than the gap: at
+    # a flat half, the 3V3 converter's 20-68 uF window becomes unsatisfiable,
+    # because the three capacitors needed at the bottom exceed the ceiling at
+    # the other tolerance corner. Proportional to the field is the right
+    # shape - it is the field that depolarises the dielectric - and it is what
+    # makes the fix a voltage rating rather than a bigger pile of parts.
+    #
+    # **It is the first thing to measure on an assembled board**, and until
+    # then every rail's capacitance is known to be at least what the checks
+    # say and no better.
+    "capacitors.bias_derating": (0.0, 1.0),
     # How much of a part's own rating this board will use. Half is what a
     # 0402 in still air is worth, and it applies to every rating that is a
     # thermal one - a resistor's power, a ferrite's current. It was written
@@ -597,7 +624,7 @@ def mcu_core(silicon, mcu, by_number, v3v3, gnd, nets) -> None:
     # The core regulator's capacitors: 2.2 uF, ESR under 100 mOhm, on each VCAP
     # pin. Datasheet Table 24.
     for index, number in enumerate(pin_number("VCAP"), start=1):
-        cap = part(parts.CAP_2U2_0402, f"core.vcap.p{number}", f"C{2 + index}")
+        cap = part(parts.CAP_4U7_0402, f"core.vcap.p{number}", f"C{2 + index}")
         nets[f"VCAP{index}"] += cap[1]
         gnd += cap[2]
 
@@ -876,7 +903,7 @@ def power_block(v3v3, gnd, nets) -> None:
     # the 5 V net, the 5 V buck's output bulk included, so the part actually
     # fitted here could have been deleted without anything noticing.
     for address, spec, ref in (
-        ("buck3v3.c_in", parts.CAP_22U_0805, "C20"),
+        ("buck3v3.c_in", parts.CAP_22U_25V_1206, "C20"),
         ("buck3v3.c_in_hf", parts.CAP_100N_0402, "C21"),
     ):
         cap = part(spec, address, ref)

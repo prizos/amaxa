@@ -31,6 +31,11 @@ MCU_H743 = PartSpec(
     params={
         "supply_voltage": between(1.62, 3.6),
         "vcap_capacitance": exact(2.2e-6),
+        # What the VCAP pins actually sit at, which is what biases the
+        # capacitor on them. §5.1: "VCORE supplies, which values depend on
+        # voltage scaling (0.7 V, 0.9 V, 1.0 V, 1.1 V or 1.2 V)". The top of
+        # that is the worst case for a ceramic and the one the derating uses.
+        "core_voltage": between(0.7, 1.2),
         "hse_gm_crit_max": exact(1.5e-3),
         "hse_load_capacitor": between(5e-12, 25e-12),
         "lse_gm_crit_max": exact(2.7e-6),       # LSEDRV = 11, high drive
@@ -92,10 +97,17 @@ CAP_1U_0402 = PartSpec(
     **_C0402, manufacturer="Samsung", mpn="CL05A105KA5NQNC", lcsc="C52923", value="1uF",
     params={"capacitance": pm(1e-6, 0.10), "max_voltage": exact(25.0)},
 )
-CAP_2U2_0402 = PartSpec(
-    **_C0402, manufacturer="Samsung", mpn="CL05A225MQ5NSNC", lcsc="C12530", value="2.2uF",
-    params={"capacitance": pm(2.2e-6, 0.20), "max_voltage": exact(6.3)},
+# The core regulator's capacitor. ST's Table 24 asks for 2.2 uF at each VCAP
+# pin, and a 2.2 uF part cannot deliver 2.2 uF: its own tolerance takes it to
+# 1.76 before bias takes anything. At 6.3 V rated and 1.25 V of bias - a fifth
+# of the rating - what reached the pin was 1.41 uF, 36 % short of what ST
+# specified, and the check that was meant to catch that compared the label.
+# 4.7 uF at 10 V is worth 3.29 at the same bias.
+CAP_4U7_0402 = PartSpec(
+    **_C0402, manufacturer="Samsung", mpn="CL05A475MP5NRNC", lcsc="C23733", value="4.7uF",
+    params={"capacitance": pm(4.7e-6, 0.20), "max_voltage": exact(10.0)},
 )
+
 CAP_8P2_0402 = PartSpec(
     **_C0402, manufacturer="FH", mpn="0402CG8R2C500NT", lcsc="C1579", value="8.2pF",
     params={"capacitance": between(7.95e-12, 8.45e-12), "max_voltage": exact(50.0)},
@@ -494,9 +506,22 @@ CAP_10U_0805 = PartSpec(
     **_C0805, manufacturer="Samsung", mpn="CL21A106KAYNNNE", lcsc="C15850", value="10uF",
     params={"capacitance": pm(10e-6, 0.20), "max_voltage": exact(25.0)},
 )
+# 25 V, not 10, and the reason is `capacitors.bias_derating` rather than any
+# question about standing off the rail. At 10 V rated and 5.25 V of bias this
+# part is at half its rating and worth half its label; at 25 V it is at a
+# fifth. The rating is what buys the capacitance back.
 CAP_22U_0805 = PartSpec(
-    **_C0805, manufacturer="HRE", mpn="CGA0805X7R226M100MT", lcsc="C23692981", value="22uF",
-    params={"capacitance": pm(22e-6, 0.20), "max_voltage": exact(10.0)},
+    **_C0805, manufacturer="Samsung", mpn="CL21A226MAQNNNE", lcsc="C45783", value="22uF",
+    params={"capacitance": pm(22e-6, 0.20), "max_voltage": exact(25.0)},
+)
+_C1206 = dict(symbol="Device:C", footprint="C1206:C_1206_3216Metric", prefix="C")
+# The 3V3 converter's input capacitor, where the bias is the 5 V rail rather
+# than the 3.3 one - a fifth of 25 V - and where the minimum is the whole
+# requirement. A 1206 for the tighter tolerance: this one is the only bulk
+# capacitor on the board with nothing beside it to share the shortfall.
+CAP_22U_25V_1206 = PartSpec(
+    **_C1206, manufacturer="Samsung", mpn="CL31A226KAHNNNE", lcsc="C12891", value="22uF",
+    params={"capacitance": pm(22e-6, 0.10), "max_voltage": exact(25.0)},
 )
 
 CAP_3N3_0402 = PartSpec(

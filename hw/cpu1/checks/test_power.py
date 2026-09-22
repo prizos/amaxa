@@ -89,9 +89,15 @@ def _divider(design, two_pad_parts, spec, high_net, tap_net, low_net):
     return spec(top[0], "resistance"), spec(bottom[0], "resistance")
 
 
-def _capacitance_on(design, two_pad_parts, spec, net_a, net_b, block=None):
+def _capacitance_on(design, two_pad_parts, spec, net_a, net_b, block=None,
+                    effective=None, bias=None):
     """
     (low, high) total capacitance between two nets, optionally one block's.
+
+    With `effective` and `bias`, the low end is what the parts are worth at
+    that DC bias rather than what is printed on them - see
+    `capacitors.bias_derating`. Every datasheet *minimum* here is held against
+    that; no maximum is, because a ceramic does not gain capacitance.
 
     `block` matters wherever a datasheet asks for capacitance *at a pin*
     rather than on a rail. Without it, the 3V3 buck's "input capacitance"
@@ -107,6 +113,8 @@ def _capacitance_on(design, two_pad_parts, spec, net_a, net_b, block=None):
         if block is not None and not address.startswith(f"{block}."):
             continue
         a, b = spec(address, "capacitance")
+        if effective is not None:
+            a = effective(address, bias)
         low, high = low + a, high + b
     return low, high
 
@@ -676,7 +684,9 @@ def test_the_3v3_converter_runs_from_the_rail_that_feeds_it(spec):
     )
 
 
-def test_the_3v3_output_filter_is_the_one_the_datasheet_specifies(design, two_pad_parts, spec):
+def test_the_3v3_output_filter_is_the_one_the_datasheet_specifies(
+    design, two_pad_parts, spec, effective_capacitance
+):
     """
     Inductance and output capacitance inside the datasheet's table for 3.3 V.
 
@@ -694,16 +704,25 @@ def test_the_3v3_output_filter_is_the_one_the_datasheet_specifies(design, two_pa
         f"the {wanted_l_low * 1e6:g} to {wanted_l_high * 1e6:g} uH specified"
     )
 
-    c_low, c_high = _capacitance_on(design, two_pad_parts, spec, "3V3", "GND")
+    # The low end is what the rail's capacitors are worth *at 3.3 V of bias*,
+    # not what is printed on them. The high end is not derated: a ceramic does
+    # not gain capacitance, so the ceiling has to be cleared by the label.
+    _, bias = spec("rail.3v3", "voltage")
+    c_low, _ = _capacitance_on(design, two_pad_parts, spec, "3V3", "GND",
+                               effective=effective_capacitance, bias=bias)
+    _, c_high = _capacitance_on(design, two_pad_parts, spec, "3V3", "GND")
     wanted_c_low, wanted_c_high = spec(BUCK_3V3, "output_capacitance")
     assert wanted_c_low <= c_low and c_high <= wanted_c_high, (
-        f"the 3V3 rail carries {c_low * 1e6:.1f} to {c_high * 1e6:.1f} uF, "
-        f"outside the {wanted_c_low * 1e6:g} to {wanted_c_high * 1e6:g} uF "
-        "specified. Adding decoupling moves this."
+        f"the 3V3 rail carries {c_low * 1e6:.1f} uF at {bias:.2f} V of bias "
+        f"and {c_high * 1e6:.1f} uF on the reel, outside the "
+        f"{wanted_c_low * 1e6:g} to {wanted_c_high * 1e6:g} uF specified. "
+        "Adding decoupling moves this."
     )
 
 
-def test_each_converter_has_its_bootstrap_and_input_capacitance(design, two_pad_parts, spec):
+def test_each_converter_has_its_bootstrap_and_input_capacitance(
+    design, two_pad_parts, spec, effective_capacitance
+):
     """
     The bootstrap capacitor and the input capacitance each datasheet asks for.
 
@@ -724,12 +743,19 @@ def test_each_converter_has_its_bootstrap_and_input_capacitance(design, two_pad_
             )
         minimum, _ = spec(regulator, "input_capacitance_min")
         block = regulator.rpartition(".")[0]
+        # The bias here is the supply the capacitor sits on, which for the
+        # 3V3 converter is the 5 V rail: at 10 V rated that was half the
+        # part's capacitance gone, and the check compared the label.
+        _, bias = spec("input" if supply == "VIN" else f"rail.{supply.lower()}",
+                       "voltage")
         input_low, _ = _capacitance_on(
-            design, two_pad_parts, spec, supply, "GND", block=block)
+            design, two_pad_parts, spec, supply, "GND", block=block,
+            effective=effective_capacitance, bias=bias)
         if input_low < minimum:
             problems.append(
                 f"  {regulator}: {input_low * 1e6:.1f} uF of its own on "
-                f"{supply}, against {minimum * 1e6:g} uF asked for"
+                f"{supply} at {bias:.2f} V of bias, against {minimum * 1e6:g} uF "
+                f"asked for"
             )
     assert not problems, "Converter capacitors:\n" + "\n".join(problems)
 

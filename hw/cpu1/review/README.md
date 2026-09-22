@@ -11,7 +11,7 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
 | **Footprints** | 272 |
 | **Nets** | 197 |
-| **Routing** | 1327 track segments, 601 vias, 4 zones |
+| **Routing** | 1327 track segments, 602 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -51,7 +51,7 @@ The inner signal layer, and the reason this board is six layers rather than four
 
 ### `In4.Cu`
 
-The second ground plane, and what both outer layers return to. With ground under B.Cu as well as under F.Cu, every through-hole via is a ground-to-ground layer change and any of the board's 219 ground vias will carry the return across.
+The second ground plane, and what both outer layers return to. With ground under B.Cu as well as under F.Cu, every through-hole via is a ground-to-ground layer change and any of the board's 220 ground vias will carry the return across.
 
 Zones on this layer: `GND`
 
@@ -144,8 +144,8 @@ schematic after the fact.
 | `C10` | `core.nrst.cap` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `J1` | `core.swd` | SWD | TC2030-IDC-NL | — | `Tag-Connect_TC2030-IDC-NL_2x03_P1.27mm_Vertical` |
 | `C2` | `core.usb_bulk` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
-| `C4` | `core.vcap.p106` | 2.2uF | CL05A225MQ5NSNC | C12530 | `C_0402_1005Metric` |
-| `C3` | `core.vcap.p71` | 2.2uF | CL05A225MQ5NSNC | C12530 | `C_0402_1005Metric` |
+| `C4` | `core.vcap.p106` | 4.7uF | CL05A475MP5NRNC | C23733 | `C_0402_1005Metric` |
+| `C3` | `core.vcap.p71` | 4.7uF | CL05A475MP5NRNC | C23733 | `C_0402_1005Metric` |
 | `FB1` | `core.vdda.bead` | 600R | GZ1005D601TF | C14182 | `L_0402_1005Metric` |
 | `C5` | `core.vdda.c1u` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
 | `C11` | `core.vref.c1u` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
@@ -189,10 +189,10 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `C22` | `buck3v3.c_bst` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `C20` | `buck3v3.c_in` | 22uF | CGA0805X7R226M100MT | C23692981 | `C_0805_2012Metric` |
+| `C20` | `buck3v3.c_in` | 22uF | CL31A226KAHNNNE | C12891 | `C_1206_3216Metric` |
 | `C21` | `buck3v3.c_in_hf` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `C23` | `buck3v3.c_out1` | 22uF | CGA0805X7R226M100MT | C23692981 | `C_0805_2012Metric` |
-| `C24` | `buck3v3.c_out2` | 22uF | CGA0805X7R226M100MT | C23692981 | `C_0805_2012Metric` |
+| `C23` | `buck3v3.c_out1` | 22uF | CL21A226MAQNNNE | C45783 | `C_0805_2012Metric` |
+| `C24` | `buck3v3.c_out2` | 22uF | CL21A226MAQNNNE | C45783 | `C_0805_2012Metric` |
 | `U3` | `buck3v3.ic` | TPS562200 | TPS562200DDCR | C49757 | `TSOT-23-6` |
 | `L2` | `buck3v3.inductor` | 3.3uH | SWPA4030S3R3MT | C15269 | `L_Sunlord_SWPA4030S` |
 | `R15` | `buck3v3.r_fb_bottom` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |

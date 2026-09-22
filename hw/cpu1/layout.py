@@ -3644,7 +3644,7 @@ STITCH_PLACES = (
     (53.0, -34.0),                    # where power good crosses to In3
     (38.0, -42.0),                    # the static signals' way under the header
     (39.5, -15.5),                    # and where that column moved to
-    (25.0, 24.0),                     # where the gate kill's gate crosses to In3
+    (23.5, 24.0),                     # where the gate kill's gate crosses to In3
 )
 
 

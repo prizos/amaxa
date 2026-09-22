@@ -174,24 +174,46 @@ def test_supplies_have_their_bulk_capacitance(design, two_pad_parts, spec):
     assert not missing, "Bulk capacitance missing:\n" + "\n".join(missing)
 
 
-def test_each_vcap_pin_has_its_regulator_capacitor(design, silicon, pad_net, two_pad_parts, spec):
+def test_each_vcap_pin_has_its_regulator_capacitor(
+    design, silicon, pad_net, two_pad_parts, spec, effective_capacitance
+):
     """
-    Each VCAP pin has exactly one capacitor to ground, of the value ST specifies.
+    Each VCAP pin has exactly one capacitor to ground, worth what ST asks for
+    once its tolerance and its own DC bias are taken off.
 
     Datasheet Table 24: CEXT 2.2 uF per VCAP pin, ESR under 100 mOhm. The core
     regulator is unstable without it; with two it is a different, untested
     filter. ESR is not in the capacitor's listing and is not checked here.
+
+    **This used to compare the number on the reel.** A 2.2 uF +-20 % part is
+    1.76 uF before anything else happens, and the one fitted was rated 6.3 V
+    with 1.25 V across it - a fifth of its rating - so what reached the pin
+    was 1.41 uF against ST's 2.2. Thirty-six per cent short of the figure that
+    stabilises the core regulator, and the check said it was the right part,
+    because `2.2` was inside `2.2 +- 20 %`.
+
+    A 2.2 uF part cannot answer a 2.2 uF requirement: its own tolerance
+    forbids it before bias is considered. So the part is a 4.7 uF at 10 V,
+    which is worth 3.29 at this bias. ST states no ceiling - the same section
+    notes that two capacitors may be connected to the VCAPx pins - and the
+    one-capacitor-per-pin rule above is what keeps that from being a licence.
     """
     cext, _ = spec(MCU, "vcap_capacitance")
+    _, core = spec(MCU, "core_voltage")
     wrong = []
     for number in silicon.pins["VCAP"].positions:
         net = pad_net[(MCU, number)]
         caps = capacitors_between(design, two_pad_parts, net, "GND")
         if len(caps) != 1:
             wrong.append(f"  pin {number} ({net}): {len(caps)} capacitors to ground, needs exactly 1")
-        elif not _contains(spec(caps[0], "capacitance"), cext):
+            continue
+        worth = effective_capacitance(caps[0], core)
+        if worth < cext:
             low, high = spec(caps[0], "capacitance")
-            wrong.append(f"  pin {number}: {caps[0]} is {low * 1e6:.2f}-{high * 1e6:.2f} uF, not {cext * 1e6:g} uF")
+            wrong.append(
+                f"  pin {number}: {caps[0]} is {low * 1e6:.2f}-{high * 1e6:.2f} uF "
+                f"on the reel and {worth * 1e6:.2f} uF at {core:g} V of bias, "
+                f"against the {cext * 1e6:g} uF ST asks for")
     assert not wrong, "Core regulator capacitors:\n" + "\n".join(wrong)
 
 

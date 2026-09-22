@@ -24,6 +24,27 @@ def _layout(board_dir):
 
 
 @pytest.fixture(scope="session")
+def effective_capacitance(spec):
+    """
+    `effective_capacitance(address, bias)` -> the low end of what that
+    capacitor is worth at that DC bias, in farads.
+
+    Nominal, less its tolerance, less `capacitors.bias_derating` times the
+    fraction of its rated voltage the bias represents. Every datasheet
+    minimum on this board is held against this rather than against the
+    number printed on the reel.
+    """
+    _, coefficient = spec("capacitors", "bias_derating")
+
+    def lookup(address: str, bias: float) -> float:
+        low, _ = spec(address, "capacitance")
+        rated, _ = spec(address, "max_voltage")
+        return max(0.0, low * (1.0 - coefficient * min(1.0, bias / rated)))
+
+    return lookup
+
+
+@pytest.fixture(scope="session")
 def stack(board_dir):
     """The dielectric between the outer layers and the plane beside them."""
     board = _layout(board_dir).BOARD
