@@ -393,6 +393,13 @@ BUCK_3V3 = PartSpec(
         "v_in": between(4.5, 17.0),
         "v_feedback": between(0.758, 0.772),
         "switching_frequency": exact(650e3),
+        # The part's *continuous rating*, from its own first sentence: "The
+        # TPS562200 and TPS563200 are 2-A and 3-A synchronous step-down
+        # converters". Declared beside the current limit because the two are
+        # different questions and the check used to ask the wrong one - a
+        # protection threshold is where the converter stops, not what it will
+        # deliver all day.
+        "load_current_max": exact(2.0),
         "current_limit_min": exact(2.5),
         "bst_capacitance": exact(100e-9),
         # What the bootstrap capacitor sits at, for the bias model. §6.1's

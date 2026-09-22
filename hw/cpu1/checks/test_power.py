@@ -545,19 +545,31 @@ def test_the_load_each_rail_carries_is_inside_its_regulator(spec):
     The 5 V converter's share is its own rail *plus* the 3V3 buck it feeds -
     see `_reflected_current`. The 3V3 buck's is its rail alone, because
     nothing runs from 3V3 to make another rail.
+
+    **The 3V3 side used to be held against its current limit**, which is a
+    protection threshold rather than a rating: it is where the converter stops
+    delivering, not what it will deliver all day. This docstring said "rated
+    output" while the code compared 2.5 A of foldback. The part is a 2 A
+    converter by its own first sentence and that is what it is held to now;
+    the limit is asserted too, above the rating, because a limit below the
+    rating would be a part that protects against its own datasheet.
     """
     i5 = _five_volt_current(spec)
     _, i3v3 = spec("rail.3v3", "current")
     rating_5v, _ = spec(BUCK_5V, "load_current_max")
+    rating_3v3, _ = spec(BUCK_3V3, "load_current_max")
     limit_3v3, _ = spec(BUCK_3V3, "current_limit_min")
     assert rating_5v >= i5, (
         f"the 5 V converter carries {i5:.3f} A - its own rail's budget plus "
         f"{_reflected_current(spec):.3f} A for the 3V3 buck it feeds - from a "
         f"{rating_5v:g} A part"
     )
-    assert limit_3v3 >= i3v3, (
-        f"the 3V3 rail is budgeted {i3v3:g} A against a current limit as low as "
-        f"{limit_3v3:g} A"
+    assert rating_3v3 >= i3v3, (
+        f"the 3V3 rail is budgeted {i3v3:g} A from a {rating_3v3:g} A part"
+    )
+    assert limit_3v3 >= rating_3v3, (
+        f"the 3V3 converter is rated {rating_3v3:g} A and folds back at "
+        f"{limit_3v3:g} A, so it protects against its own rating"
     )
 
 
@@ -639,14 +651,25 @@ def test_the_inductors_do_not_spend_the_efficiency_the_design_assumes(
     spending more than a third of it is the wrong part even if it never
     saturates.
     """
-    efficiency_low, _ = spec("power", "efficiency")
+    # **Each stage against its own efficiency.** `power.efficiency` is what a
+    # conversion end to end is assumed to manage and it was used for both
+    # inductors, although `buck3v3.efficiency` is declared and is what
+    # `_reflected_current` already uses for that stage. The 3V3 winding's
+    # budget is 139 mW at its own figure rather than 185 at the generic one;
+    # 33 mW of loss passes either way, so this changes no verdict - it stops
+    # the two places that talk about the same converter's efficiency using
+    # different numbers.
+    generic_low, _ = spec("power", "efficiency")
+    buck3v3_low, _ = spec("buck3v3", "efficiency")
     cases = [
         # As above: the 5 V winding carries the 3V3 buck's draw as well.
-        ("SW_5V", "5V", spec("rail.5v", "voltage")[1], _five_volt_current(spec)),
-        ("SW_3V3", "3V3", spec("rail.3v3", "voltage")[1], spec("rail.3v3", "current")[1]),
+        ("SW_5V", "5V", spec("rail.5v", "voltage")[1], _five_volt_current(spec),
+         generic_low),
+        ("SW_3V3", "3V3", spec("rail.3v3", "voltage")[1],
+         spec("rail.3v3", "current")[1], buck3v3_low),
     ]
     problems = []
-    for switch, rail, voltage, load in cases:
+    for switch, rail, voltage, load, efficiency_low in cases:
         address = _parts_on(design, two_pad_parts, "Device:L", switch, rail)[0]
         resistance, _ = spec(address, "dc_resistance")
         loss = load**2 * resistance
@@ -954,7 +977,7 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, pad
     )
     assert drawn <= allowed, (
         f"the board promises the power board {promised * 1e3:g} mA out of "
-        f"VREF+, plus {50e-6 * 1e6:g} uA of quiescent, and {why}"
+        f"VREF+, plus {quiescent * 1e6:g} uA of quiescent, and {why}"
     )
     wanted, _ = spec(REFERENCE, "supply_bypass")
     # The reference's own, not the rail's: same scope error as the converters'
@@ -1420,7 +1443,10 @@ SUPPLY_PINS = {
     "VCC": _DRAWN,
     "VDD": _DRAWN,
     "V+": _DRAWN,
-    "IN": ("quiescent_current",),
+    # A linear regulator's input. `quiescent_current_max` was missing from
+    # this row and present on the others, so the reference's own 50 uA was in
+    # no rail's sum while the analog regulator's 55 uA was.
+    "IN": ("quiescent_current", "quiescent_current_max"),
     "VIO": ("io_supply_current_max",),
     "VDDIO": ("supply_current_typical", "io_supply_current_max"),
 }

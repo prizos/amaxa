@@ -771,7 +771,11 @@ def test_nothing_runs_alongside_a_raw_comparator_input(
     velocity = 299.792458 / math.sqrt(effective)        # mm per nanosecond
     edge, _ = spec("trip", "aggressor_edge")            # the fastest, so the worst
     _, swing = spec("rail.3v3", "voltage")
-    hysteresis = max(
+    # The *least* hysteresis any comparator on this board has. `max` was the
+    # most permissive part of a mixed set, which is the wrong end for a noise
+    # margin - the comparator that trips first is the one with the least to
+    # lose. All seven are identical today, so this changes no number.
+    hysteresis = min(
         spec(address, "input_hysteresis")[0]
         for address, part in design["parts"].items()
         if part["symbol"].startswith("Comparator:")
