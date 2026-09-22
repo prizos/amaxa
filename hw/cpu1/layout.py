@@ -1030,8 +1030,13 @@ def _safety() -> None:
     # The gate enable's pull-down, in the clear space west of buffer1 where
     # that signal already passes on its way to A7.
     PLACEMENT["safety.r_gate_enable_pulldown"] = (22.5, 21.5, 180)
+    # The drain resistor is an 0805, not an 0402: it carries the contention
+    # current for as long as a trip lasts with the enable still asserted, and
+    # 54 mW is past what this board runs a 62.5 mW part at. Its courtyard is
+    # 3.4 mm wide against the 0402's 1.9, which is why it sits at 33.0 rather
+    # than 32.1 - any nearer and it overlaps the transistor.
     PLACEMENT["safety.q_gate_kill"] = (29.9, 24.4, 0)
-    PLACEMENT["safety.r_gate_kill_drain"] = (32.1, 24.4, 0)
+    PLACEMENT["safety.r_gate_kill_drain"] = (33.0, 24.4, 0)
     for address in ("safety.q_gate_kill", "safety.r_gate_kill_drain"):
         LABELS[address] = (0.0, -1.3)
     for address in ("safety.r_clear_series", "safety.c_clear",
@@ -2332,8 +2337,8 @@ def _gate_kill() -> None:
 
     # And the drain resistor to the line itself, under the output fan-out.
     path("GATE_ENABLE_OUT", _width_for("GATE_ENABLE_OUT", SIGNAL), [
-        (F, ["safety.r_gate_kill_drain:2", (33.4, 24.4)]),
-        (B, [(33.4, 24.4), (41.6, 24.4), (41.6, 21.37)]),
+        (F, ["safety.r_gate_kill_drain:2", (34.3, 24.4)]),
+        (B, [(34.3, 24.4), (41.6, 24.4), (41.6, 21.37)]),
         (F, [(41.6, 21.37), "safety.pulldown.gate_enable_out:1"]),
     ])
 

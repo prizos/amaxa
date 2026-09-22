@@ -258,7 +258,7 @@ schematic after the fact.
 | `R17` | `safety.r_fault1_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R18` | `safety.r_fault2_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R99` | `safety.r_gate_enable_pulldown` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
-| `R100` | `safety.r_gate_kill_drain` | 150R | 0402WGF1500TCE | C25082 | `R_0402_1005Metric` |
+| `R100` | `safety.r_gate_kill_drain` | 150R | 0805W8F1500T5E | C17471 | `R_0805_2012Metric` |
 | `R86` | `safety.r_trip_n_pulldown` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
 | `R16` | `safety.r_trip_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R85` | `safety.r_tripped_pullup` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |

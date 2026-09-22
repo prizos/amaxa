@@ -53,6 +53,14 @@ MCU_H743 = PartSpec(
         # milliamps. There is no current this pin may be driven above its
         # supply with; the limit is the voltage.
         "analog_input_voltage_max": exact(4.0),
+        # The magnitude of that same row, as a current. Table 21 rates
+        # I_INJ(PIN) on FT_xxx, TT_xx, RST and B pins at **-5 to +0 mA**, so
+        # five milliamps is the most this part may have pushed through any of
+        # them - and therefore the most a resistor feeding one can be carrying
+        # while the part is still inside its ratings. That is the bound on
+        # every series resistor into an analog pin: past it the silicon is out
+        # of spec, not just the resistor. The crop is in evidence/.
+        "pin_injection_current_max": exact(5e-3),
         # What a 5 V-tolerant pin may see, as the datasheet states it: a
         # headroom above the *lowest* of the part's supplies, not a fixed
         # number. Recorded as the overhead so a check reads the board's own
@@ -139,9 +147,18 @@ RES_1K_0402 = PartSpec(
 # Between the gate-kill FET's drain and the line it pulls down. It bounds what
 # the FET draws from a '541 output that has not let go yet: 3.465 V across
 # 33 + 150 ohm is 19 mA against the buffer's 24 mA per output.
-RES_150R_0402 = PartSpec(
-    **_R0402, mpn="0402WGF1500TCE", lcsc="C25082", value="150R",
-    params={"resistance": pm(150, 0.01), "max_power": exact(0.0625)},
+# **An 0805, and the reason is the sustained case rather than the trip.** A
+# trip is over in nanoseconds, but nothing makes the buffer stop driving: if
+# firmware leaves the enable asserted with the latch set, Q2 holds the line
+# down against a '541 output that is still pushing, and this resistor carries
+# 19 mA of that contention for as long as it lasts. 54 mW in an 0402 rated
+# 62.5 is inside the part and past the half this board derates every thermal
+# rating to, which is the margin that exists for exactly this - a part run at
+# 87 % of its absolute rating in still air. The 0805's 125 mW makes it 43 %.
+RES_150R_0805 = PartSpec(
+    symbol="Device:R", footprint="R0805:R_0805_2012Metric", prefix="R",
+    manufacturer="UNI-ROYAL", mpn="0805W8F1500T5E", lcsc="C17471", value="150R",
+    params={"resistance": pm(150, 0.01), "max_power": exact(0.125)},
 )
 
 # The analog rail this board hands the power board's sensors. It is an LDO and

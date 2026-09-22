@@ -13,34 +13,13 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 # BLOCKING is what mattered. A board that says it is unfinished now has to say
 # what is unfinished, and a board that says it is finished has to have this
 # empty, so neither statement can drift from the board again.
-COMPLETE = False
+COMPLETE = True
 
 BLOCKING: dict[str, str] = {
-    "sixteen ADC series resistors and three others have a power rating "
-    "nothing can make fail": (
-        "Setting each `max_power` to zero in turn and running the suite, 20 "
-        "of 101 still pass. Sixteen are the ADC channels' series resistors, "
-        "and they are correct: the far end is a capacitor and a sampling "
-        "switch, so there is no DC path and the part genuinely dissipates "
-        "nothing. The others are the Ethernet reset delay, the clear line's "
-        "series resistor and the USB VBUS sense resistor - all series "
-        "elements into high-impedance nodes, all for the same reason.\n\n"
-        "It was 36 before this round. The thirteen 3V3 pull-ups and the "
-        "lockout divider's top leg were failing for a *wrong* reason, and "
-        "those are fixed; what is left is a real property of the board and "
-        "not a hole in the check.\n\n"
-        "It stays here because the rule is that a rating nothing compares "
-        "against is a comment with a float in it, and these nineteen are "
-        "exactly that - recorded so the next person does not have to redo "
-        "the sweep to find out. What would settle them is a fault model this "
-        "board does not have: what an ADC pin's clamp, or the MCU's VBUS "
-        "sense pin, does to the resistor feeding it when the far side is "
-        "driven hard. That is worth having and is not written."
-    ),
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 202
+EXPECTED_CHECKS = 203
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {

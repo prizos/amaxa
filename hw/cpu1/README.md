@@ -74,25 +74,31 @@ hand, near the pins they serve.
 
 ## Where it stands
 
-Everything on this board is drawn, routed and checked: 198 checks, DRC with
+Everything on this board is drawn, routed and checked: 203 checks, DRC with
 no violations and no unconnected items, gerbers for all six copper layers plus
 drill and IPC-D-356, `make reproducible` regenerating the same board, `make
 offline` building with every network call refused, both firmware BSPs
-compiling, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` empty.
+compiling, and `NEEDS_A_HUMAN_EYE`, `WAITING_ON_A_DECISION` and **`BLOCKING`
+all empty**.
 
-**It is not ready to order, and `checks/config.py` says why.** One entry in
-`BLOCKING`, and it is the one the last fix uncovered rather than one it left
-behind: the 3V3 rail now adds up to 784.8 mA against its 800 mA band, derived
-off the netlist and printed on every run - and two of that sum's largest terms
-are not maximums. The PHY's 102 mA is a *typical* (its datasheet has no
-maximum supply current at all), and the comparators' 5 mA each is a 25 °C
-figure. Fifteen milliamps of margin is comfortable only if the terms are
-guaranteed, and these two are not.
+`BLOCKING` held five entries at the start of this branch and now holds none.
+What closed the last of them is worth recording, because it was the one that
+looked least like a defect: nineteen resistors had a power rating that no
+perturbation could make fail, and the entry said what would settle it was "a
+fault model this board does not have". That model exists now.
+`test_every_resistor_has_a_worst_case_something_states` gives every resistor
+on the board a case from a figure something already declares — the injection
+current ST permits into an analog pin, the rail across a node a capacitor
+holds up, the path back to whatever drives the far end — and asserts that
+**none of them comes out with no case at all**. Zeroing each rating in turn
+now fails for 100 of 101; the one that survives is a test-pad stub the check
+models as carrying nothing, and says so.
 
-What used to be there is closed. The rail's contents were an itemised comment
-somebody typed and summed by hand, and it had already failed once: fifteen
-pull-downs taken from 10 k to 1.2 k added 43 mA and put 3V3 at 806 against its
-800, with no check moving.
+It found a real defect on the way. The gate kill's drain resistor was an 0402
+dissipating 54 mW of contention current whenever a trip coincides with the
+enable still asserted — inside the part's 62.5 mW absolute rating, which is
+why it had passed, and 174 % of the half this board derates every thermal
+rating to. It is a 150 Ω 0805 now.
 
 `COMPLETE` was True for a while and that was wrong - not because the board is
 bad, but because the gate behind it tested two things and the flag was read as

@@ -1263,7 +1263,7 @@ def safety_chain(v3v3, gnd, nets) -> None:
     # map says so now. It is the Infineon MADK convention - `docs/research/07`
     # records "active-low gate kill" - but this board had never said it.
     gate_kill = part(parts.FET_GATE_KILL, "safety.q_gate_kill", "Q2")
-    kill_drain = part(parts.RES_150R_0402, "safety.r_gate_kill_drain", "R100")
+    kill_drain = part(parts.RES_150R_0805, "safety.r_gate_kill_drain", "R100")
     Net("GATE_KILL_DRAIN").connect(kill_drain[1], gate_kill["D"])
     buffered["GATE_ENABLE_OUT"] += kill_drain[2]
     tripped += gate_kill["G"]

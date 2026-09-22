@@ -1514,6 +1514,43 @@ def _paths_to_ground(design, pad_net, spec):
     return best
 
 
+def _paths_from_a_source(design, pad_net, spec, sources):
+    """
+    net -> the least series resistance back to something that drives it.
+
+    The mirror of `_paths_to_ground`. When a transistor pulls one end of a
+    resistor down, what limits the current is not the path onward to ground -
+    that is a parallel branch - but the path *back* to whatever is holding the
+    other end up. Walking the wrong one of those two made the gate kill's
+    drain resistor look like it carried 0.3 mA when it carries 19.
+    """
+    import heapq
+
+    edges: dict[str, list] = {}
+    for address, part in design["parts"].items():
+        if part["symbol"] != "Device:R":
+            continue
+        a, b = pad_net.get((address, "1")), pad_net.get((address, "2"))
+        if not (a and b) or a == b:
+            continue
+        ohms = spec(address, "resistance")[0]
+        edges.setdefault(a, []).append((b, ohms))
+        edges.setdefault(b, []).append((a, ohms))
+
+    best: dict[str, float] = {}
+    queue = [(0.0, net) for net in sorted(sources)]
+    heapq.heapify(queue)
+    while queue:
+        ohms, net = heapq.heappop(queue)
+        if net in best:
+            continue
+        best[net] = ohms
+        for far, more in edges.get(net, ()):
+            if far not in best:
+                heapq.heappush(queue, (ohms + more, far))
+    return best
+
+
 def _drivers_of(design, pad_net, net, pin_types):
     """Every part that can source current into `net`, with the rails it runs from."""
     out = []
@@ -1672,3 +1709,207 @@ def test_each_rail_carries_no_more_than_it_is_budgeted(
         + "\nThe band is what the converter, the fuse and the inductors are "
           "sized from; it is not a wish."
     )
+
+
+@pytest.fixture(scope="module")
+def pin_map(board_dir):
+    import sys
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from mcu_pins import load_source
+    return load_source(board_dir / "pinmap.py", "cpu1_pinmap_power")
+
+
+def _reaches_a_bus(design, pad_net, spec_has, net_a, net_b, on_a_bus) -> bool:
+    """Whether either end gets to a transceiver's bus through anything."""
+    seen, edge = {net_a, net_b}, [net_a, net_b]
+    while edge:
+        net = edge.pop()
+        if net in on_a_bus:
+            return True
+        for address, part in design["parts"].items():
+            pads = [p for (owner, p), n in pad_net.items()
+                    if owner == address and n == net]
+            if not pads or len(part.get("pads", [])) > 3:
+                continue
+            for (owner, _), far in pad_net.items():
+                if owner == address and far not in seen:
+                    seen.add(far)
+                    edge.append(far)
+    return False
+
+
+def test_every_resistor_has_a_worst_case_something_states(
+    design, two_pad_parts, pad_net, spec, spec_has, net_voltages, pin_map
+):
+    """
+    Every resistor on this board, and the largest current anything here says
+    can flow through it.
+
+    **The checks above leave a gap and it was recorded rather than closed.**
+    Between them they cover a resistor with both ends on a rail, a resistor
+    with one end on a rail, and a divider walked from either end. What they do
+    not cover is a series element whose far end is a *pin*: sixteen ADC
+    channel resistors, the Ethernet reset delay, the clear pulse's series
+    resistor and the USB VBUS sense resistor. Setting each one's `max_power`
+    to zero left the suite green, and `BLOCKING` carried them with the note
+    that what would settle it is "a fault model this board does not have".
+
+    This is that model, and it is three cases, each from a figure something
+    already declares:
+
+      - **into an analog pin**, the current is bounded by what ST permits to
+        be injected. Table 21 rates I_INJ at -5 to +0 mA, so five milliamps is
+        the most the part may have pushed through that pin while it is inside
+        its ratings - past it the silicon is out of spec, never mind the
+        resistor. That is the worst case the resistor has to survive.
+      - **into a node held by a capacitor**, the capacitor charges to whatever
+        drives it and the pin at the other end can be driven low, so the
+        resistor sees the rail. That is the Ethernet reset delay and the clear
+        pulse: both are RC networks whose whole purpose is to hold a node up
+        while a pin pulls it down.
+      - **from a named supply into a pin**, the supply across the resistor.
+        That is the USB VBUS sense resistor, at the 5.25 V its own connector
+        declares rather than at the logic rail everything unnamed defaults to.
+
+    The point is not any one of the three. It is that **no resistor may come
+    out of this with no case at all** - the assertion below is that every one
+    of them was bounded by something, so a part added tomorrow cannot land in
+    the same gap silently.
+    """
+    voltages, default = _net_voltages(net_voltages)
+    _, injection = spec("mcu", "pin_injection_current_max")
+    _, vbus = spec("usb", "vbus_voltage")
+
+    analog_nets = {pin.net_name for pin in pin_map.PINS
+                   if pin.signal.startswith(("ADC", "COMP"))}
+    pin_nets = {pin.net_name for pin in pin_map.PINS}
+    # A net with a capacitor on it can be held up while something pulls the
+    # other end down - which is what an RC delay and an AC-coupled pulse are
+    # both for. The capacitor's far side does not have to be ground.
+    held = {net for address, part in design["parts"].items()
+            if part["symbol"] == "Device:C"
+            for net in two_pad_parts.get(address, ()) if net and net != "GND"}
+    # A net a transistor's channel reaches can be pulled to ground by it.
+    switched = {net for address, part in design["parts"].items()
+                if part["symbol"].startswith("Transistor_")
+                for pad in ("2", "3")
+                for net in (pad_net.get((address, pad)),) if net}
+    # Nets that reach a part declaring a bus fault voltage: the terminations,
+    # which `test_a_bus_termination_survives_the_fault_its_transceiver_declares`
+    # owns end to end - normal drive and fault - and which this must not
+    # second-guess with a different model.
+    on_a_bus = set()
+    for address, part in design["parts"].items():
+        if not spec_has(address, "bus_fault_voltage"):
+            continue
+        for (owner, _), net in pad_net.items():
+            if owner == address:
+                on_a_bus.add(net)
+    paths = _paths_to_ground(design, pad_net, spec)
+    # Everything that can hold a node up: a named supply, an MCU pin, and any
+    # part pin that drives - a buffer's tri-state output is none of the first
+    # two and is what holds the gate line up while the kill transistor pulls
+    # the other end of its drain resistor down.
+    driving_nets = {
+        net for address, part in design["parts"].items()
+        for pad, kind in symbol_pin_types(part["symbol"]).items()
+        if kind in DRIVING
+        for net in (pad_net.get((address, str(pad))),) if net and net != "GND"
+    }
+    from_source = _paths_from_a_source(
+        design, pad_net, spec, set(voltages) | pin_nets | driving_nets)
+    phy = _phy_lines(design)
+
+    unmodelled, hot = [], []
+    for address, (net_a, net_b) in sorted(two_pad_parts.items()):
+        if design["parts"][address]["symbol"] != "Device:R":
+            continue
+        ohms, _ = spec(address, "resistance")
+        rated, _ = spec(address, "max_power")
+        cases = []
+
+        if net_a in voltages and net_b in voltages:
+            across = abs(voltages[net_a] - voltages[net_b])
+            cases.append((across**2 / ohms, "both ends on a named supply"))
+
+        # Anything that can reach a bus belongs to the termination check.
+        if {net_a, net_b} & phy:
+            cases.append((0.0, "an Ethernet line termination; test_ethernet.py "
+                               "owns it, because the voltage across it is the "
+                               "transmit swing and not the rail"))
+
+        if {net_a, net_b} & on_a_bus or _reaches_a_bus(
+                design, pad_net, spec_has, net_a, net_b, on_a_bus):
+            cases.append((0.0, "a bus termination; test_a_bus_termination_"
+                               "survives_the_fault_its_transceiver_declares "
+                               "owns both its cases"))
+
+        for near, far in ((net_a, net_b), (net_b, net_a)):
+            if far in analog_nets:
+                cases.append((injection**2 * ohms,
+                              f"{injection * 1e3:g} mA into {far}, which is "
+                              f"the most ST allows injected"))
+            if far in pin_nets and near in held:
+                cases.append((default**2 / ohms,
+                              f"{near} is held by a capacitor and {far} can be "
+                              f"driven low"))
+            if far in pin_nets and near == "USB_VBUS_IN":
+                cases.append((vbus**2 / ohms, f"{vbus:g} V of VBUS into {far}"))
+            # Not a line the PHY biases *to* the rail: the voltage across
+            # one of those is the transmit swing rather than the rail, which
+            # this rule would get wrong by a factor of twelve in power. The
+            # sibling resistor check excludes them for the same reason and
+            # `test_ethernet.py` owns them.
+            if near in voltages and far not in voltages and far not in phy:
+                cases.append((voltages[near]**2 / ohms,
+                              f"{near} across it with {far} driven low"))
+
+            # Driven at one end, and a path to ground out of the other: the
+            # LEDs through their own forward drop, every damping resistor
+            # into its pull-down.
+            if (far in pin_nets or far in voltages) and near in paths:
+                to_ground, drop = paths[near]
+                across = voltages.get(far, default) - drop
+                if across > 0 and (ohms + to_ground) > 0:
+                    current = across / (ohms + to_ground)
+                    cases.append((
+                        current**2 * ohms,
+                        f"{far} driving {across:.2f} V into {ohms:g} + "
+                        f"{to_ground:.0f} ohm to ground"))
+
+            # A transistor pulling this end to ground, with the other end
+            # held up by whatever drives it. What limits the current is the
+            # path *back to that driver*, not the path onward to ground.
+            if far in switched and near in from_source:
+                upstream = from_source[near]
+                current = default / (ohms + upstream)
+                cases.append((
+                    current**2 * ohms,
+                    f"{far} pulled to ground with {default:.3f} V reaching "
+                    f"{near} through {upstream:.0f} ohm"))
+
+            # A net with nothing on it but a test point carries nothing, and
+            # saying so is a case rather than an absence.
+            others = {owner for (owner, _), net in pad_net.items()
+                      if net == far and owner != address}
+            if others and all(
+                    design["parts"][owner]["symbol"].startswith("Connector:TestPoint")
+                    for owner in others):
+                cases.append((0.0, f"{far} reaches nothing but a test point"))
+
+        if not cases:
+            unmodelled.append(f"  {address}: between {net_a} and {net_b}")
+            continue
+        worst, why = max(cases)
+        if worst > rated * _derating(spec):
+            hot.append(
+                f"  {address}: {worst * 1e3:.1f} mW - {why} - against "
+                f"{rated * 1e3:g} mW derated to {rated * _derating(spec) * 1e3:.0f}")
+
+    assert not unmodelled, (
+        "Resistors nothing on this board says a current for:\n"
+        + "\n".join(unmodelled)
+        + "\nA rating nothing compares against is a comment with a float in "
+          "it. Give it a case here, or say why it cannot carry anything."
+    )
+    assert not hot, "Resistors past half their rating:\n" + "\n".join(hot)
