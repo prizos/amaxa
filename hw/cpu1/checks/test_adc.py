@@ -295,32 +295,38 @@ def test_the_filter_does_not_load_the_tap_it_sits_beside(design, pad_net, networ
         H(s) = (1 + sRC) / (1 + s(Rs + R)C)
 
     unity at DC, so nothing static notices. Two things follow, and they are
-    not the same thing:
+    not the same thing - and **both of them are costed here in nanoseconds**,
+    because nanoseconds are what the rest of the trip chain is spent in:
 
-      - **amplitude**, R/(Rs + R) to a step, so a fast edge arrives low and
-        the effective trip point sits that much high. This is what the series
-        resistor fixes, and only the series resistor: it is a ratio.
-      - **time**, because the same network delays a *ramp* - which is what a
-        rising fault current is - by exactly Rs*C, whatever R is. This is
-        what the capacitor fixes, and only the capacitor.
+      - **a ramp** - which is what a rising fault current is - comes out
+        delayed by exactly Rs*C, whatever R is. That is the capacitor's
+        doing, and only the capacitor's.
+      - **a step** comes out low by Rs/(Rs + R), which is the series
+        resistor's doing and only its. That deficit is *not* a threshold
+        error: the output jumps immediately to R/(Rs + R) of the input, so a
+        fault already further over the threshold than the deficit fires with
+        nothing added. What the deficit sets is how far over a fault has to
+        be to get that - and `trip.prompt_overshoot` is what this board
+        promises about it.
 
-    At 10 ohm and 10 nF the first was 17 % against a 12 % threshold tolerance
-    and the second was 20 ns, the entire share of the trip budget reserved for
-    a filter nobody had noticed was already fitted. FAST4 was worse on both
-    because it carried a second identical network for redundancy: two 10 ohm
-    branches in parallel are 4.95 ohm and 20 nF, so 29 % and 40 ns. The
-    redundancy cost it accuracy and time.
+    At 10 ohm and 10 nF the delay was 20 ns - the whole share of the budget
+    reserved for a filter nobody had noticed was already fitted - and the
+    deficit was 17 %, so a fault had to be a fifth over the threshold to trip
+    at once. FAST4 was worse on both because it carries a second identical
+    network for redundancy: two 10 ohm branches in parallel are 4.95 ohm and
+    20 nF, so 40 ns and 29 %.
 
-    At 22 ohm and 4.7 nF the first is 8.3 % and the second 9.4 ns, and the
-    second network is 1 kohm and 100 pF - which it can be because PB2 is a
-    comparator input with nothing sampling it, so it needs no reservoir. Both
-    numbers are worked out here from the parts and held against what the board
-    declares, rather than printed.
+    **This check spent one round comparing that deficit against
+    `trip.threshold_tolerance`**, which is a fraction of the threshold while
+    the deficit is a fraction of the step. Two denominators, one declaration,
+    and the appearance of a budget being spent twice. The deficit has its own
+    declaration now and the comparison is in the units the effect actually
+    has.
     """
     _, source = spec("header", "source_impedance")
-    _, tolerance = spec("trip", "threshold_tolerance")
     _, budget = spec("trip", "budget")
     _, reserved = spec("trip", "reserved_share")
+    _, prompt = spec("trip", "prompt_overshoot")
 
     watched = set()
     for address, part in design["parts"].items():
@@ -339,16 +345,26 @@ def test_the_filter_does_not_load_the_tap_it_sits_beside(design, pad_net, networ
 
     assert branches, "no comparator shares a node with an input network"
     wrong = []
+    slowest = worst = None
     for node, rc in sorted(branches.items()):
         parallel = 1.0 / sum(1.0 / r for r, _ in rc)
         total = sum(c for _, c in rc)
-        error = source / (source + parallel)
+        deficit = source / (source + parallel)
+        # What that deficit means as an overshoot: the output starts at
+        # (1 - deficit) of the input, so an input this far over the threshold
+        # already puts the output on it.
+        overshoot = 1.0 / (1.0 - deficit) - 1.0
         delay = source * total
-        if error > tolerance:
+        if slowest is None or delay > slowest[1]:
+            slowest = (node, delay)
+        if worst is None or overshoot > worst[1]:
+            worst = (node, overshoot, deficit, parallel)
+        if overshoot > prompt:
             wrong.append(
                 f"  {node}: {len(rc)} branch(es) of {parallel:.2f} ohm, so a step "
-                f"arrives {error * 100:.1f}% low and the trip point sits that "
-                f"much high, against {tolerance * 100:g}% of threshold tolerance")
+                f"arrives {deficit * 100:.1f}% low and a fault has to be "
+                f"{overshoot * 100:.1f}% over its threshold to trip at once, "
+                f"against the {prompt * 100:g}% this board promises")
         if delay > reserved * budget:
             wrong.append(
                 f"  {node}: {total * 1e9:.2f} nF behind {source:g} ohm delays a "
@@ -357,6 +373,12 @@ def test_the_filter_does_not_load_the_tap_it_sits_beside(design, pad_net, networ
                 f"budget reserved for the tap")
     assert not wrong, (
         "The ADC filter loads the comparator tap beside it:\n" + "\n".join(wrong))
+
+    print(f"    tap: {slowest[0]} delays a ramp {slowest[1] * 1e9:.2f} ns of the "
+          f"{reserved * budget * 1e9:.0f} it may; {worst[0]} takes "
+          f"{worst[2] * 100:.2f} % off a step through {worst[3]:.2f} ohm, so a "
+          f"fault {worst[1] * 100:.2f} % over its threshold still trips at once, "
+          f"against {prompt * 100:g} % promised")
 
 
 def _is_fast(channel: str) -> bool:

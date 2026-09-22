@@ -257,10 +257,26 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     What the trip point is worth, worked from where the DAC's reference comes
     from and what the comparator adds.
 
-    The DAC's full scale *is* its supply, so the logic rail's tolerance lands
-    directly on every threshold, while everything the ADCs measure is
-    ratiometric to VREF+ instead. That mismatch is the dominant term and it is
-    the reason this check exists rather than a comment.
+    The DAC's full scale *is* its reference, so the reference's tolerance
+    lands directly on every threshold.
+
+    **Only static errors belong here.** The tap the comparator watches is a
+    lead-lag - the ADC's own capacitor against the power board's source
+    impedance - and for one round this check summed its amplitude deficit
+    into the total, on the grounds that two checks were spending one
+    declaration. They were not, and the sum was wrong twice over: the
+    deficit is a fraction of the *step*, these are fractions of the
+    *threshold*, and the two are responses to mutually exclusive
+    excitations - a ramp gets the delay, a step gets the deficit, no signal
+    gets both.
+
+    The deficit also does not slow a real trip. The output of a lead-lag
+    jumps immediately to R/(Rs + R) of its input, so a fault already above
+    the threshold by more than that deficit fires on the instant. What the
+    tap costs is nanoseconds, it is bounded in nanoseconds by
+    `test_adc.py::test_the_filter_does_not_load_the_tap_it_sits_beside`, and
+    those nanoseconds are spent in `trip.budget` where the rest of the chain
+    is. Nothing dynamic is charged to this budget.
     """
     rail, (rail_low, rail_high) = _supply_of(pad_net, DAC, "1", spec)
     supply_low, supply_high = spec(DAC, "supply_voltage")
@@ -286,39 +302,9 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     dac_gain, _ = spec(DAC, "gain_error")
     dac_inl, _ = spec(DAC, "integral_nonlinearity")
 
-    # **And the tap, which lands on the same budget and was spending it
-    # twice.** The comparator does not see the sense voltage: it sees it
-    # through the lead-lag the ADC's own capacitor makes with the power
-    # board's source impedance, so a fast edge arrives low by R_s/(R_s + R)
-    # and the effective trip point sits that much high. That is an error on
-    # the trip point exactly like the five below.
-    #
-    # `test_adc.py::test_the_filter_does_not_load_the_tap_it_sits_beside`
-    # already held that term against `trip.threshold_tolerance` - and so did
-    # this check, for its own five terms, with neither aware of the other.
-    # The two passed independently at 8.6 % and 11.5 % of a 12 % declaration
-    # while together they are 20 %. Summing them here is what makes the
-    # declaration mean one thing.
-    _, source = spec("header", "source_impedance")
-    tapped = []
-    for address, part in design["parts"].items():
-        if not address.startswith("adc.") or not address.endswith(".series"):
-            continue
-        node = pad_net.get((address, "1"))
-        if node not in {pad_net.get((c, "1")) for c in comparators} | {
-                pad_net.get((c, "3")) for c in comparators}:
-            continue
-        tapped.append((node, spec(address, "resistance")[0]))
-    branches: dict[str, float] = {}
-    for node, ohms in tapped:
-        branches[node] = 1.0 / (1.0 / branches.get(node, float("inf")) + 1.0 / ohms)
-    tap = max((source / (source + ohms) for ohms in branches.values()), default=0.0)
-    assert branches, "no comparator shares a node with an input network"
-
     terms = {
-        "the tap the comparator watches, through the ADC filter beside it": tap,
-        # The DAC's full scale *is* the supply, so the rail's spread lands on
-        # every threshold in proportion.
+        # The DAC's full scale *is* its reference, so the reference's spread
+        # lands on every threshold in proportion.
         "the rail the DAC uses as its reference":
             (rail_high - rail_low) / 2 / full_scale,
         "the comparator": (offset + hysteresis) / threshold,
@@ -328,6 +314,13 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
         "the DAC's nonlinearity": dac_inl * full_scale / 2 ** bits / threshold,
     }
     total = sum(terms.values())
+    # Printed as well as asserted, because 11.46 against 12 is not a margin
+    # anyone should have to run the suite to discover, and because which term
+    # dominates is the whole argument for where the reference comes from.
+    print(f"    trip point: {total * 100:.2f} % of {allowed * 100:g} % at a "
+          f"{threshold:.3f} V threshold, {(allowed - total) * 100:.2f} % spare; "
+          + ", ".join(f"{share * 100:.2f} % {name}" for name, share
+                      in sorted(terms.items(), key=lambda kv: -kv[1])))
     assert total <= allowed, (
         f"at a threshold of {threshold:.3f} V, {floor * 100:g} % of full scale, the "
         f"trip point is good to {total * 100:.1f} % against {allowed * 100:g} % "

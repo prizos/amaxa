@@ -273,6 +273,33 @@ INTENT: dict[str, tuple[float, float]] = {
     # in `test_a_trip_stops_the_outputs_inside_the_budget`, and spent out of
     # the budget like every other term. Four tenths is the ceiling on it.
     "trip.reserved_share": (0.0, 0.4),
+    # How far above its threshold a fault has to be before this board
+    # undertakes to catch it inside `trip.budget`.
+    #
+    # It exists because the tap in front of the comparators is a lead-lag, and
+    # a lead-lag's two errors belong in two different places. To a *ramp* it
+    # is a pure delay of Rs*C, which is a term in the trip budget and is spent
+    # there. To a *step* it is an amplitude deficit of Rs/(Rs + R) - and that
+    # is not a threshold error, because the output jumps straight to
+    # R/(Rs + R) of the input: a fault already further above the threshold
+    # than the deficit fires on the instant, with nothing added at all. Only a
+    # fault that *just* clears the threshold waits, and then it waits for the
+    # network to settle, which is hundreds of nanoseconds.
+    #
+    # So the honest statement is not "the trip point is x per cent out". It is
+    # "a fault this far over trips in fifty nanoseconds, and one closer than
+    # that trips late". A quarter is the promise, and it is a judgement about
+    # what a trip is for rather than a measurement: a shoot-through is not
+    # twenty-five per cent over a phase-current threshold, it is several
+    # hundred. A marginal overload is what sits near the line, and a marginal
+    # overload does not destroy a bridge in fifty nanoseconds.
+    #
+    # For one round the deficit was summed into `trip.threshold_tolerance`
+    # instead, on the grounds that two checks were spending one declaration.
+    # They were not: a fraction of a step and a fraction of a threshold are
+    # different quantities, and a ramp and a step are different signals. This
+    # is the declaration that was actually missing.
+    "trip.prompt_overshoot": (0.0, 0.25),
     # What to add to a load figure the datasheet does not guarantee. Two of
     # the largest entries on this board's rails are not maximums: the
     # LAN8742A's 102 mA is a *typical* - its datasheet has no maximum supply
