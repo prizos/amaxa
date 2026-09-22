@@ -633,3 +633,89 @@ def test_a_cable_ground_tied_straight_to_the_boards_is_one_the_parts_can_afford(
             f"{low:g} to {high:g} V its standard requires, against the "
             f"{margin:g} the tie is justified by"
         )
+
+
+def test_each_bus_pair_is_drawn_the_way_its_rule_claims(buses, pcb_text, board_dir):
+    """
+    Both halves of each bus pair are the same width, and arrive together.
+
+    `rules.kicad_dru` says of these four nets: "they are differential pairs
+    leaving the board on a cable, so they are wider than a signal that stays
+    on it, and the two halves of each pair are the same width as each other -
+    a difference in width is a difference in impedance, and the impedance is
+    the only thing a terminated bus cares about."
+
+    **A `(min ...)` constraint cannot make that true.** It sets a floor, and a
+    floor does not equalise anything: two nets can both clear 0.2 mm at 0.2
+    and 0.4. Nor could any check see it - this file never opened the board
+    file at all, so no width, length or separation was computed for CAN or
+    RS-485 anywhere on this board. The widths agree today only because the
+    layout generator gives both halves the same floor.
+
+    So equality alone would be a check that cannot fail, and the thing that
+    *can* is next to it: `layout.py` computes one width from the **high** half
+    and draws both with it. If a rule ever asked more of the low half - a
+    later rule matching `CAN_L`, or a pattern that catches one name and not
+    the other - the generator would draw it too narrow. So each net's drawn
+    width is held against what its own rule requires, read out of the rules
+    file, which is the comparison the generator's shortcut can lose.
+
+    **What is not claimed, and is not checked, is impedance.** Measured, the
+    two halves of each pair run 2.54 mm apart - header pitch, over 0.19 mm of
+    prepreg - which is not a coupled pair at all but two single-ended traces
+    that happen to be adjacent. That is a legitimate choice at CAN and RS-485
+    edge rates over this distance, and it is why the rule's sentence stops at
+    width. Saying so here is what stops someone reading "differential pair"
+    and assuming a controlled one.
+    """
+    import re as _re
+
+    names = {m.group(1): m.group(2)
+             for m in _re.finditer(r'\(net (\d+) "([^"]*)"\)', pcb_text)}
+    widths: dict[str, set] = {}
+    for block in _re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
+        net = _re.search(r"\(net (\d+)\)", block)
+        width = _re.search(r"\(width ([\d.]+)\)", block)
+        if net and width:
+            widths.setdefault(names.get(net.group(1), ""), set()).add(float(width.group(1)))
+
+    # What each net's own rules ask of it, from the rules file rather than
+    # from the generator that consumed it.
+    import fnmatch
+
+    required: list[tuple[str, float]] = []
+    text = (board_dir / "rules.kicad_dru").read_text()
+    for block in text.split("(rule ")[1:]:
+        condition = _re.search(r'\(condition "([^"]*)"\)', block)
+        width = _re.search(r"\(constraint track_width \(min ([\d.]+)mm\)\)", block)
+        if not (condition and width):
+            continue
+        for pattern in _re.findall(r"A\.NetName == '([^']*)'", condition.group(1)):
+            required.append((pattern, float(width.group(1))))
+    assert required, "no track_width rules found to check against"
+
+    problems = []
+    for bus, (_, _, pair) in sorted(buses.items()):
+        assert len(pair) == 2, f"{bus} is {pair}, not a pair"
+        drawn = [widths.get(net, set()) for net in pair]
+        for net, found in zip(pair, drawn):
+            assert found, f"{net} has no copper on the board"
+        if drawn[0] != drawn[1]:
+            problems.append(
+                f"  {bus}: {pair[0]} is drawn at {sorted(drawn[0])} mm and "
+                f"{pair[1]} at {sorted(drawn[1])} mm - the rule says both "
+                f"halves are the same width as each other"
+            )
+        for net, found in zip(pair, drawn):
+            wants = max([0.0] + [w for pattern, w in required
+                                 if fnmatch.fnmatchcase(net, pattern)])
+            if min(found) < wants - 1e-9:
+                problems.append(
+                    f"  {bus}: {net} is drawn at {min(found):g} mm and its own "
+                    f"rule asks for {wants:g} mm. The layout takes one width "
+                    f"from the pair's high half and draws both with it, so a "
+                    f"rule that asks more of the other half is lost"
+                )
+    assert not problems, (
+        "Bus pairs whose halves are drawn differently:\n" + "\n".join(problems)
+    )
