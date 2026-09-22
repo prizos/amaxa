@@ -181,7 +181,7 @@
 #define PIN_TRIP1_N_PIN GPIO_PIN_15
 #define PIN_TRIP1_N_AF GPIO_AF1_TIM1
 
-/* FAULT1_N: TIM1_BKIN2 on PE6, pin 5. gate-driver fault, active low */
+/* FAULT1_N: TIM1_BKIN2 on PE6, pin 5. gate-driver fault, active low - so it idles high, and a board with no power stage reads as no fault. Pulled low it would hold the trip bus down through its own Schottky and the board would never leave the tripped state */
 #define PIN_FAULT1_N_PORT GPIOE
 #define PIN_FAULT1_N_PIN GPIO_PIN_6
 #define PIN_FAULT1_N_AF GPIO_AF1_TIM1
@@ -226,7 +226,7 @@
 #define PIN_TRIP2_N_PIN GPIO_PIN_2
 #define PIN_TRIP2_N_AF GPIO_AF3_TIM8
 
-/* FAULT2_N: TIM8_BKIN2 on PG3, pin 88. gate-driver fault, active low */
+/* FAULT2_N: TIM8_BKIN2 on PG3, pin 88. gate-driver fault, active low; as FAULT1_N */
 #define PIN_FAULT2_N_PORT GPIOG
 #define PIN_FAULT2_N_PIN GPIO_PIN_3
 #define PIN_FAULT2_N_AF GPIO_AF3_TIM8
@@ -385,35 +385,35 @@
 #define PIN_GATE_ENABLE_PORT GPIOD
 #define PIN_GATE_ENABLE_PIN GPIO_PIN_7
 
-/* RELAY1: GPIO output on PG0, pin 56 */
+/* RELAY1: GPIO output on PG0, pin 56. a pin nobody is driving must not close a contactor */
 #define PIN_RELAY1_PORT GPIOG
 #define PIN_RELAY1_PIN GPIO_PIN_0
 
-/* RELAY2: GPIO output on PG1, pin 57 */
+/* RELAY2: GPIO output on PG1, pin 57. as RELAY1 */
 #define PIN_RELAY2_PORT GPIOG
 #define PIN_RELAY2_PIN GPIO_PIN_1
 
-/* STO1_FEEDBACK: GPIO input on PG9, pin 124 */
+/* STO1_FEEDBACK: GPIO input on PG9, pin 124. safe torque off: nothing attached reads as not permitted */
 #define PIN_STO1_FEEDBACK_PORT GPIOG
 #define PIN_STO1_FEEDBACK_PIN GPIO_PIN_9
 
-/* STO2_FEEDBACK: GPIO input on PG10, pin 125 */
+/* STO2_FEEDBACK: GPIO input on PG10, pin 125. as STO1 */
 #define PIN_STO2_FEEDBACK_PORT GPIOG
 #define PIN_STO2_FEEDBACK_PIN GPIO_PIN_10
 
-/* ID_STRAP0: GPIO input on PE2, pin 1 */
+/* ID_STRAP0: GPIO input on PE2, pin 1. the power board grounds whichever straps it wants, so all ones is no board */
 #define PIN_ID_STRAP0_PORT GPIOE
 #define PIN_ID_STRAP0_PIN GPIO_PIN_2
 
-/* ID_STRAP1: GPIO input on PE3, pin 2 */
+/* ID_STRAP1: GPIO input on PE3, pin 2. as ID_STRAP0 */
 #define PIN_ID_STRAP1_PORT GPIOE
 #define PIN_ID_STRAP1_PIN GPIO_PIN_3
 
-/* ID_STRAP2: GPIO input on PE4, pin 3 */
+/* ID_STRAP2: GPIO input on PE4, pin 3. as ID_STRAP0 */
 #define PIN_ID_STRAP2_PORT GPIOE
 #define PIN_ID_STRAP2_PIN GPIO_PIN_4
 
-/* ID_STRAP3: GPIO input on PE5, pin 4 */
+/* ID_STRAP3: GPIO input on PE5, pin 4. as ID_STRAP0 */
 #define PIN_ID_STRAP3_PORT GPIOE
 #define PIN_ID_STRAP3_PIN GPIO_PIN_5
 

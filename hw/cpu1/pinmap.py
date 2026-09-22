@@ -106,7 +106,8 @@ PINS = [
     # that decision on this board, where it does not belong.
     Pin("PE14", "TIM1_CH4", "PWM1_CH4", note="single-ended: no complementary pair, no dead time"),
     Pin("PE15", "TIM1_BKIN", "TRIP1_N", net="TRIP_N", note="from the hardware trip latch, active low"),
-    Pin("PE6", "TIM1_BKIN2", "FAULT1_N", note="gate-driver fault, active low"),
+    Pin("PE6", "TIM1_BKIN2", "FAULT1_N", idle="3V3",
+        note="gate-driver fault, active low - so it idles high, and a board with no power stage reads as no fault. Pulled low it would hold the trip bus down through its own Schottky and the board would never leave the tripped state"),
 
     # --- PWM: TIM8, the same again --------------------------------------------
     Pin("PC6", "TIM8_CH1", "PWM2_A_HIGH"),
@@ -117,7 +118,8 @@ PINS = [
     Pin("PB15", "TIM8_CH3N", "PWM2_C_LOW"),
     Pin("PC9", "TIM8_CH4", "PWM2_CH4", note="single-ended: no complementary pair, no dead time"),
     Pin("PG2", "TIM8_BKIN", "TRIP2_N", net="TRIP_N", note="one latch output, one node, both timers"),
-    Pin("PG3", "TIM8_BKIN2", "FAULT2_N", note="gate-driver fault, active low"),
+    Pin("PG3", "TIM8_BKIN2", "FAULT2_N", idle="3V3",
+        note="gate-driver fault, active low; as FAULT1_N"),
 
     # --- analog ------------------------------------------------------------------
     Pin("PF11", "ADC1_INP2", "FAST1", note="simultaneous with FAST2"),
@@ -184,14 +186,17 @@ PINS = [
     # Two relay drives, not a pre-charge and a main contactor. Which one is
     # which - if the power board has relays at all - is that board's
     # business, read from the ID straps and configured in firmware.
-    Pin("PG0", "GPIO", "RELAY1", "out"),
-    Pin("PG1", "GPIO", "RELAY2", "out"),
-    Pin("PG9", "GPIO", "STO1_FEEDBACK", "in"),
-    Pin("PG10", "GPIO", "STO2_FEEDBACK", "in"),
-    Pin("PE2", "GPIO", "ID_STRAP0", "in"),
-    Pin("PE3", "GPIO", "ID_STRAP1", "in"),
-    Pin("PE4", "GPIO", "ID_STRAP2", "in"),
-    Pin("PE5", "GPIO", "ID_STRAP3", "in"),
+    Pin("PG0", "GPIO", "RELAY1", "out", idle="GND",
+        note="a pin nobody is driving must not close a contactor"),
+    Pin("PG1", "GPIO", "RELAY2", "out", idle="GND", note="as RELAY1"),
+    Pin("PG9", "GPIO", "STO1_FEEDBACK", "in", idle="GND",
+        note="safe torque off: nothing attached reads as not permitted"),
+    Pin("PG10", "GPIO", "STO2_FEEDBACK", "in", idle="GND", note="as STO1"),
+    Pin("PE2", "GPIO", "ID_STRAP0", "in", idle="3V3",
+        note="the power board grounds whichever straps it wants, so all ones is no board"),
+    Pin("PE3", "GPIO", "ID_STRAP1", "in", idle="3V3", note="as ID_STRAP0"),
+    Pin("PE4", "GPIO", "ID_STRAP2", "in", idle="3V3", note="as ID_STRAP0"),
+    Pin("PE5", "GPIO", "ID_STRAP3", "in", idle="3V3", note="as ID_STRAP0"),
 
     # --- people -------------------------------------------------------------------------
     Pin("PE1", "GPIO", "LED_STATUS", "out"),

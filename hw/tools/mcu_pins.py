@@ -60,6 +60,21 @@ class Pin:
     header has a macro per pin. This is what keeps those two facts apart.
     """
 
+    idle: str = ""
+    """
+    For a connector signal, the rail it must be pulled to with nothing
+    attached: `3V3` or `GND`.
+
+    An unfitted or unplugged power board must not read as permission, and
+    which rail that means is a property of the *signal*, not of the copper -
+    a fault line is active low so it idles high, a safe-torque-off feedback
+    idles low, a strap floats to the code that means "no board". It lives
+    here because the pin map is where what a signal means is written down;
+    `checks/test_safety.py` held the same ten facts as a dictionary of its
+    own, which is a table of beliefs inside the thing that was supposed to be
+    checking them.
+    """
+
     note: str = ""
 
     @property

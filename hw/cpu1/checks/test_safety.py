@@ -1133,12 +1133,23 @@ def test_every_connector_signal_is_defined_with_nothing_attached(
     which is the one that looks wrong until you notice a board with no power
     stage cannot have a gate-driver fault.
     """
-    expected = {
-        "ID_STRAP0": "3V3", "ID_STRAP1": "3V3", "ID_STRAP2": "3V3", "ID_STRAP3": "3V3",
-        "FAULT1_N": "3V3", "FAULT2_N": "3V3",
-        "STO1_FEEDBACK": "GND", "STO2_FEEDBACK": "GND",
-        "RELAY1": "GND", "RELAY2": "GND",
-    }
+    # **From the pin map, not from a dictionary here.** These ten facts used
+    # to be written out in this file - the only check on the idle polarity of
+    # the straps, the fault lines, the safe-torque-off feedback and the relay
+    # commands, and its own table of what it expected to find. A check whose
+    # expectation is a list somebody typed agrees with a mistake made twice,
+    # which is how a hand-written polarity table once enforced a backwards
+    # reverse-polarity FET on this board.
+    #
+    # The pin map is where what a signal *means* is recorded, so the intended
+    # idle rail lives there with the sentence that justifies it, and this
+    # compares the copper against it. Two artefacts, written for different
+    # reasons, that have to agree.
+    expected = {pin.net_name: pin.idle for pin in pin_map.PINS if pin.idle}
+    assert len(expected) >= 10, (
+        f"only {len(expected)} pins declare an idle rail; this check is about "
+        f"the connector signals and there are ten of them"
+    )
     wrong = []
     for net, rail in expected.items():
         pulls = _through_resistor(design, pad_net, net)
