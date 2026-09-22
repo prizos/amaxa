@@ -1271,6 +1271,25 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
                         f"{rated * 1e3:g} mW and derated to "
                         f"{rated * _derating(spec) * 1e3:.0f}")
 
+            # And the voltage across it under that same fault, which is not
+            # the same question as the power. A thick-film chip has a working
+            # voltage limit set by the film's length, and an 0402 is 50 V
+            # against the 58 the CAN part declares: the termination could be
+            # inside its power rating and still be flashed over. The rating is
+            # declared on the two terminations and nowhere else, because these
+            # are the only resistors on the board a bus fault reaches.
+            if spec_has(address, "max_voltage"):
+                standoff, _ = spec(address, "max_voltage")
+                if fault > standoff:
+                    unprotected.append(
+                        f"  {address}: {fault:g} V across a part rated "
+                        f"{standoff:g} V if {transceiver}'s bus is driven to "
+                        f"its declared fault voltage")
+            else:
+                unprotected.append(
+                    f"  {address}: on {transceiver}'s bus with no max_voltage "
+                    f"declared, and the fault it must stand off is {fault:g} V")
+
             power = fault**2 / resistance
             if power <= rated * _derating(spec):
                 continue
@@ -1294,18 +1313,22 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
                     f"jumpers as they ship it still runs from "
                     f"{', '.join(sorted(left))} to {', '.join(sorted(right))}")
     # And what it dissipates when somebody *does* close the jumper, driving
-    # normally. That is the configuration these parts exist for, and until now
-    # the only case computed was the bus fault - which the open jumper
-    # excuses, so nothing ever evaluated the intended use.
-    # **Reported, and recorded in BLOCKING rather than asserted.** All three
-    # of these fail today and the board cannot be made to pass by arithmetic:
-    # RS-485's 120 ohm takes 103 mW from a part rated 62.5, and CAN's two
-    # 60.4 ohm take 46 mW each against a 31 mW derated limit. Fixing it needs
-    # bigger parts in a column that is already full, or a duty-cycle argument
-    # this board has nowhere to state. Asserting it would mean disabling the
-    # assertion; leaving it silent would mean the arithmetic was never done.
-    for line in sorted(set(working)):
-        print("    termination in normal use -" + line)
+    # normally. That is the configuration these parts exist for, and for a
+    # while the only case computed was the bus fault - which the open jumper
+    # excuses, so nothing evaluated the intended use.
+    #
+    # **This was reported rather than asserted, and recorded in BLOCKING.**
+    # Every termination failed it: RS-485's 120 ohm took 103 mW from an 0402
+    # rated 62.5, and CAN's two 60.4 ohm took 46 mW each against a 31 mW
+    # derated limit. The answer was a bigger package - a 1206 for RS-485 and
+    # 0805s for CAN's two halves - and once the parts could do the job there
+    # was no reason to keep printing it instead of holding them to it.
+    assert not working, (
+        "Terminations past their rating with their own driver on the bus:\n"
+        + "\n".join(sorted(set(working)))
+        + "\nA termination behind a jumper still has to survive the jumper "
+          "being closed, which is the only reason it is fitted."
+    )
     assert not unprotected, (
         "Terminations a declared fault destroys, fitted with nothing open in the "
         "way:\n" + "\n".join(sorted(set(unprotected)))

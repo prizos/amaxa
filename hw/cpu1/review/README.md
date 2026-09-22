@@ -11,7 +11,7 @@ soldered underneath it. This is the board as it stands, plotted from the same
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
 | **Footprints** | 272 |
 | **Nets** | 197 |
-| **Routing** | 1325 track segments, 599 vias, 4 zones |
+| **Routing** | 1327 track segments, 601 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -354,9 +354,9 @@ schematic after the fact.
 | `J5` | `can.header` | bus | PZ254-1-03-Z-8.5 | C2894926 | `PinHeader_1x03_P2.54mm_Vertical` |
 | `JP1` | `can.termination_jumper` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
 | `JP3` | `can.termination_jumper_low` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
-| `R77` | `can.termination_lower` | 60R4 | 0402WGF604JTCE | C60310 | `R_0402_1005Metric` |
+| `R77` | `can.termination_lower` | 60R4 | 0805W8F604JT5E | C72998 | `R_0805_2012Metric` |
 | `C57` | `can.termination_split` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
-| `R97` | `can.termination_upper` | 60R4 | 0402WGF604JTCE | C60310 | `R_0402_1005Metric` |
+| `R97` | `can.termination_upper` | 60R4 | 0805W8F604JT5E | C72998 | `R_0805_2012Metric` |
 | `U16` | `can.transceiver` | TCAN1044V | TCAN1044VDRQ1 | C1852061 | `SOIC-8_3.9x4.9mm_P1.27mm` |
 
 #### RS-485
@@ -366,7 +366,7 @@ schematic after the fact.
 | `C58` | `rs485.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `J6` | `rs485.header` | bus | PZ254-1-03-Z-8.5 | C2894926 | `PinHeader_1x03_P2.54mm_Vertical` |
 | `R94` | `rs485.r_de_pulldown` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
-| `R78` | `rs485.termination` | 120R | 0402WGF1200TCE | C25079 | `R_0402_1005Metric` |
+| `R78` | `rs485.termination` | 120R | 1206W4F1200T5E | C17909 | `R_1206_3216Metric` |
 | `JP2` | `rs485.termination_jumper` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
 | `U17` | `rs485.transceiver` | THVD1450 | THVD1450DR | C2671361 | `SOIC-8_3.9x4.9mm_P1.27mm` |
 

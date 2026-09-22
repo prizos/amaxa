@@ -909,13 +909,28 @@ SOLDER_JUMPER = PartSpec(
     manufacturer="-", mpn="SOLDER-JUMPER-2", lcsc=None, value="open",
 )
 
-RES_60R4_0402 = PartSpec(
-    **_R0402, mpn="0402WGF604JTCE", lcsc="C60310", value="60R4",
-    params={"resistance": pm(60.4, 0.01), "max_power": exact(0.0625)},
+# The two bus terminations, and the only two resistors on this board that are
+# not 0402. They are bigger because they are the only two that carry their own
+# transceiver's output: an 0402 is 62.5 mW and 50 V, and closing either jumper
+# puts 46 mW into each CAN half and 103 mW into the RS-485 one, with 58 V
+# across the CAN pair under the fault its own datasheet declares. Two of those
+# three numbers are past an 0402 before any derating at all.
+#
+# `max_voltage` is declared only here. Every other resistor on the board is
+# rated 50 V too, and nothing can drive 50 V across any of them; these are the
+# ones a bus fault reaches, so these are the ones where the figure is a limit
+# rather than a fact about the reel.
+RES_60R4_0805 = PartSpec(
+    symbol="Device:R", footprint="R0805:R_0805_2012Metric", prefix="R",
+    manufacturer="UNI-ROYAL", mpn="0805W8F604JT5E", lcsc="C72998", value="60R4",
+    params={"resistance": pm(60.4, 0.01), "max_power": exact(0.125),
+            "max_voltage": exact(150.0)},
 )
-RES_120R_0402 = PartSpec(
-    **_R0402, mpn="0402WGF1200TCE", lcsc="C25079", value="120R",
-    params={"resistance": pm(120, 0.01), "max_power": exact(0.0625)},
+RES_120R_1206 = PartSpec(
+    symbol="Device:R", footprint="R1206:R_1206_3216Metric", prefix="R",
+    manufacturer="UNI-ROYAL", mpn="1206W4F1200T5E", lcsc="C17909", value="120R",
+    params={"resistance": pm(120, 0.01), "max_power": exact(0.25),
+            "max_voltage": exact(200.0)},
 )
 CAP_4N7_0402 = PartSpec(
     **_C0402, manufacturer="FH", mpn="0402B472K500NT", lcsc="C1538", value="4.7nF",

@@ -2544,13 +2544,20 @@ def _field_buses() -> None:
     # a single pitch has to size for and then wastes on the resistors. The
     # CAN connector moved a millimetre and a half south for the rest of the
     # room; further south and its courtyard reaches the RS-485 transceiver.
-    for prefix, first, names in (
-        ("can", -24.0, ("termination_jumper", "termination_upper", "termination_lower")),
-        ("rs485", -41.5, ("termination_jumper", "termination")),
+    # The pitch is per part rather than per chain, because the parts are no
+    # longer all the same size. The two terminations are the only resistors on
+    # this board that are not 0402 - a 1206 for RS-485 and two 0805s for CAN -
+    # and a 1206 standing on end is 4.2 mm of courtyard against an 0402's 1.0.
+    # One pitch that clears the largest wastes the difference on every other
+    # part, in a window that is 9 mm tall at the RS-485 end.
+    for prefix, places in (
+        ("can", (("termination_jumper", -23.6),
+                 ("termination_upper", -27.0),
+                 ("termination_lower", -30.5))),
+        ("rs485", (("termination", -43.0),)),
     ):
-        for index, name in enumerate(names):
-            PLACEMENT[f"{prefix}.{name}"] = (CHAIN_X,
-                                             round(first - index * 3.5, 4), 90)
+        for name, y in places:
+            PLACEMENT[f"{prefix}.{name}"] = (CHAIN_X, y, 90)
             LABELS[f"{prefix}.{name}"] = (-1.6, 0.0)
     # CAN's low leg has a jumper of its own and it does not go in the column.
     # A fourth part there has nowhere to stand: the transceiver's CAN_L leg
@@ -2560,6 +2567,15 @@ def _field_buses() -> None:
     # one pad on the lane and the other reached under it on the back layer.
     PLACEMENT["can.termination_jumper_low"] = (11.3, -30.7, 0)
     LABELS["can.termination_jumper_low"] = (0.0, -1.6)
+    # And RS-485's jumper leaves the column for the same reason, now that what
+    # stands beside it is a 1206. The window is bounded above by the
+    # transceiver's own A leg crossing at -39.365 and below by the connector's
+    # courtyard at -46.62: seven millimetres, against the 1.65 + 2.28 of
+    # courtyard a jumper and a 1206 need between their centres plus the
+    # clearance at each end. It does not fit, and the jumper is the half that
+    # can be reached from beside the lane.
+    PLACEMENT["rs485.termination_jumper"] = (11.3, -41.0, 0)
+    LABELS["rs485.termination_jumper"] = (0.0, -1.6)
     PLACEMENT["can.termination_split"] = (14.0, _split_tap_y(), 0)
     LABELS["can.termination_split"] = (0.0, -1.6)
 
@@ -2637,6 +2653,15 @@ def _field_bus_routes() -> None:
         # The termination taps each lane where it passes.
         ROUTES.append((high, width, F, [
             (high_lane, _point(f"{jumper}:1")[1]), f"{jumper}:1"]))
+        if prefix == "rs485":
+            # The jumper stands beside the lane rather than in the column, so
+            # what joins it to the resistor has to pass under the lane.
+            y = _point(f"{jumper}:2")[1]
+            path("RS485_TERM", width, [
+                (F, [f"{rest[0]}:1", (CHAIN_X, y)]),
+                (B, [(CHAIN_X, y), (12.6, y)]),
+                (F, [(12.6, y), f"{jumper}:2"]),
+            ])
         if prefix == "can":
             # Down past the connector's row on the back layer, out from under
             # the lane, and up into the jumper that stands beside it.
@@ -2650,7 +2675,7 @@ def _field_bus_routes() -> None:
         else:
             ROUTES.append((low, width, F, [
                 f"{rest[-1]}:2", (low_lane, _point(f"{rest[-1]}:2")[1])]))
-        links = [(f"{jumper}:2", f"{rest[0]}:1")]
+        links = [] if prefix == "rs485" else [(f"{jumper}:2", f"{rest[0]}:1")]
         links += [(f"{a}:2", f"{b}:1") for a, b in zip(rest, rest[1:])]
         for one, other in links:
             net = NET_AT.get(tuple(one.split(":")))

@@ -1576,8 +1576,8 @@ def field_buses(v3v3, gnd, nets) -> None:
     # and that counter reached 76. Two parts asking for one designator is a
     # designator SKiDL renames, silently, and a board that then carries a
     # reference no assembly house will accept.
-    upper = part(parts.RES_60R4_0402, "can.termination_upper", "R97")
-    lower = part(parts.RES_60R4_0402, "can.termination_lower", "R77")
+    upper = part(parts.RES_60R4_0805, "can.termination_upper", "R97")
+    lower = part(parts.RES_60R4_0805, "can.termination_lower", "R77")
     split = part(parts.CAP_4N7_0402, "can.termination_split", "C57")
     canh += jumper[1]
     Net("CAN_TERM").connect(jumper[2], upper[1])
@@ -1618,7 +1618,7 @@ def field_buses(v3v3, gnd, nets) -> None:
     gnd += rs485_header[3]
 
     rs485_jumper = part(parts.SOLDER_JUMPER, "rs485.termination_jumper", "JP2")
-    termination = part(parts.RES_120R_0402, "rs485.termination", "R78")
+    termination = part(parts.RES_120R_1206, "rs485.termination", "R78")
     bus_a += rs485_jumper[1]
     Net("RS485_TERM").connect(rs485_jumper[2], termination[1])
     bus_b += termination[2]

@@ -43,28 +43,6 @@ BLOCKING: dict[str, str] = {
         "measurement on the first assembled board. Until then the 3V3 rail's "
         "input ripple and its loop stability are both unverified."
     ),
-    "the bus terminations cannot take their own driver's output if anyone "
-    "fits them": (
-        "Both terminations ship behind a jumper that is open, so a board as "
-        "delivered is not affected - but they exist to be closed, and closing "
-        "one runs the resistor past its rating. The figures are now recorded "
-        "and the arithmetic is in "
-        "`test_a_bus_termination_survives_the_fault_its_transceiver_declares`, "
-        "which prints them.\n\n"
-        "The THVD1450 drives up to 3.5 V differential into 54 ohm, so across "
-        "the 120 ohm this board fits that is 103 mW in a part rated 62.5 - "
-        "past the absolute maximum, not merely past the board's own 50 % "
-        "derating. The TCAN1044V drives up to 3.3 V, which puts 46 mW into "
-        "each of the two 60.4 ohm halves: inside the 62.5 mW absolute rating "
-        "and past the 31 mW derated one.\n\n"
-        "Only the fault case was ever computed, and the open jumper excused "
-        "it, so the configuration these parts exist for was never evaluated. "
-        "Resolving it means a package with the power to do the job - 120 ohm "
-        "at 103 mW wants a 1206 to keep the derating - or splitting each "
-        "termination across several 0402s, or a stated transmit duty cycle "
-        "this board has nowhere to declare. All three are decisions, and the "
-        "column the chain stands in is already full."
-    ),
 }
 
 # Checks that must actually run for this board, common and board-specific.

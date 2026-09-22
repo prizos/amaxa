@@ -80,10 +80,9 @@ drill and IPC-D-356, `make reproducible` regenerating the same board, `make
 offline` building with every network call refused, both firmware BSPs
 compiling, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` empty.
 
-**It is not ready to order, and `checks/config.py` says why.** Two entries in
-`BLOCKING`: the converters' capacitance is checked at nominal with nothing on
-this board knowing what DC bias does to it, and the bus terminations cannot
-take their own driver's output if anyone closes their jumper.
+**It is not ready to order, and `checks/config.py` says why.** One entry in
+`BLOCKING`: the converters' capacitance is checked at nominal, and nothing on
+this board knows what DC bias does to it.
 
 The analog inputs' over-voltage was a third and is not any more. The board
 used to hand the power board's sensors 5 V through a bead and take their
