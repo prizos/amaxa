@@ -109,10 +109,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "is, turning off, is disable_time_max, which the trip budget uses"
     ),
     ("safety.buffer2", "enable_time_max"): "as buffer1: turning on is not timed",
-    ("safety.buffer2", "disable_time_max"): (
-        "both buffers are the same part, so the trip budget is worked with one "
-        "of them. This is the second copy of the same 7 ns"
-    ),
     ("safety.buffer1", "input_low_voltage_max"): (
         "0.8 V, against what the MCU's pins drive low to - which the pages of "
         "ST's datasheet read for this board do not state. The high side is "
@@ -120,13 +116,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "bring-up that VDDA's current needs"
     ),
     ("safety.buffer2", "input_low_voltage_max"): "as buffer1",
-    ("safety.buffer2", "propagation_delay_max"): (
-        "both buffers are the same part; the skew check works with one set of "
-        "timings and this is the second copy"
-    ),
-    ("safety.buffer2", "output_skew_max"): "as buffer1's, and the same part",
-    ("safety.buffer2", "output_current_max"): "as buffer1's, and the same part",
-    ("safety.buffer2", "total_output_current_max"): "as buffer1's, and the same part",
     ("usb.receptacle", "current_rating"): (
         "5 A per contact against a port that draws none: VBUS reaches a sense "
         "pin and a clamp and stops there, which is the whole design of it. "

@@ -925,7 +925,11 @@ def test_a_trip_stops_the_outputs_inside_the_budget(
     """
     _, trip_budget = spec("trip", "budget")
     latch, _ = spec(LATCH, "preset_to_output_max")
-    buffer_off, _ = spec(BUFFERS[0], "disable_time_max")
+    # The slower of the two packages, not the first one declared. Every
+    # per-part figure here used to be read off BUFFERS[0], so a second
+    # buffer with any rating at all - a millisecond to disable, a
+    # microamp of drive - changed no outcome on this board.
+    buffer_off = max(spec(address, "disable_time_max")[0] for address in BUFFERS)
     spent = latch + buffer_off
     assert spent < trip_budget, (
         f"the latch and the buffer take {spent * 1e9:.1f} ns of a "
@@ -1116,8 +1120,10 @@ def test_the_buffers_drive_less_than_they_are_rated_for(design, pad_net, spec):
     when each one looks free.
     """
     _, rail = spec("rail.3v3", "voltage")
-    per_output, _ = spec(BUFFERS[0], "output_current_max")
-    total_rating, _ = spec(BUFFERS[0], "total_output_current_max")
+    # The weakest package, because both are held to these.
+    per_output = min(spec(address, "output_current_max")[0] for address in BUFFERS)
+    total_rating = min(spec(address, "total_output_current_max")[0]
+                       for address in BUFFERS)
     for address in BUFFERS:
         total = 0.0
         for owner, _, source, drain in _buffer_channels(design, pad_net):
@@ -1200,7 +1206,7 @@ def test_the_gate_kill_stays_inside_its_ratings(design, pad_net, spec):
     to_buffer = min(spec(address, "resistance")[0] for address, _ in driving)
 
     contention = rail / (to_buffer + drain_ohms + channel)
-    allowed, _ = spec(BUFFERS[0], "output_current_max")
+    allowed = min(spec(address, "output_current_max")[0] for address in BUFFERS)
     assert contention <= allowed, (
         f"holding {killed} down takes {contention * 1e3:.1f} mA from the buffer "
         f"through {to_buffer:g} + {drain_ohms:g} ohm, against {allowed * 1e3:g} mA "
@@ -1255,12 +1261,27 @@ def test_complementary_pwm_outputs_go_through_the_same_buffer(design, pad_net, s
     This is why the channel assignment is not arbitrary. Inside a '541 the
     outputs are matched to a nanosecond; between two of them the only bound is
     each one's own propagation window, which is nearly four nanoseconds wide.
-    Dead time has to cover whatever this is, and a bridge sees the difference as
-    shoot-through the moment it does not.
+
+    **The reason this docstring used to give does not hold.** It said "dead
+    time has to cover whatever this is, and a bridge sees the difference as
+    shoot-through the moment it does not" - but the part-to-part spread is
+    4.1 ns against the *shortest* dead time this board declares, 500 ns, which
+    covers it a hundred and twenty times over. The figure appeared in the
+    failure message and was compared against nothing, which is how a claim
+    like that survives.
+
+    The requirement stands and the assertion below is unchanged: putting a
+    bridge's two halves in one package costs nothing and removes a variable
+    from a signal whose whole job is to not overlap. What changed is that it
+    is now kept for that reason rather than for an arithmetic one that does
+    not hold, and both timing figures are held against dead time so the
+    numbers in the message mean something.
     """
     dead_time, _ = spec("pwm", "dead_time")
-    within, _ = spec(BUFFERS[0], "output_skew_max")
-    delay_max, _ = spec(BUFFERS[0], "propagation_delay_max")
+    # Worst case across the packages: the widest skew and the longest delay,
+    # which on a mixed-part board need not come from the same one.
+    within = max(spec(address, "output_skew_max")[0] for address in BUFFERS)
+    delay_max = max(spec(address, "propagation_delay_max")[0] for address in BUFFERS)
     between = delay_max - within
 
     buffer_of = {}
@@ -1282,6 +1303,16 @@ def test_complementary_pwm_outputs_go_through_the_same_buffer(design, pad_net, s
     assert within < dead_time / 10, (
         f"{within * 1e9:g} ns of skew against {dead_time * 1e9:.0f} ns of dead time"
     )
+    # And the part-to-part figure, which used to appear only in the message
+    # above. Holding it here is what makes the docstring's claim checkable:
+    # if a slower buffer ever made this comparable to dead time, the pairing
+    # above would stop being belt-and-braces and start being load-bearing.
+    assert between < dead_time, (
+        f"{between * 1e9:.1f} ns between two packages against "
+        f"{dead_time * 1e9:.0f} ns of dead time - at that point the pairing "
+        f"above is the only thing preventing shoot-through, and one check is "
+        f"too few for that"
+    )
 
 
 def test_the_connector_is_rated_for_everything_that_can_drive_it(design, pad_net, spec):
@@ -1294,7 +1325,7 @@ def test_the_connector_is_rated_for_everything_that_can_drive_it(design, pad_net
     connector might be a flat cable with a tenth of the rating.
     """
     contact, _ = spec(HEADER, "current_rating")
-    source, _ = spec(BUFFERS[0], "output_current_max")
+    source = max(spec(address, "output_current_max")[0] for address in BUFFERS)
     assert contact > source, (
         f"a contact carries {contact:g} A and a buffer output can source "
         f"{source:g} A into it"
