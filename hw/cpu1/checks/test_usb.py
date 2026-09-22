@@ -412,7 +412,7 @@ def test_the_pair_arrives_together(spec, stack, lengths, pair_tracks):
 PAIR_NETS = ("USB_DP", "USB_DM")
 
 
-def test_the_pair_runs_over_the_plane_that_returns_it(board_dir, pcb_text):
+def test_the_pair_runs_over_the_plane_that_returns_it(board_dir, pcb_text, spec):
     """
     The layer every pair is on has an unbroken ground plane next to it.
 
@@ -463,4 +463,26 @@ def test_the_pair_runs_over_the_plane_that_returns_it(board_dir, pcb_text):
         f"pairs run on {unbacked}, and no ground plane is next to "
         f"{'that layer' if len(unbacked) == 1 else 'those layers'}. "
         f"Ground is on {ground}."
+    )
+
+    # **And that assertion cannot fail on this stackup**, which is worth
+    # saying rather than leaving to be discovered. With ground on In1 and In4,
+    # `backed()` is true of F.Cu, In2, In3 and B.Cu and false only of the two
+    # ground pours themselves - and a pair cannot be routed on a pour. So no
+    # routing decision reaches it. It is kept because it is the assertion that
+    # *would* start failing on a stackup with one ground plane, which is the
+    # board this came from.
+    #
+    # What can fail is below: where a pair changes layer its return has to
+    # change plane with it, and the only thing that carries a return across
+    # that boundary is a ground via near the crossing. On this board the USB
+    # pair never changes layer, so the requirement is the stronger and simpler
+    # one - it stays where it started.
+    _, reach = spec("routing", "reference_change_distance")
+    assert len(carrying) == 1, (
+        f"the pair is routed on {carrying}, and every change of layer hands "
+        f"its return to a different plane. Either keep it on one layer, or "
+        f"put a ground via within {reach:g} mm of each crossing and say so "
+        f"here - this check asserts the simpler thing because the board does "
+        f"the simpler thing."
     )

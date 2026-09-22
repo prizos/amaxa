@@ -1179,3 +1179,62 @@ def test_the_crossing_solver_finds_where_a_track_enters_and_leaves():
     (x, y), = _edge_crossings(box, (-1.0, 5.0), (5.0, 5.0))
     assert abs(x) < 1e-9 and abs(y - 5.0) < 1e-9, f"crossed at ({x}, {y}), expected (0, 5)"
 
+
+
+def test_the_generator_and_drc_resolve_an_overlapping_rule_the_same_way(board_dir, nets):
+    """
+    Where two rules match one net, the width the generator draws is the width
+    DRC will hold that net to.
+
+    **They resolve overlaps by different algorithms.** KiCad applies the
+    *last* matching rule in the file - later rules override earlier ones -
+    while `layout.py`'s `_width_for` takes the **maximum** over every match.
+    Six patterns on this board overlap: `SW*` with `SW_5V`, `TRIP*` with
+    `TRIP_LEVEL_*`, `BOARD_ID*` with `*_SENSE`, `USB_*` with the usb pair,
+    `ETH_*` with the ethernet pairs, and `PWM*` with the safety chain.
+
+    They agree today only because every later rule happens to be *wider* than
+    the earlier one it overlaps, which makes last-match and maximum the same
+    number. Nothing held them to that. A rule added or reordered so that a
+    later one is narrower would have the generator draw a track wider than
+    DRC requires - harmless - or, if the patterns were the other way round,
+    draw one DRC then rejects, which is a build that fails a long way from
+    its cause.
+
+    This compares the two algorithms over every net actually on the board, so
+    the coincidence has to keep holding or say so.
+    """
+    import fnmatch
+    import re as _re
+
+    text = (board_dir / "rules.kicad_dru").read_text()
+    ordered: list[tuple[str, float]] = []
+    for block in _re.findall(r"\(rule\b.*?\(severity", text, _re.S):
+        width = _re.search(r"\(constraint track_width \(min ([\d.]+)mm\)\)", block)
+        if not width:
+            continue
+        for pattern in _re.findall(r"A\.NetName == '([^']+)'", block):
+            ordered.append((pattern, float(width.group(1))))
+    assert ordered, "no track_width rules to compare"
+
+    disagree = []
+    for net in sorted(nets):
+        matched = [(pattern, w) for pattern, w in ordered
+                   if fnmatch.fnmatchcase(net, pattern)]
+        if len(matched) < 2:
+            continue
+        last = matched[-1][1]                    # what KiCad applies
+        widest = max(w for _, w in matched)      # what the generator draws
+        if abs(last - widest) > 1e-9:
+            disagree.append(
+                f"  {net}: matches {[p for p, _ in matched]}; DRC applies the "
+                f"last at {last:g} mm and the generator draws the widest at "
+                f"{widest:g} mm"
+            )
+    assert not disagree, (
+        "Nets where the rules file and the generator disagree:\n"
+        + "\n".join(disagree)
+        + "\nKiCad takes the last matching rule; `_width_for` takes the "
+          "maximum. Reorder the rules so the two coincide, or narrow the "
+          "overlap."
+    )
