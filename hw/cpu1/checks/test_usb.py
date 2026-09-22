@@ -349,8 +349,18 @@ def test_the_rule_the_fab_is_held_to_is_the_one_the_stackup_asks_for(
     gap = load_source(board_dir / "layout.py", "cpu1_layout_usb").USB_GAP
 
     text = (board_dir / "rules.kicad_dru").read_text()
+    # Bounded to the rule's own body, the same way the Ethernet check is:
+    # `.*?` with re.S crosses into the next `(rule`, so a usb pair rule that
+    # lost its own track_width would quietly report the *following* rule's
+    # figure and pass. Proven on a copy of this file with the constraint
+    # swapped for a clearance one: the unbounded form returned 0.2 from the
+    # ethernet phy rule below, which is 101 ohm and inside the band, while
+    # the real floor for the pair would have become `mcu signals`' 0.15 mm
+    # and 114 ohm, outside it. `test_ethernet.py` records fixing exactly this
+    # and nobody came back for the USB copy.
     rule = re.search(
-        r"\(rule \"usb pair\".*?\(constraint track_width \(min ([\d.]+)mm\)\)",
+        r'\(rule "usb pair"(?:[^(]|\((?!rule ))*?'
+        r"\(constraint track_width \(min ([\d.]+)mm\)\)",
         text, re.S,
     )
     assert rule, "rules.kicad_dru has no usb pair rule to check"
@@ -377,7 +387,21 @@ def test_the_pair_arrives_together(spec, stack, lengths, pair_tracks):
     edge, _ = spec("usb", "rise_time")
     _, allowed = spec("usb", "skew_share")
     width = max(seg[2] for segments in pair_tracks.values() for seg in segments)
-    mismatch = abs(lengths["USB_DP"] - lengths["USB_DM"])
+
+    # **The whole path, not the controlled part of it.** Each half of this
+    # pair is two nets: the stretch from the receptacle to the ESD array,
+    # where a USB-C's two positions for the same signal are joined and the
+    # two joins cross each other, and the controlled run from the array to
+    # the MCU. This check used to measure only the second, which is 80 % of
+    # the copper and not the end the cable is on. The first stretch is 7.98
+    # and 8.58 mm - 0.6 mm of mismatch that nothing counted.
+    #
+    # It is the total that turns into common mode on a cable leaving the
+    # enclosure, so it is the total that is measured.
+    def whole(half: str) -> float:
+        return sum(lengths[net] for net in (half, f"{half}_CABLE") if net in lengths)
+
+    mismatch = abs(whole("USB_DP") - whole("USB_DM"))
     skew = mismatch * pairs.delay_per_mm(stack, width)
     assert skew <= allowed * edge, (
         f"{mismatch:.2f} mm of mismatch is {skew * 1e12:.0f} ps, "
