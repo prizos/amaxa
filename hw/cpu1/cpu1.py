@@ -67,42 +67,27 @@ INTENT: dict[str, tuple[float, float]] = {
     # regulator, the fuse and the FET are sized against the sum. Budgeting
     # them separately is how a 1 A converter came to be asked for 1.36 A.
     #
-    # 3V3, adding up the parts that draw it:
-    #   MCU          500 mA  datasheet Table 29, 400 MHz VOS1, all peripherals
-    #                        enabled, T_J 105 degC, production tested
-    #   PHY          102 mA  LAN8742A Table 5.5, REF_CLK Out with the regulator
-    #                        enabled, 100BASE-TX with traffic, with magnetics
-    #   RS-485        45 mA  THVD1450 driving 54 ohm
-    #   buffers        6 mA  sixteen outputs into their 10 k pull-downs
-    #   LEDs, latch,
-    #   DAC, CAN VIO  17 mA
-    #   reference       5 mA  what `analog.reference_current` promises the
-    #                          power board it may take from VREF+, plus the
-    #                          part's own 50 uA. Not its 25 mA capability:
-    #                          the rail cannot give the reference enough
-    #                          headroom to deliver that, which is the point
-    #                          of declaring the promise
-    #   header        100 mA what the connector may take at 3V3
-    #   ------------------
-    #   total        770 mA, and the budget is 800.
+    # **What is on each rail used to be an itemised list here, summed by
+    # hand.** It is not any more:
+    # `test_each_rail_carries_no_more_than_it_is_budgeted` walks the netlist -
+    # every part's declared supply current attributed to the pin it draws it
+    # from, every resistor chain with a DC path to ground at the rail that
+    # feeds it, and every promise a block makes to the far side - and prints
+    # the itemisation on every run. The comment could not be wrong in a way
+    # anything noticed, and it was: it carried 45 mA for the RS-485
+    # transceiver, which is below that part's bus current alone.
+    #
+    # Two numbers in that sum deserve to be read before the band is trusted:
+    # the PHY's 102 mA is a *typical* - its datasheet has no maximum supply
+    # current anywhere - and the comparators' 5 mA is a 25 degC figure rather
+    # than one over temperature. Both are recorded at their parts.
     "rail.3v3.current": (0.0, 0.8),
     "rail.5v.voltage": (4.75, 5.25),
-    # 5 V, its own loads only:
-    #   comparators   35 mA  seven TLV3501 at their 5 mA maximum
-    #   CAN           80 mA  TCAN1044V dominant into 50 ohm, maximum
-    #   3V3A          50 mA  what the analog connector may draw, plus the
-    #                         LDO's own 55 uA. It was half a ferrite's 100 mA
-    #                         rating when this rail was a bead; the regulator
-    #                         that replaced it is good for 300 mA, so the
-    #                         50 is now the connector's promise and not the
-    #                         passive's limit.
-    #   ------------------
-    #   total        165 mA, and the budget is 200.
-    #
-    # The reference's 25 mA used to be on this line and is not any more: it
-    # moved to 3V3 so that VREF+ cannot exist before VDDA does, and the entry
-    # went with it. A budget that still carries a load the schematic has moved
-    # is a budget nobody has read since.
+    # The 5 V rail's own loads, on the same terms: the check adds them up and
+    # prints them. The reference's 25 mA used to be itemised here and is not
+    # any more - it moved to 3V3 so that VREF+ cannot exist before VDDA does,
+    # and the hand-written entry stayed behind for a while, which is the other
+    # way a summed comment goes wrong.
     "rail.5v.current": (0.0, 0.20),
     # What the analog header is allowed to draw from 3V3A, which is what the
     # 5 V rail's budget above carries for it, through the LDO.
@@ -113,7 +98,7 @@ INTENT: dict[str, tuple[float, float]] = {
     # nothing said how much. Five milliamps is fifty millivolts of dropout off
     # the reference's own curve, against the 129 mV of headroom 3V3 leaves at
     # its low corner; the part could give 25 mA and the rail could not.
-    "analog.reference_current": (0.0, 5e-3),
+    "vref.supply_current": (0.0, 5e-3),
     # The highest voltage a sensor on the far side of the analog connector may
     # ever present to one of the fast inputs, **including while it is
     # failing**. These pins are TT_xx analog inputs and ST's Table 20 caps
@@ -319,6 +304,12 @@ INTENT: dict[str, tuple[float, float]] = {
     # input pin and a short track on the other side of the header fit inside
     # it, and anything that needs a flying lead does not.
     "header.gate_line_capacitance": (0.0, 10e-12),
+    # What the digital connector may draw from the 3V3 pin it carries. It was
+    # a line in the budget comment above and nothing else, which is the shape
+    # of problem this whole block has: a number somebody typed into prose and
+    # summed by hand. Declared here, it is read by
+    # `test_each_rail_carries_no_more_than_it_is_budgeted` off the netlist.
+    "header.supply_current": (0.0, 0.1),
     # And what counts as low there. This used to be read off the *latch's*
     # V_IL, 0.8 V, for a net that never reaches the latch - it crosses the
     # header into a gate driver. What a gate driver calls a low is the far

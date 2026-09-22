@@ -625,6 +625,14 @@ BUF_OCTAL = PartSpec(
         "total_output_current_max": exact(100e-3),
         "input_low_voltage_max": exact(0.8),
         "input_high_voltage_min": exact(2.0),
+        # SCAS298N 7.5: I_CC 10 uA maximum over the recommended free-air
+        # temperature range, at V_CC = 3.6 V, inputs at V_CC or GND. What the
+        # package draws for itself is nothing; what it costs the rail is the
+        # fifteen outputs holding their pull-downs, which the rail check walks
+        # out of the copper rather than reading from here. The same table's
+        # 500 uA per input applies only to an input sitting at an intermediate
+        # level, which every input on this part is held away from.
+        "supply_current_max": exact(10e-6),
     },
 )
 
@@ -640,6 +648,9 @@ LATCH_DFF = PartSpec(
         "supply_voltage": between(1.65, 5.5),
         "preset_to_output_max": exact(5.9e-9),
         "output_current_max": exact(24e-3),
+        # SCES794E 7.5: I_CC 10 uA maximum over the recommended free-air
+        # temperature range, V_I at 5.5 V or GND, I_O = 0.
+        "supply_current_max": exact(10e-6),
         "input_low_voltage_max": exact(0.8),
         "input_high_voltage_min": exact(2.0),
         # **An LVC input has no clamp diode to V_CC**, and the two rows below
@@ -750,6 +761,16 @@ COMPARATOR = PartSpec(
     value="TLV3501",
     params={
         "supply_voltage": between(2.7, 5.5),
+        # **5 mA, and it is a 25 degC figure.** SBOS321E 6.6 gives I_Q as
+        # 3.2 mA typical and 5 mA maximum at V_S = 5 V with the output high -
+        # but that table's header reads "At T_A = 25 degC and V_S = 2.7 V to
+        # 5.5 V", and the I_Q row carries no temperature condition of its own.
+        # Rows in this datasheet that *are* specified over temperature say so
+        # individually. So this is the worst case at room temperature and not
+        # over the range, and supply current against temperature exists only
+        # as Figure 12. Seven of these are the largest single entry on the
+        # 5 V rail, so the caveat is the rail budget's caveat too.
+        "supply_current_max": exact(5e-3),
         # 20 mV of overdrive, over the whole temperature range. The 5 mV figure
         # is half as fast again, which is what the tap network in M6 has to
         # deliver against.
@@ -797,6 +818,12 @@ THRESHOLD_DAC = PartSpec(
         "supply_voltage": between(2.7, 5.5),
         "resolution_bits": exact(12),
         "channels": exact(4),
+        # DS22187E 1.0, Power Requirements: I_DD 800 uA typical, 1400 uA
+        # maximum over -40 to +125 degC, at V_DD = 5.5 V with all four
+        # channels in normal mode. A 100 % tested limit - the row carries no
+        # design-only note. This board runs it at 3.3 V, where the figure will
+        # be lower and is not separately specified.
+        "supply_current_max": exact(1400e-6),
         # The reference the part ships selecting, from datasheet Table 4-2.
         # Not the one this board uses - firmware selects the supply instead -
         # but it is what the thresholds are worth until it does.
@@ -866,6 +893,19 @@ CAN_TRANSCEIVER = PartSpec(
     params={
         "supply_voltage": between(4.5, 5.5),
         "io_supply_voltage": between(1.7, 5.5),
+        # Section 6.6, Supply Characteristics, over -40 to +125 degC. The
+        # dominant state into 50 ohm is the worst row: 49 mA typical, 80 mA
+        # maximum. At 60 ohm it is 70. The 5 V rail takes all of that - the
+        # V_IO rows carry no load condition because V_IO feeds only the level
+        # shifter, not the bus driver, and its dominant figure is 300 uA.
+        # (The V_IO rows are 300 uA dominant and 48 uA recessive, also
+        # maxima over temperature. They are not declared as a parameter: the
+        # KiCad symbol this part borrows is the SN65HVD230's, whose pin 5 is
+        # that part's V_REF rather than this one's V_IO, so nothing could
+        # attribute the figure to the right rail without a table saying which
+        # pin is really which - and 300 uA is a fifth of a milliamp against
+        # the 3V3 rail's fifteen of margin. See SOIC8.md.)
+        "supply_current_max": exact(80e-3),
         "loop_delay_max": exact(210e-9),
         "bus_fault_voltage": exact(58.0),
         "data_rate_max": exact(8e6),
@@ -902,6 +942,24 @@ RS485_TRANSCEIVER = PartSpec(
         "supply_voltage": between(3.0, 5.5),
         "bus_fault_voltage": exact(18.0),
         "data_rate_max": exact(50e6),
+        # **Quiescent, and only quiescent.** ZHCSI82E 7.7 gives I_CC as 2.4 mA
+        # typical and 3 mA maximum over the operating free-air temperature
+        # range with the driver and receiver both enabled - and every row in
+        # that table says "No load". There is no tabulated supply current with
+        # the driver loaded anywhere in the document: it exists only as a
+        # 25 degC typical curve, Figure 10 at 5 V and Figure 13 at 3.3 V,
+        # reading about 58 mA at rest and 85 mA at the full 50 Mbps rate.
+        #
+        # So the loaded figure is computed rather than read, from two numbers
+        # that *are* tabulated maxima: this quiescent current, and the driver's
+        # own differential output into the load below. The rail check does
+        # that arithmetic. The budget comment used to carry 45 mA for this
+        # part, which is neither figure and is below the bus current alone.
+        "supply_current_max": exact(3e-3),
+        # The load the driver works into: two 120 ohm terminations at the ends
+        # of the cable, in parallel, which is TIA-485's figure and this
+        # datasheet's own test condition throughout §7.7 and §7.10.
+        "bus_load_min": exact(54.0),
         # Driver differential output magnitude, 1.5 to 3.5 V into 54 ohm.
         # Unlike CAN there is no timeout: a half-duplex driver holds the line
         # for as long as DE is asserted.
@@ -1013,6 +1071,20 @@ ETH_PHY = PartSpec(
         "core_supply_voltage": between(1.14, 1.26),   # VDDCR, from the internal regulator
         "magnetics_supply_voltage": between(2.25, 3.6),
         "bias_resistance": pm(12.1e3, 0.01),          # RBIAS to ground, 1%
+        # **A typical, because the datasheet has no maximum.** Table 5.5,
+        # "Current Consumption and Power Dissipation (REF_CLK Out, Reg.
+        # Enabled)", 100BASE-TX with traffic: 59 mA for the device and 102 mA
+        # with magnetics. The table has no MIN/TYP/MAX columns at all - each
+        # row is labelled "Typical" - and §5.4's preamble states supplies at
+        # nominal with no temperature at all. Absolute Maximum Ratings,
+        # Operating Conditions and the DC Specifications were all checked and
+        # none of them bounds supply current.
+        #
+        # 102 and not 59, because the 3V3 rail feeds the magnetics' centre
+        # taps as well as the part. The rail budget carries it as the only
+        # figure there is, and that it is a typical is the budget's largest
+        # single piece of slack - it is the number to measure first.
+        "supply_current_typical": exact(102e-3),
         # Table 5.8: 950 to 1050 mV peak, measured at the line side of the
         # transformer with the line replaced by 100 ohm. It is what decides
         # what the line terminations dissipate, and it is the whole reason

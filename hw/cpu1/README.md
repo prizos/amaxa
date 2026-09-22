@@ -74,34 +74,25 @@ hand, near the pins they serve.
 
 ## Where it stands
 
-Everything on this board is drawn, routed and checked: 197 checks, DRC with
+Everything on this board is drawn, routed and checked: 198 checks, DRC with
 no violations and no unconnected items, gerbers for all six copper layers plus
 drill and IPC-D-356, `make reproducible` regenerating the same board, `make
 offline` building with every network call refused, both firmware BSPs
 compiling, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` empty.
 
 **It is not ready to order, and `checks/config.py` says why.** One entry in
-`BLOCKING`: nothing adds up what a rail actually carries. Each rail's current
-is a declared band that the converter, the fuse and the inductors are sized
-against, and what is *on* the rail is a prose comment summed by hand. It has
-already failed once - fifteen pull-downs taken from 10 k to 1.2 k added 43 mA
-and pushed 3V3 to 806 mA against its own 800, and no check moved.
+`BLOCKING`, and it is the one the last fix uncovered rather than one it left
+behind: the 3V3 rail now adds up to 784.8 mA against its 800 mA band, derived
+off the netlist and printed on every run - and two of that sum's largest terms
+are not maximums. The PHY's 102 mA is a *typical* (its datasheet has no
+maximum supply current at all), and the comparators' 5 mA each is a 25 °C
+figure. Fifteen milliamps of margin is comfortable only if the terms are
+guaranteed, and these two are not.
 
-The converters' capacitance against DC bias was the entry before it. That one
-is closed: `capacitors.bias_derating` states what a Class II ceramic loses as
-a coefficient on the fraction of its rating it is operated at, every datasheet
-minimum on the board is held against the derated value, and the parts that
-could not meet theirs went up in voltage rating - which is what lowers the
-field - rather than up in count.
-
-The analog inputs' over-voltage was a third and is not any more. The board
-used to hand the power board's sensors 5 V through a bead and take their
-outputs into pins ST caps at **4.0 V absolute** with no positive-injection
-allowance at all, which an op-amp rails past during exactly the over-current
-the trip chain exists for. `docs/research/07` called for clamps; they do not
-fit, and three positions were tried. The rail is regulated to 3.3 V instead,
-so the worst a sensor can rail to is 3.366 V and the fault stops existing.
-What it costs is at the connector, and `parts/HDR2X15` says so.
+What used to be there is closed. The rail's contents were an itemised comment
+somebody typed and summed by hand, and it had already failed once: fifteen
+pull-downs taken from 10 k to 1.2 k added 43 mA and put 3V3 at 806 against its
+800, with no check moving.
 
 `COMPLETE` was True for a while and that was wrong - not because the board is
 bad, but because the gate behind it tested two things and the flag was read as

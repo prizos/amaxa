@@ -13,7 +13,14 @@ SMBJ series table recorded in `parts/SMB/SMB.md`.
 """
 
 import collections
+import sys
+from pathlib import Path
+
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+
+from symbols import symbol_pin_names  # noqa: E402
 
 BUCK_5V = "buck5.ic"
 BUCK_3V3 = "buck3v3.ic"
@@ -874,10 +881,10 @@ def test_the_reference_runs_from_the_rail_it_is_given(design, two_pad_parts, pad
     # figure is a curve, about 10 mV per milliamp. VREF+ leaves this board on
     # a connector pin with no series element and the power board's sensors are
     # ratiometric to it, so something out there draws from it; until
-    # `analog.reference_current` was declared, nothing said how much, and the
+    # `vref.supply_current` was declared, nothing said how much, and the
     # check above was comparing 129 mV of headroom against a figure that
     # assumed nobody was connected.
-    _, promised = spec("analog", "reference_current")
+    _, promised = spec("vref", "supply_current")
     curve = sorted(
         (amps, spec(REFERENCE, f"dropout_at_{name}")[1])
         for amps, name in ((5e-3, "5ma"), (10e-3, "10ma"),
@@ -1360,4 +1367,204 @@ def test_a_bus_termination_survives_the_fault_its_transceiver_declares(
         "way:\n" + "\n".join(sorted(set(unprotected)))
         + "\nTermination belongs at the cable ends; on this board it belongs "
           "behind a jumper that ships open."
+    )
+
+
+# --- what each rail actually carries -----------------------------------------
+
+RAILS = (("3V3", "rail.3v3"), ("5V", "rail.5v"))
+
+# Symbol libraries whose parts cannot source current into a net.
+PASSIVES = {"Device", "Connector", "Jumper", "TestPoint", "Diode", "Switch"}
+
+# Which declared parameter belongs to which supply pin. Not a table of values -
+# a part states its own current; this says which of a multi-supply part's pins
+# that current comes out of, which the symbol alone cannot say.
+SUPPLY_PINS = {
+    "VCC": ("supply_current_max", "supply_current_typical", "quiescent_current",
+            "quiescent_current_max"),
+    "VDD": ("supply_current_max", "supply_current_typical", "quiescent_current",
+            "quiescent_current_max"),
+    "V+": ("supply_current_max", "supply_current_typical", "quiescent_current",
+           "quiescent_current_max"),
+    "IN": ("quiescent_current",),
+    "VIO": ("io_supply_current_max",),
+    "VDDIO": ("supply_current_typical", "io_supply_current_max"),
+}
+
+
+def _resistor_chains(design, pad_net):
+    """
+    Every maximal run of two-pad resistors, as (end net, end net, ohms).
+
+    A chain rather than a resistor, because what draws from a rail is the
+    whole series path to wherever it ends - a feedback divider is two parts
+    and one current, and a buffered output is a series resistor and a
+    pull-down and one current.
+    """
+    edges = []
+    for address, part in design["parts"].items():
+        if part["symbol"] != "Device:R":
+            continue
+        a, b = pad_net.get((address, "1")), pad_net.get((address, "2"))
+        if a and b:
+            edges.append((address, a, b))
+
+    degree = collections.Counter()
+    for _, a, b in edges:
+        degree[a] += 1
+        degree[b] += 1
+
+    chains, seen = [], set()
+    for address, a, b in edges:
+        if address in seen:
+            continue
+        run, ends = {address}, []
+        for start, other in ((a, b), (b, a)):
+            net, previous = start, address
+            # A net with exactly two resistors on it is a junction inside a
+            # chain, whatever else sits there: a divider's tap carries a
+            # sense pin as well, and that pin takes no DC. Anything with one
+            # resistor or three is where the chain ends.
+            while degree[net] == 2:
+                nxt = next((e for e in edges
+                            if e[0] != previous and net in (e[1], e[2])), None)
+                if nxt is None:
+                    break
+                run.add(nxt[0])
+                previous, net = nxt[0], nxt[2] if nxt[1] == net else nxt[1]
+            ends.append(net)
+        seen |= run
+        chains.append((ends[0], ends[1], run))
+    return chains
+
+
+def test_each_rail_carries_no_more_than_it_is_budgeted(
+    design, pad_net, two_pad_parts, spec, spec_has
+):
+    """
+    Add up what is actually on each rail, and hold it against the band the
+    converter, the fuse and the inductors are all sized from.
+
+    **`rail.3v3.current` and `rail.5v.current` are declared bands, and what is
+    on them was a prose comment.** An itemised list somebody typed, in
+    milliamps, summed by hand, sitting beside the declaration. Every check
+    read the band; nothing read the board.
+
+    It failed once, quietly. Taking the fifteen gate-line pull-downs from 10 k
+    to 1.2 k added 43 mA of continuous draw and put the 3V3 rail at 806 mA
+    against its own 800. No check moved - the band had not changed, and the
+    comment was still describing the board from before. The pull-downs went
+    back to 10 k for other reasons and took the regression with them, which is
+    luck and not a gate.
+
+    So the sum comes off the netlist, in three parts:
+
+      - **what each part says it draws**, attributed to the pin it draws it
+        from, so a transceiver with a 5 V supply and a 3.3 V I/O pin does not
+        charge its bus-driver current to the logic rail;
+      - **what a driver works into off the board**, where a part states both a
+        differential output and the load it is specified into and its own
+        current figure is the unloaded one;
+      - **every resistor chain with a DC path to ground**, at the rail that
+        feeds it - whether that is a divider straight off the rail or a
+        buffered output through a series resistor into its pull-down. That
+        last is the one the 1.2 k slipped past.
+
+    What it does not carry is a pull-up that ends at a pin: it draws only
+    while that pin is low, and this board states no duty cycle for any of
+    them. Those are milliamps, and they are the known conservatism gap here.
+
+    The declared promises - what the connectors may take, what the reference
+    may supply - are read from the block that owns them, so they stay in the
+    sum without anyone re-typing them.
+    """
+    chains = _resistor_chains(design, pad_net)
+    problems = []
+    for net, rail in RAILS:
+        _, volts = spec(rail, "voltage")
+        _, budget = spec(rail, "current")
+        items = []
+
+        blocks_counted = set()
+        for address, part in design["parts"].items():
+            # Which of this part's supply pins land on this rail. A figure is
+            # per *part*, not per pin - the MCU has fourteen VDD pads and one
+            # 500 mA - so each parameter is counted once, on the rail the pin
+            # that carries it sits on.
+            here = {name.upper() for pad, name in symbol_pin_names(part["symbol"]).items()
+                    if pad_net.get((address, str(pad))) == net}
+            if not here:
+                continue
+            wanted = {parameter for name in here for parameter in SUPPLY_PINS.get(name, ())}
+            for parameter in sorted(wanted):
+                if spec_has(address, parameter):
+                    items.append((f"{address}.{parameter}", spec(address, parameter)[1]))
+
+            # A driver whose own figure is the unloaded one, plus what it
+            # pushes into the cable. Only where the part says both, which is
+            # how the CAN transceiver - whose figure is measured *with* its
+            # load - avoids being charged for its bus twice.
+            if spec_has(address, "bus_load_min") and spec_has(
+                    address, "differential_output_max"):
+                _, swing = spec(address, "differential_output_max")
+                load, _ = spec(address, "bus_load_min")
+                items.append((f"{address}.bus", swing / load))
+
+            # And what the block this part belongs to has promised to supply
+            # off the board - a connector's draw, a reference's output. The
+            # promise is owned by the block, so it is counted once however
+            # many of its parts sit on the rail.
+            block = address.partition(".")[0]
+            if block not in blocks_counted and spec_has(block, "supply_current"):
+                blocks_counted.add(block)
+                items.append((f"{block}.supply_current",
+                              spec(block, "supply_current")[1]))
+
+        # Every resistor chain that ends at ground, charged to whichever rail
+        # can drive its other end: the rail itself, or a part that runs from
+        # the rail and drives that net.
+        # What can *drive* a net down to ground: a part with a supply pin on
+        # this rail. Not a passive - a resistor sitting on the rail is part of
+        # the chain, not a source for it, and counting it as one charged the
+        # 3V3 feedback divider to both rails at once.
+        on_rail = {
+            address for address, part in design["parts"].items()
+            if part["symbol"].partition(":")[0] not in PASSIVES
+            and any(pad_net.get((address, str(pad))) == net
+                    for pad, name in symbol_pin_names(part["symbol"]).items()
+                    if name.upper() in SUPPLY_PINS)
+        }
+        for end_a, end_b, run in chains:
+            for source, sink in ((end_a, end_b), (end_b, end_a)):
+                if sink != "GND":
+                    continue
+                driven = source == net or any(
+                    address in on_rail and address not in run
+                    for address, _ in design["nets"].get(source, []))
+                if not driven:
+                    continue
+                ohms = sum(spec(a, "resistance")[0] for a in run)
+                items.append(("+".join(sorted(run)), volts / ohms))
+                break
+
+        total = sum(current for _, current in items)
+        if total > budget:
+            worst = sorted(items, key=lambda x: -x[1])[:6]
+            problems.append(
+                f"  {rail}: {total * 1e3:.1f} mA against a {budget * 1e3:g} mA "
+                f"budget. Largest: "
+                + ", ".join(f"{name} {current * 1e3:.1f}" for name, current in worst))
+        # Printed on every run, because a budget nobody can see is the thing
+        # this check exists to replace. Everything above a milliamp, which is
+        # where the itemised comment this replaced stopped too.
+        print(f"    {rail}: {total * 1e3:.1f} mA of {budget * 1e3:g}, "
+              f"from {len(items)} loads")
+        for name, current in sorted(items, key=lambda x: -x[1]):
+            if current >= 1e-3:
+                print(f"        {current * 1e3:8.1f} mA  {name}")
+    assert not problems, (
+        "Rails carrying more than they are budgeted:\n" + "\n".join(problems)
+        + "\nThe band is what the converter, the fuse and the inductors are "
+          "sized from; it is not a wish."
     )

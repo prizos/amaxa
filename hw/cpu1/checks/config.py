@@ -16,29 +16,38 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 BLOCKING: dict[str, str] = {
-    "nothing adds up what a rail actually carries, and a change has already "
-    "slipped past because of it": (
-        "`rail.3v3.current` and `rail.5v.current` are declared bands, and the "
-        "converter, the fuse and the inductors are all sized against them. "
-        "What is *on* each rail is a prose comment beside the declaration - "
-        "an itemised list somebody typed, in units of milliamps, summed by "
-        "hand.\n\n"
-        "It has already failed once. Taking the fifteen gate-line pull-downs "
-        "from 10 k to 1.2 k added 43 mA of continuous draw and pushed the 3V3 "
-        "rail to 806 mA against its own 800, and nothing said so: the check "
-        "reads the band, the band did not move, and the comment was still "
-        "describing the board before the change. The pull-downs went back to "
-        "10 k for other reasons and the regression went with them, which is "
-        "luck rather than a check.\n\n"
-        "Resolving it means deriving each rail's load from the netlist - every "
-        "resistor to ground, every part's declared supply current - and "
-        "holding that against the declared band, so the comment becomes a "
-        "report rather than a claim."
+    "the 3V3 budget closes on fifteen milliamps, and two of its largest "
+    "terms are not maximums": (
+        "`test_each_rail_carries_no_more_than_it_is_budgeted` now adds the "
+        "rail up off the netlist and prints it: 784.8 mA against an 800 mA "
+        "band. That is the first time the number has been derived rather "
+        "than typed, and it is the arithmetic that makes the gap visible.\n\n"
+        "Fifteen milliamps of margin would be comfortable if the terms were "
+        "all guaranteed. Two of the largest are not:\n\n"
+        "  - the PHY's **102 mA is a typical**. The LAN8742A datasheet has "
+        "no maximum supply current anywhere - Table 5.5 has no MIN/TYP/MAX "
+        "columns at all, each row is labelled 'Typical', and section 5.4's "
+        "preamble states supplies at nominal with no temperature. Absolute "
+        "Maximum Ratings, Operating Conditions and the DC Specifications "
+        "were all read and none of them bounds it. If the real part draws "
+        "15 % more than typical at temperature, the rail is over.\n"
+        "  - the seven comparators' **5 mA each is a 25 degC figure**. "
+        "SBOS321E's electrical table header reads 'At T_A = 25 degC'; the "
+        "rows in it that are specified over temperature say so individually "
+        "and I_Q does not. Supply current against temperature exists only as "
+        "Figure 12. That one is on the 5 V rail, which has 35 mA spare, so "
+        "it is the smaller of the two worries.\n\n"
+        "Resolving it means measuring both on the first assembled board, or "
+        "widening `rail.3v3.current` and re-deriving the converter, the fuse "
+        "and the FET from the wider figure - which the checks will do, "
+        "because they already take the band rather than a typed sum. What it "
+        "must not mean is leaving a rail sized from a typical without "
+        "anybody having said so."
     ),
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 197
+EXPECTED_CHECKS = 198
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
