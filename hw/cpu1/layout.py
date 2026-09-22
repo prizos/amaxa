@@ -1030,6 +1030,10 @@ def _safety() -> None:
     # The gate enable's pull-down, in the clear space west of buffer1 where
     # that signal already passes on its way to A7.
     PLACEMENT["safety.r_gate_enable_pulldown"] = (22.5, 21.5, 180)
+    PLACEMENT["safety.q_gate_kill"] = (29.9, 24.4, 0)
+    PLACEMENT["safety.r_gate_kill_drain"] = (32.1, 24.4, 0)
+    for address in ("safety.q_gate_kill", "safety.r_gate_kill_drain"):
+        LABELS[address] = (0.0, -1.3)
     for address in ("safety.r_clear_series", "safety.c_clear",
                     "safety.d_clear_clamp", "safety.r_gate_enable_pulldown"):
         LABELS[address] = (0.0, -1.3)
@@ -2265,6 +2269,39 @@ def _pwm_inputs() -> None:
 # on the far side of their package from it. Everything east of the buffers is
 # the output fan-out, on the front; this goes underneath it.
 TRIPPED_LANE = 32.6
+
+
+# The gate kill stands beside the TRIPPED lane rather than beside the line it
+# pulls down. Its gate is the thing that must not be far from anything - every
+# picofarad on TRIPPED delays both buffers' disable as well - so the long run
+# is the drain's, which carries 16 mA for seven nanoseconds and nothing after.
+GATE_KILL_Y = 24.2
+
+
+def _gate_kill() -> None:
+    """Q2 and its drain resistor, and the two runs that reach them."""
+    net = "GATE_KILL_DRAIN"
+    ROUTES.append((net, _width_for(net, SIGNAL), F,
+                   ["safety.q_gate_kill:3", "safety.r_gate_kill_drain:1"]))
+
+    # The gate, off the top of the lane that already carries TRIPPED to both
+    # buffers.
+    path("TRIPPED", _width_for("TRIPPED", SIGNAL), [
+        # Through In3 for the last leg. The back layer carries 5 V straight
+        # across at y 21.1, between the lane and the transistor, and the front
+        # there is the buffer's own fan-out; the inner signal layer has
+        # twenty-odd segments on the whole board.
+        (B, [(TRIPPED_LANE, 15.995), (TRIPPED_LANE, 14.2)]),
+        (MID, [(TRIPPED_LANE, 14.2), (28.5, 14.2), (28.5, 23.9)]),
+        (F, [(28.5, 23.9), "safety.q_gate_kill:1"]),
+    ])
+
+    # And the drain resistor to the line itself, under the output fan-out.
+    path("GATE_ENABLE_OUT", _width_for("GATE_ENABLE_OUT", SIGNAL), [
+        (F, ["safety.r_gate_kill_drain:2", (33.4, 24.4)]),
+        (B, [(33.4, 24.4), (41.6, 24.4), (41.6, 21.37)]),
+        (F, [(41.6, 21.37), "safety.pulldown.gate_enable_out:1"]),
+    ])
 
 
 def _tripped() -> None:
@@ -3552,6 +3589,7 @@ STITCH_PLACES = (
     (53.0, -34.0),                    # where power good crosses to In3
     (38.0, -42.0),                    # the static signals' way under the header
     (39.5, -15.5),                    # and where that column moved to
+    (25.0, 24.0),                     # where the gate kill's gate crosses to In3
 )
 
 
@@ -3820,6 +3858,7 @@ _dac_test_points()
 _adc_to_package()
 _pwm_inputs()
 _tripped()
+_gate_kill()
 _safety_signals()
 _static_routes()
 _static_mcu()

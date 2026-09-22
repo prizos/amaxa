@@ -61,7 +61,7 @@
 # drives a cable to a gate driver, so it is wider than the MCU-side signal it
 # copies; the latch's nets are short and on-board.
 (rule "safety chain"
-	(condition "A.NetName == 'GATE_ENABLE_B' || A.NetName == 'GATE_ENABLE_OUT' || A.NetName == 'TRIP_SET_N' || A.NetName == 'TRIPPED'")
+	(condition "A.NetName == 'GATE_ENABLE_B' || A.NetName == 'GATE_ENABLE_OUT' || A.NetName == 'GATE_KILL_DRAIN' || A.NetName == 'TRIP_SET_N' || A.NetName == 'TRIPPED'")
 	(constraint track_width (min 0.2mm))
 	(severity error))
 

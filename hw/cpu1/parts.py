@@ -124,14 +124,12 @@ RES_1K_0402 = PartSpec(
     **_R0402, mpn="0402WGF1001TCE", lcsc="C11702", value="1k",
     params={"resistance": pm(1_000, 0.01), "max_power": exact(0.0625)},
 )
-# The gate lines' pull-downs, and the reason they are not 10 k: when the trip
-# puts the buffers into high impedance, this resistor is the only thing
-# discharging the line, and at 10 k that took 59 ns against a 50 ns budget. The
-# floor is the buffer's own limit - eight outputs on one package at 3.465 V may
-# not exceed half of its 50 mA total - which puts it at 1.11 k.
-RES_1K2_0402 = PartSpec(
-    **_R0402, mpn="0402WGF1201TCE", lcsc="C25862", value="1k2",
-    params={"resistance": pm(1_200, 0.01), "max_power": exact(0.0625)},
+# Between the gate-kill FET's drain and the line it pulls down. It bounds what
+# the FET draws from a '541 output that has not let go yet: 3.465 V across
+# 33 + 33 + 150 ohm is 16 mA against the buffer's 24 mA per output.
+RES_150R_0402 = PartSpec(
+    **_R0402, mpn="0402WGF1500TCE", lcsc="C25082", value="150R",
+    params={"resistance": pm(150, 0.01), "max_power": exact(0.0625)},
 )
 
 # Between 3V3 and VDDA: 600 ohm at 100 MHz keeps digital noise off the analog
@@ -381,6 +379,35 @@ VREF_3V0 = PartSpec(
         "quiescent_current_max": exact(50e-6),
         "supply_bypass": exact(0.47e-6),
         "temperature_drift": exact(75e-6),
+    },
+)
+
+
+# The gate kill. When the latch trips it pulls GATE_ENABLE_OUT low directly,
+# because the '541 letting go does not pull anything low - it stops driving,
+# and the line then discharges through its pull-down alone. At the 10 k those
+# pull-downs are, that is 205 ns; through this it is 3 ns.
+#
+# Chosen for its gate, not its channel. There is 150 ohm in series with the
+# drain, so on-resistance barely matters - but the gate hangs on TRIPPED,
+# which also disables both buffers, so every picofarad there delays the whole
+# chain. 60.67 pF is what a latch output charges in 2.5 ns; an AO3400A's
+# 630 pF would have taken 38, which is most of the budget.
+#
+# And it is specified where it is used. Diodes' DS30599 gives R_DS(on) at
+# V_GS = 4.5, 2.5 **and 1.8 V**, so the 2.5 V row is a maximum at a drive
+# below the 3.135 V this board's rail falls to - not a figure read at 10 V
+# and hoped for, which is what the alternatives offered.
+FET_GATE_KILL = PartSpec(
+    symbol="Transistor_FET:Q_NMOS_GSD", footprint="SOT523:SOT-523", prefix="Q",
+    manufacturer="Diodes Incorporated", mpn="DMG1012T-7", lcsc="C20512",
+    value="DMG1012T",
+    params={
+        "gate_threshold_max": exact(1.0),        # V_GS(TH) max, V_DS=V_GS, 250 uA
+        "on_resistance_at_2v5": exact(0.5),      # R_DS(on) max at V_GS = 2.5 V
+        "input_capacitance": exact(60.67e-12),   # C_iss typical
+        "drain_source_voltage_max": exact(20.0),
+        "drain_current_max": exact(0.8),
     },
 )
 

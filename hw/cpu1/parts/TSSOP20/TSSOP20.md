@@ -68,7 +68,17 @@ the continuous current *per output* and ±100 mA as the continuous current
 through V_CC or GND, which is the package total. The 50 was the per-output
 number read as a package one.
 
-It was load-bearing. The gate lines' pull-downs were sized down from 10 k to
-1.2 k for the trip budget, and the floor that stopped them going lower was
-"eight outputs on one package against half of 50 mA". Against the real 100 mA
-that floor is half what was used. See `evidence/lvc541a_current_ratings.png`.
+It was load-bearing while the trip budget was being closed with resistors: the
+gate-line pull-downs were briefly taken from 10 k to 1.2 k, and the floor that
+stopped them going lower was "eight outputs on one package against half of
+50 mA" - a floor drawn against a per-output rating mistaken for a package one.
+The resistor route turned out to be a dead end for other reasons (see
+`parts/R0402/R0402.md`) and the fall is now done by a transistor, so the
+number is no longer holding a value in place. It is still the number every
+check uses, which is why it had to be right. See
+`evidence/lvc541a_current_ratings.png`.
+
+The per-output figure is what bounds Q2's drain resistor: 3.465 V across
+33 + 150.5 ohm is 19 mA from the one output that fights it, against the 24 mA
+§6.7 recommends for a guaranteed level, and well inside the ±50 mA §7.1
+allows.

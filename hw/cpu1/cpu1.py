@@ -283,6 +283,14 @@ INTENT: dict[str, tuple[float, float]] = {
     # input pin and a short track on the other side of the header fit inside
     # it, and anything that needs a flying lead does not.
     "header.gate_line_capacitance": (0.0, 10e-12),
+    # And what counts as low there. This used to be read off the *latch's*
+    # V_IL, 0.8 V, for a net that never reaches the latch - it crosses the
+    # header into a gate driver. What a gate driver calls a low is the far
+    # side's number, so it is an interface promise like the fault line's
+    # 0.4 V beside it. 0.8 V is the strictest thing a 3.3 V CMOS input is
+    # likely to ask for, so the figure does not move; what changes is that it
+    # is now this board asking rather than the wrong datasheet answering.
+    "header.gate_line_low": (0.0, 0.8),
     # Where each kind of channel rolls off. The fast ones carry what the control
     # loop reads every PWM cycle: low enough to stop the switching node aliasing
     # into the measurement, high enough that the measurement is of now.
@@ -1137,25 +1145,47 @@ def safety_chain(v3v3, gnd, nets) -> None:
     # This is the whole point of the series resistor being before it: the
     # pull-down is at the connector, where a gate driver reads it.
     #
-    # **1.2 k, not 10 k, and the reason is the trip budget.** These were sized
-    # for the static job - "an unfitted board is not a command" - where any
-    # value that beats leakage does. They have a second job nobody had costed:
-    # when a trip puts the buffers into high impedance, this resistor is the
-    # only thing discharging the gate line, and the budget's own words are
-    # "how long a half bridge survives a shoot-through", which is not the same
-    # instant as the buffer letting go. At 10 k, with the copper measured off
-    # the routed board, the worst line took 59 ns to reach a valid low - more
-    # than the whole 50 ns budget, on top of the 25 ns the chain already
-    # spends getting there.
+    # 10 k, and the second job these have is not theirs to do. A trip puts the
+    # buffers into high impedance, and the line then discharges through this
+    # resistor alone - 205 ns at 10 k, against a 50 ns budget. They were
+    # briefly 1.2 k for that reason, which bought 34 ns of fall by spending
+    # 35 mA of 3V3 that the rail's own budget had not been told about and did
+    # not have. There is no value that satisfies both: the budget wants 600
+    # ohm or less and the rail wants 1.4 k or more, and the window is empty.
     #
-    # The floor is the buffer's own rating: eight of these on one package at
-    # 3.465 V is 23.1 mA against half of its 50 mA total. 1.2 k is the nearest
-    # value above that floor, and it brings the discharge to under 7 ns.
+    # So the fall is done by a transistor instead, on the one line that means
+    # "stop" - see the gate kill below - and these go back to the value the
+    # static job actually wants.
     for name, net in buffered.items():
-        pull_down = part(parts.RES_1K2_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
+        pull_down = part(parts.RES_10K_0402, f"safety.pulldown.{name.lower()}", f"R{reference}")
         reference += 1
         net += pull_down[1]
         gnd += pull_down[2]
+
+    # **The gate kill.** The '541 going high-impedance is not the same event as
+    # the gate line going low, and the budget's own sentence - "how long a half
+    # bridge survives a shoot-through" - is about the second. Nothing was
+    # counting the difference, and through a pull-down the difference is most
+    # of the budget.
+    #
+    # Q2 pulls GATE_ENABLE_OUT down as soon as the latch trips, through 150 ohm
+    # that bounds what it takes from a buffer output which has not let go yet:
+    # 3.465 V across the 33 ohm series and this 150 is 19 mA, against the 24 mA
+    # the '541 wants to stay inside per output. The line then falls in 3.3 ns
+    # rather than 205, and turning Q2 on costs 2.5 ns in front of that.
+    #
+    # **This makes GATE_ENABLE the signal the trip's timing rests on**, and
+    # that is a statement about the interface, not just about this board: the
+    # power board has to disable every gate driver from this one pin, and the
+    # fourteen PWM lines are a second layer that arrives 200 ns later. The pin
+    # map says so now. It is the Infineon MADK convention - `docs/research/07`
+    # records "active-low gate kill" - but this board had never said it.
+    gate_kill = part(parts.FET_GATE_KILL, "safety.q_gate_kill", "Q2")
+    kill_drain = part(parts.RES_150R_0402, "safety.r_gate_kill_drain", "R100")
+    Net("GATE_KILL_DRAIN").connect(kill_drain[1], gate_kill["D"])
+    buffered["GATE_ENABLE_OUT"] += kill_drain[2]
+    tripped += gate_kill["G"]
+    gnd += gate_kill["S"]
 
     # The relays are not buffered - they are not in the PWM path - but they are
     # pulled down for the same reason: a pin nobody is driving must not close a
@@ -1723,11 +1753,11 @@ def ethernet(v3v3, gnd, nets) -> None:
     # microseconds, against a pin rated 20. Through 1 k it is 3.3 mA, and the
     # release is still (10 k + 1 k) x 4.7 uF.
     reset_series = part(parts.RES_1K_0402, "eth.r_reset_delay", "R96")
-    # C90, not C81: C68 to C89 are the plane-stitching capacitors, allocated as
-    # a contiguous block, and C81 is one of them. The block grew by one when
-    # power good's crossing to the inner signal layer needed a tie beside it,
-    # which is what took C89 as well.
-    reset_delay = part(parts.CAP_4U7_0603, "eth.c_reset", "C90")
+    # C91, not C81: C68 to C90 are the plane-stitching capacitors, allocated as
+    # a contiguous block, and C81 is one of them. The block has grown twice,
+    # for the two crossings to the inner signal layer that needed a tie beside
+    # them - power good's, and the gate kill's gate.
+    reset_delay = part(parts.CAP_4U7_0603, "eth.c_reset", "C91")
     nets["ETH_PHY_RESET"] += reset_series[1]
     Net("ETH_RESET_RC").connect(reset_series[2], reset_delay[1])
     gnd += reset_delay[2]
@@ -1834,7 +1864,7 @@ def plane_stitching(v3v3, gnd) -> None:
     `test_routing.py` failed, named the layer changes it had stranded, and
     these went where that list said.
     """
-    for index in range(22):
+    for index in range(23):
         cap = part(parts.CAP_100N_0402, f"stitch.{index + 1}", f"C{68 + index}")
         v3v3 += cap[1]
         gnd += cap[2]

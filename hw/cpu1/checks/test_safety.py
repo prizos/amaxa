@@ -911,31 +911,51 @@ def test_a_trip_stops_the_outputs_inside_the_budget(
     # nothing was counting it.
     _, far_side = spec("header", "gate_line_capacitance")
     _, rail = spec("rail.3v3", "voltage")
-    threshold = min(spec(address, "input_low_voltage_max")[0]
-                    for address in (LATCH,))
-    falling, worst = 0.0, None
-    for address, part in design["parts"].items():
-        if not address.startswith("safety.pulldown."):
-            continue
-        line = pad_net[(address, "1")]
-        if not line.endswith("_OUT"):
-            continue
-        _, pull = spec(address, "resistance")
-        driven = line[:-4] + "_B"
-        loaded_line = board_capacitance(line) + far_side
-        if driven in design["nets"]:
-            loaded_line += board_capacitance(driven)
-        takes = pull * loaded_line * math.log(rail / threshold)
-        if takes > falling:
-            falling, worst = takes, line
+    rail_low, _ = spec("rail.3v3", "voltage")
+    _, threshold = spec("header", "gate_line_low")
+
+    # **Through the transistor, not the pull-down.** The kill line is the one
+    # the budget is about, and what pulls it down is Q2 - a pull-down big
+    # enough to do it in time wants 600 ohm, and the 3V3 rail wants 1.4 k, so
+    # there is no resistor that satisfies both. The fourteen PWM lines still
+    # fall through their 10 k, two hundred nanoseconds later, and that is the
+    # second layer the interface promises rather than the first.
+    kill = [address for address, part in design["parts"].items()
+            if part["symbol"].startswith("Transistor_FET:Q_NMOS")]
+    assert len(kill) == 1, f"expected one gate-kill transistor, found {kill}"
+    fet = kill[0]
+    line = pad_net[(fet, "3")]                 # the drain's net, through R100
+    series = [address for address, part in design["parts"].items()
+              if part["symbol"] == "Device:R"
+              and line in {net for (a, _), net in pad_net.items() if a == address}]
+    assert len(series) == 1, f"the drain reaches {series}"
+    killed = next(net for (a, _), net in pad_net.items()
+                  if a == series[0] and net != line)
+
+    _, channel = spec(fet, "on_resistance_at_2v5")
+    _, drain = spec(series[0], "resistance")
+    loaded_line = board_capacitance(killed) + far_side
+    driven = killed[:-4] + "_B"
+    if driven in design["nets"]:
+        loaded_line += board_capacitance(driven)
+    falling = (channel + drain) * loaded_line * math.log(rail / threshold)
+    worst = killed
+
+    # And the gate itself, because TRIPPED has to charge it before any of that
+    # starts - and TRIPPED is also what disables both buffers, so this delay
+    # is in front of the 7 ns they take, not beside it.
+    _, gate = spec(fet, "input_capacitance")
+    _, turn_on = spec(fet, "gate_threshold_max")
+    _, drive = spec(LATCH, "output_current_max")
+    falling += gate * turn_on / drive
 
     assert spent + slowest + loading + falling < trip_budget, (
         f"{spent * 1e9:.1f} ns for the latch and buffer, {slowest * 1e9:g} ns "
         f"for the comparator at its datasheet's own load, and {loading * 1e9:.1f} "
         f"ns more for the {loaded * 1e12:.0f} pF on {trip_bus} - "
         f"{junctions} Schottky junctions and the copper between them - and "
-        f"{falling * 1e9:.1f} ns for {worst} to fall to a valid low through its "
-        f"pull-down, against a {trip_budget * 1e9:g} ns budget"
+        f"{falling * 1e9:.1f} ns to turn {fet} on and pull {worst} below "
+        f"{threshold:g} V, against a {trip_budget * 1e9:g} ns budget"
     )
 
     # And what that leaves the tap network M6 has still to draw. **Reported,
@@ -1045,6 +1065,82 @@ def test_the_buffers_drive_less_than_they_are_rated_for(design, pad_net, spec):
             f"{address}: {total * 1e3:.1f} mA across all outputs, rated "
             f"{total_rating * 1e3:g} mA"
         )
+
+
+def test_the_gate_kill_stays_inside_its_ratings(design, pad_net, spec):
+    """
+    What Q2 has to survive, walked out of the copper rather than assumed.
+
+    The transistor pulls GATE_ENABLE_OUT down while the buffer driving that
+    line is still driving it high - for the few nanoseconds before the same
+    TRIPPED edge disables the buffer, and indefinitely if firmware has left
+    the enable asserted with the latch set. So three things have to hold:
+
+      - the buffer output feeding the line must not be asked for more than one
+        '541 output may source, which is what sets the drain resistor's floor;
+      - the drain must be rated for the rail it is holding off;
+      - the drain current at the instant the line is still at the rail must be
+        inside what this transistor may carry.
+
+    Every resistance here is found by walking the netlist from the drain, so
+    changing the drain resistor or the series resistor moves the answer.
+    """
+    fets = [address for address, part in design["parts"].items()
+            if part["symbol"].startswith("Transistor_FET:Q_NMOS")]
+    assert len(fets) == 1, f"expected one gate-kill transistor, found {fets}"
+    fet = fets[0]
+    drain_net = pad_net[(fet, "3")]
+    assert pad_net[(fet, "2")] == "GND", "the source is not at ground"
+
+    # The gate belongs on the same net that disables the buffers, because the
+    # kill and the disable are one event. Taking the net from the buffers
+    # rather than naming it means a board that renamed or re-routed the latch's
+    # output cannot leave the transistor behind on the old one - disconnecting
+    # the gate used to show up only as a fixture error two tests away.
+    disables = {pad_net.get((address, "19")) for address in BUFFERS}
+    assert len(disables) == 1, f"the buffers are disabled by {disables}"
+    disable = disables.pop()
+    assert pad_net[(fet, "1")] == disable, (
+        f"{fet}'s gate is on {pad_net[(fet, '1')]!r}, but what stops the "
+        f"buffers is {disable!r} - the kill and the disable are one event"
+    )
+
+    series = _through_resistor(design, pad_net, drain_net)
+    assert len(series) == 1, f"the drain reaches {series} rather than one resistor"
+    drain_resistor, killed = series[0]
+
+    _, rail = spec("rail.3v3", "voltage")
+    _, channel = spec(fet, "on_resistance_at_2v5")
+    _, drain_ohms = spec(drain_resistor, "resistance")
+
+    # The line's own series resistor, back towards whichever buffer drives it.
+    upstream = [(address, far) for address, far in
+                _through_resistor(design, pad_net, killed) if far != drain_net]
+    driving = [(address, far) for address, far in upstream if far != "GND"]
+    assert driving, f"{killed} reaches nothing that could be driving it"
+    to_buffer = min(spec(address, "resistance")[0] for address, _ in driving)
+
+    contention = rail / (to_buffer + drain_ohms + channel)
+    allowed, _ = spec(BUFFERS[0], "output_current_max")
+    assert contention <= allowed, (
+        f"holding {killed} down takes {contention * 1e3:.1f} mA from the buffer "
+        f"through {to_buffer:g} + {drain_ohms:g} ohm, against {allowed * 1e3:g} mA "
+        f"per output"
+    )
+
+    _, standoff = spec(fet, "drain_source_voltage_max")
+    assert rail <= standoff, (
+        f"{fet} holds off {rail:.3f} V, rated {standoff:g} V"
+    )
+
+    # At the instant TRIPPED arrives the line is still at the rail, so the
+    # whole of it appears across the drain resistor and the channel.
+    peak = rail / (drain_ohms + channel)
+    _, carries = spec(fet, "drain_current_max")
+    assert peak <= carries, (
+        f"{fet} passes {peak * 1e3:.1f} mA at the first instant, rated "
+        f"{carries * 1e3:g} mA"
+    )
 
 
 def test_every_logic_part_runs_from_the_rail_it_is_given(spec):

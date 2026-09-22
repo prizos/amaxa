@@ -177,7 +177,10 @@ PINS = [
     Pin("PG5", "GPIO", "TRIP_CLEAR_N", "out", note="the only way to clear the trip latch; pulled up, so a reset pin does not clear it"),
     Pin("PF0", "I2C2_SDA", "DAC_SDA", note="trip-threshold DAC"),
     Pin("PF1", "I2C2_SCL", "DAC_SCL"),
-    Pin("PD7", "GPIO", "GATE_ENABLE", "out"),
+    Pin("PD7", "GPIO", "GATE_ENABLE", "out",
+        note="the gate kill: the power board disables every driver from this "
+             "one pin, and a trip pulls it low in 3 ns through Q2. The PWM "
+             "lines are a second layer and arrive 200 ns later"),
     # Two relay drives, not a pre-charge and a main contactor. Which one is
     # which - if the power board has relays at all - is that board's
     # business, read from the ID straps and configured in firmware.

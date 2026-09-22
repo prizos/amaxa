@@ -75,30 +75,6 @@ BLOCKING: dict[str, str] = {
         "this board has nowhere to declare. All three are decisions, and the "
         "column the chain stands in is already full."
     ),
-    "the trip budget closes only because nothing is left for the tap filter "
-    "M6 has still to draw": (
-        "`trip.budget` is 50 ns and its own words are 'how long a half bridge "
-        "survives a shoot-through' - which is not the instant the buffer lets "
-        "go, but the instant the gate line is actually low. Nothing was "
-        "counting the difference. When a trip puts the '541s into high "
-        "impedance the line is discharged by its pull-down alone, and at the "
-        "10 k those started at, the worst line measured 59 ns to reach a valid "
-        "low: more than the entire budget, on top of the 25 ns the chain "
-        "spends getting there.\n\n"
-        "The pull-downs are 1.2 k now, which is as low as the buffer's own "
-        "50 mA total allows with eight lines on a package, and that brings the "
-        "fall to 24.5 ns with 10 pF allowed for the far side. The sum is then "
-        "12.9 + 7 + 5.0 + 24.5 = 49.7 ns of 50 - it closes, by three hundred "
-        "picoseconds, and the 40 % `trip.reserved_share` holds back for M6's "
-        "anti-alias tap is entirely gone.\n\n"
-        "It cannot be closed on this board. Five nanoseconds of fall wants "
-        "244 ohm, which is 114 mA out of one '541 against its 50 mA total. "
-        "The line's fall belongs to the far side: a gate driver with its own "
-        "input pull-down makes this disappear, and this board cannot assume "
-        "one. So the requirement goes to the power board, next to the analog "
-        "clamps - and until M6 is drawn against a real number rather than a "
-        "reserved fraction, the tap filter has no time to spend."
-    ),
     "the comparator taps share a node with the ADC filter, so a fast edge "
     "reaches them 17 to 29 per cent low": (
         "The taps are on the unfiltered side of each input network and the "
@@ -130,7 +106,7 @@ BLOCKING: dict[str, str] = {
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 196
+EXPECTED_CHECKS = 197
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {

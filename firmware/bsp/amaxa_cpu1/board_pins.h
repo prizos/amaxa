@@ -381,7 +381,7 @@
 #define PIN_DAC_SCL_PIN GPIO_PIN_1
 #define PIN_DAC_SCL_AF GPIO_AF4_I2C2
 
-/* GATE_ENABLE: GPIO output on PD7, pin 123 */
+/* GATE_ENABLE: GPIO output on PD7, pin 123. the gate kill: the power board disables every driver from this one pin, and a trip pulls it low in 3 ns through Q2. The PWM lines are a second layer and arrive 200 ns later */
 #define PIN_GATE_ENABLE_PORT GPIOD
 #define PIN_GATE_ENABLE_PIN GPIO_PIN_7
 
