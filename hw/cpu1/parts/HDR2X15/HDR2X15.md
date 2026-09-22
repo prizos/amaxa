@@ -27,7 +27,7 @@ a later block, because a filter slow enough to be worth having on a 1 MSPS ADC
 costs hundreds of nanoseconds and the trip budget is fifty.
 
 Three go *out*: VREF+, so the power board's sensors can be ratiometric to the
-same reference the ADCs use, and two pins of 5VA for them to run from.
+same reference the ADCs use, and two pins of 3V3A for them to run from.
 
 ## VREF+ leaves this board unbuffered
 
@@ -41,12 +41,23 @@ that says what "next to nothing" buys. A sensor bridge pulling a milliamp costs
 a tenth of a millivolt, which is nothing; a resistive divider to ground on the
 far end of the cable is a different matter.
 
-## 5VA is a bead, not a regulator
+## The sensor supply is 3.3 V, and that is an interface decision
 
-The 5 V rail through a 600 Ω ferrite, which is what VDDA gets and for the same
-reason. A low-noise LDO would be better and is what the plan asks for; the bead
-is what this block needs to name the rail and get the pin onto the connector,
-and replacing it later changes one part.
+It was 5 V through a 600 Ω ferrite. The sense lines come back into TT_xx
+analog pins that ST's Table 20 caps at **4.0 V absolute** with no
+positive-injection allowance, and a sensor's op-amp rails to its own supply
+during exactly the over-current the trip chain exists for — so a 5 V supply
+out of this connector was a 5.25 V fault this board had no way to clamp.
+
+A TLV70233 regulates it to 3.3 V instead, and at the top corner of its 2 %
+accuracy a sensor can rail to 3.366 V, which the pins take. See
+`parts/SOT23_5/SOT23_5.md`.
+
+**What a power board gives up:** sensors that need 5 V — an ACS724, a LEM
+module — cannot run from this pin. They run from the 12–15 V aux on the
+digital header, which every power board already has, and their output is
+scaled to this rail. That is the trade, and it is stated here because it is
+the connector's business rather than the regulator's.
 
 **Footprint.** KiCad stock `Connector_PinHeader_2.54mm:PinHeader_2x15_P2.54mm_Vertical`,
 unmodified.

@@ -1,0 +1,13 @@
+{
+  "tlv70233_electrical": {
+    "assumes": "The 300 mA rated output current is from the title and the front page rather than this table, which states the current *limit* rather than the rating.",
+    "crop": "144,333,1413,1127",
+    "document": "TI TLV702xx 300-mA Low-IQ Low-Dropout Regulator, SLVSAG6B (September 2010, revised February 2011), served by LCSC for C26833",
+    "dpi": 200,
+    "page": 3,
+    "read": "2026-09-22",
+    "sha256": "d2237f1cfed2b53cd07ee8bf0b3f6a81daa87a285edee8b7036b6ad7237b4e5c",
+    "shows": "Electrical characteristics over -40 to +125 C junction: input voltage range 2.0 to 5.5 V, DC output accuracy -2 to +2 %, dropout 375 mV max at 300 mA, output current limit 320 mA min, ground pin current 55 uA max at no load, PSRR 68 dB at 1 kHz, output noise 48 uVrms. Every figure this board holds the analog rail to is on this page.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/828325a4619b404796ed5aed0cc99453.pdf"
+  }
+}

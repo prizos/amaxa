@@ -90,11 +90,12 @@ INTENT: dict[str, tuple[float, float]] = {
     # 5 V, its own loads only:
     #   comparators   35 mA  seven TLV3501 at their 5 mA maximum
     #   CAN           80 mA  TCAN1044V dominant into 50 ohm, maximum
-    #   5VA           50 mA  half the ferrite's 100 mA rating, like every
-    #                         other part on this board. It was budgeted at the
-    #                         whole of it - no derating at all, on a figure
-    #                         that is a temperature rise and an impedance
-    #                         collapse rather than a limit.
+    #   3V3A          50 mA  what the analog connector may draw, plus the
+    #                         LDO's own 55 uA. It was half a ferrite's 100 mA
+    #                         rating when this rail was a bead; the regulator
+    #                         that replaced it is good for 300 mA, so the
+    #                         50 is now the connector's promise and not the
+    #                         passive's limit.
     #   ------------------
     #   total        165 mA, and the budget is 200.
     #
@@ -103,8 +104,8 @@ INTENT: dict[str, tuple[float, float]] = {
     # went with it. A budget that still carries a load the schematic has moved
     # is a budget nobody has read since.
     "rail.5v.current": (0.0, 0.20),
-    # What the analog header is allowed to draw from 5VA, which is what the
-    # 5 V rail's budget above carries for it.
+    # What the analog header is allowed to draw from 3V3A, which is what the
+    # 5 V rail's budget above carries for it, through the LDO.
     "analog.supply_current": (0.0, 0.05),
     # And the same promise for VREF+, which had none. It leaves on one pin of
     # the analog connector with no series element, and the power board's
@@ -115,39 +116,46 @@ INTENT: dict[str, tuple[float, float]] = {
     "analog.reference_current": (0.0, 5e-3),
     # The highest voltage a sensor on the far side of the analog connector may
     # ever present to one of the fast inputs, **including while it is
-    # failing**. It is a requirement this board places on the power board, and
-    # the reason it has to be one is worth setting out.
+    # failing**. These pins are TT_xx analog inputs and ST's Table 20 caps
+    # them at 4.0 V absolute - not VDDA plus a diode drop, which is the number
+    # everybody reaches for: Table 21 rates injection current on them at minus
+    # five to **plus nought** milliamps, so there is no positive-injection
+    # path at all and the limit is a voltage with nothing below it.
     #
-    # These pins are TT_xx analog inputs and ST's Table 20 caps them at 4.0 V
-    # absolute. Not VDDA plus a diode drop: Table 21 rates the injection
-    # current on them at minus five to **plus nought** milliamps, so there is
-    # no positive-injection path at all and the limit is a voltage. Meanwhile
-    # this board hands the sensors 5VA, which reaches 5.2 V, and an op-amp
-    # rails to its own supply when the thing it measures goes wrong - during
-    # the over-current the trip chain exists for.
+    # **This used to be a requirement on a board that does not exist yet**,
+    # because the rail this board handed those sensors was 5 V through a bead
+    # and an op-amp rails to its own supply. `docs/research/07` answered it
+    # with "RC corner ~1-2 MHz **plus clamps**"; the RC is built and the
+    # clamps do not fit - a clamp has to sit on the sense net ahead of the
+    # series resistor, and searching the whole analog region for somewhere a
+    # SOT-363 and its two vias would go found nothing. Three positions were
+    # tried and built: the strip between the header and the first column is
+    # two millimetres wide, the band at y -25.8 is the channel the RMII
+    # crosses the board in, and the band below the comparators collides with
+    # the trip diodes and the jack's mounting pad.
     #
-    # `docs/research/07-power-board-interface.md` answers that with "RC corner
-    # ~1-2 MHz **plus clamps**". The RC is built. **The clamps are not, and
-    # they do not fit**: a clamp has to sit on the sense net ahead of the
-    # series resistor - at 10 ohm the resistor is what the settling window
-    # needs and 225 mW at the fault, on a 62.5 mW part - and searching the
-    # whole analog region for somewhere a SOT-363 and its two vias would go
-    # found nothing. Three positions were tried and built: the strip between
-    # the header and the first column is two millimetres wide, the band at
-    # y -25.8 is the channel the RMII crosses the board in, and the band below
-    # the comparators collides with the trip diodes and the jack's mounting
-    # pad. Making room means re-planning the fan's columns.
-    #
-    # So the limit goes where it can be met and where the fault starts: at the
-    # sensor. A 3.3 V output stage, a divider, or a clamp beside the op-amp
-    # all satisfy it, and any of them is cheaper there than here.
+    # It is not a requirement on the far side any more. The analog rail is
+    # regulated to 3.3 V, so what a sensor can rail to is a number this board
+    # sets, and `test_no_analog_input_may_be_presented_more_than_its_pin_allows`
+    # derives this band's ceiling from that rail rather than taking it on
+    # trust. What remains on the power board is narrower and ordinary: do not
+    # drive these pins from the 12-15 V aux.
     "analog.input_voltage_max": (0.0, 4.0),
-    # The most the bead between 5 V and the analog header may drop. The
-    # sensors on the far side are ratiometric to VREF+ so their *reading* does
-    # not depend on this, but their own headroom is specified from their
-    # supply, and a tenth of a volt is the most this board will take out of
-    # it. At 50 mA through 0.9 ohm the drop is 45 mV.
+    # How far the analog rail may sit from its nominal 3.3 V by the time it
+    # reaches the connector. The sensors on the far side are ratiometric to
+    # VREF+ so their *reading* does not depend on this, but their own headroom
+    # is specified from their supply, and it is also what bounds how high they
+    # can rail into an analog pin. A tenth of a volt: the LDO's own 2 % is
+    # 66 mV of it and the copper between it and the connector is the rest.
     "analog.supply_drop": (0.0, 0.1),
+    # How far from the pin it serves a local capacitor may sit. It was a bare
+    # 3.0 in `checks/test_core.py`, used by the MCU's decoupling check alone;
+    # it is here because a second check wants the same idea for the analog
+    # regulator's input capacitor, and two copies of a number is how the trip
+    # budget ended up in two files. Three millimetres is what "beside it"
+    # means for a 0402 next to a fine-pitch package: the capacitor's own body
+    # is 1 mm, so this is about one part's width of track at each end.
+    "layout.decoupling_reach": (0.0, 3.0),
     # What each conversion is assumed to manage, end to end. Nothing on the
     # board measures it either; it is what the fuse, the FET and the inductors
     # are sized against, and it is the first thing to measure at bring-up.
@@ -1249,15 +1257,40 @@ def analog_input(v5, gnd, nets) -> None:
     pins = PINMAP.header_pins(PINMAP.HEADER_ANALOG, PINMAP.HEADER_GROUND,
                               len(header.pins))
 
-    # 5 V through a bead, which is what VDDA gets and for the same reason. A
-    # low-noise LDO here would be better and is what the plan asks for; the
-    # bead is what this block needs to name the rail, and swapping it is one
-    # part.
-    bead = part(parts.FERRITE_600R_0402, "analog.bead", "FB2")
-    v5 += bead[1]
-    v5a = Net("5VA")
-    v5a += bead[2]
+    # **An LDO, not a bead, and the reason is a voltage.** This rail used to be
+    # 5 V through a ferrite. The sensors it powers drive the sense lines, and
+    # those come back into TT_xx analog pins ST's Table 20 caps at 4.0 V
+    # absolute - no positive-injection allowance at all, so the limit is a
+    # voltage with nothing below it. An op-amp rails to its own supply during
+    # the over-current the trip chain exists for, and a 5 V supply means it
+    # rails to 5.25. `docs/research/07` answered that with "RC plus clamps";
+    # the clamps do not fit on this board, and three positions were tried.
+    #
+    # So the rail is regulated to 3.3 V instead. At the worst corner of the
+    # part's own 2 % accuracy a sensor can rail to 3.366 V, which is inside
+    # the pin's rating with 0.6 V to spare, and the fault this board could not
+    # clamp stops being a fault. What it costs is stated at the connector: a
+    # power board that wants 5 V sensors makes 5 V from the 12-15 V aux it
+    # already has on the digital header, and scales their output to this rail.
+    ldo = part(parts.LDO_3V3_ANALOG, "analog.ldo", "U19")
+    v5 += ldo["IN"], ldo["EN"]   # no enable control: the rail lives with 5 V
+    gnd += ldo["GND"]
+    ldo["NC"] += NC  # noqa: F821
+    v5a = Net("3V3A")
+    v5a += ldo["OUT"]
     v5a.drive = POWER
+
+    # TI asks for 0.1 to 1 uF across IN and GND when the source is far away,
+    # and the 5 V island is as far from this connector as anything gets.
+    ldo_in = part(parts.CAP_1U_0402, "analog.ldo_input", "C246")
+    v5 += ldo_in[1]
+    gnd += ldo_in[2]
+
+    # And the output pair, which was the bead's pair. The part is stable on
+    # 0.1 uF of *effective* capacitance - its own words, and the reason it is
+    # worth saying is that effective is what the DC-bias question elsewhere on
+    # this board is about. A 1 uF 0402 X5R at 3.3 V of a 25 V rating has an
+    # order of magnitude in hand against that 0.1.
     for address, spec, ref in (("analog.bulk", parts.CAP_1U_0402, "C38"),
                                ("analog.decoupling", parts.CAP_100N_0402, "C39")):
         cap = part(spec, address, ref)
@@ -1267,7 +1300,7 @@ def analog_input(v5, gnd, nets) -> None:
     for number, name in pins.items():
         if name == "GND":
             gnd += header[number]
-        elif name == "5VA":
+        elif name == "3V3A":
             v5a += header[number]
         else:
             if name not in nets:

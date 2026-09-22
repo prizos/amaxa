@@ -1844,45 +1844,75 @@ def _trip() -> None:
     _trip_routes()
 
 
-# The analog supply for the power board's own sensors: the 5 V rail through a
-# bead, which is what VDDA gets and for the same reason. It sits west of the
-# connector and level with the two pins it leaves on, so the bead is at the
-# load rather than at the rail - which is the only place a bead is worth
-# fitting.
+# The analog supply for the power board's own sensors: 5 V into an LDO, out at
+# 3.3 V. It sits west of the connector and level with the two pins it leaves
+# on, so the regulator is at the load rather than at the rail.
+#
+# It was a ferrite here until the pins on the other end of those sensors were
+# costed: TT_xx analog inputs cap at 4.0 V absolute and an op-amp rails to its
+# own supply, so a 5 V rail out of this connector is a 5.25 V fault waiting for
+# the over-current the trip chain exists for. The regulator is 4.1 by 3.4 mm
+# against the bead's 1.9 by 1.4, which is why the input capacitor goes south
+# of it rather than beside it.
 ANALOG_SUPPLY = 7.21                      # midway between pins 23 and 25
 ANALOG_SUPPLY_LANE, ANALOG_SUPPLY_TAP = 22.0, (-7.0, 26.0)
 ANALOG_SUPPLY_COLUMN = -53.0
 
 
 def _analog_header_supply() -> None:
-    PLACEMENT["analog.bead"] = (-51.5, ANALOG_SUPPLY, 0)
-    PLACEMENT["analog.bulk"] = (-49.5, ANALOG_SUPPLY + 2.6, 270)
-    PLACEMENT["analog.decoupling"] = (-47.5, ANALOG_SUPPLY + 2.6, 270)
-    for address in ("analog.bead", "analog.bulk", "analog.decoupling"):
-        LABELS[address] = (0.0, -1.6)
+    PLACEMENT["analog.ldo"] = (-50.6, ANALOG_SUPPLY, 0)
+    PLACEMENT["analog.ldo_input"] = (-52.0, 4.6, 0)
+    PLACEMENT["analog.bulk"] = (-48.4, ANALOG_SUPPLY + 3.6, 270)
+    PLACEMENT["analog.decoupling"] = (-46.9, ANALOG_SUPPLY + 3.6, 270)
+    for address in ("analog.ldo", "analog.ldo_input",
+                    "analog.bulk", "analog.decoupling"):
+        LABELS[address] = (0.0, -2.4)
 
     # 5 V from the island, the long way round the west of the board: the
-    # connector is as far from the regulator as anything on this board is.
+    # connector is as far from the regulator as anything on this board is. It
+    # crosses to the front south of the regulator rather than level with it,
+    # because level with it is where the ground pad is and a 1.325 mm pad on a
+    # SOT-23-5 leaves nothing between itself and the column.
     rail = _width_for("5V", RAIL)
+    ARRIVAL = (ANALOG_SUPPLY_COLUMN, 4.0)
     VIAS.append((None, ANALOG_SUPPLY_TAP, "5V", *VIA))
     ROUTES.append(("5V", rail, B, [
         ANALOG_SUPPLY_TAP,
         (ANALOG_SUPPLY_TAP[0], ANALOG_SUPPLY_LANE),
         (ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY_LANE),
-        (ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY),
+        ARRIVAL,
     ]))
-    VIAS.append((None, (ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY), "5V", *VIA))
-    ROUTES.append(("5V", rail, F,
-                   [(ANALOG_SUPPLY_COLUMN, ANALOG_SUPPLY), "analog.bead:1"]))
+    VIAS.append((None, ARRIVAL, "5V", *VIA))
 
-    # And out the other side of the bead to the two pins and both capacitors.
-    supply = _width_for("5VA", RAIL)
-    ROUTES.append(("5VA", supply, F, [
-        "analog.bead:2", (-45.5, ANALOG_SUPPLY), "header.analog:23"]))
-    ROUTES.append(("5VA", supply, F, [(-45.5, ANALOG_SUPPLY), "header.analog:25"]))
+    # IN from the south, EN up the west side, and the input capacitor further
+    # south still. The part has no enable control here - the rail lives with
+    # 5 V - and tying EN to IN across the package would have to cross the
+    # ground pad between them, so both come off this one column instead.
+    for y, end in ((ANALOG_SUPPLY - 0.95, "analog.ldo:1"),
+                   (ANALOG_SUPPLY + 0.95, "analog.ldo:3")):
+        ROUTES.append(("5V", rail, F, [
+            ARRIVAL, (ANALOG_SUPPLY_COLUMN, y), end]))
+    ROUTES.append(("5V", rail, F, [ARRIVAL, (ANALOG_SUPPLY_COLUMN, 4.6),
+                                   "analog.ldo_input:1"]))
+
+    # Ground leaves the middle pad eastward under the body, which is the only
+    # direction with neither an IN nor an EN track across it, and drops to the
+    # plane clear of the package.
+    ground = _width_for("GND", RAIL)
+    ROUTES.append(("GND", ground, F, [
+        "analog.ldo:2", (-50.6, ANALOG_SUPPLY), (-50.6, 4.6)]))
+    ROUTES.append(("GND", ground, F, ["analog.ldo_input:2", (-50.6, 4.6)]))
+    VIAS.append((None, (-50.6, 4.6), "GND", *VIA))
+
+    # And out of OUT to the two pins and both output capacitors.
+    supply = _width_for("3V3A", RAIL)
+    ROUTES.append(("3V3A", supply, F, [
+        "analog.ldo:5", (-49.46, ANALOG_SUPPLY),
+        (-45.5, ANALOG_SUPPLY), "header.analog:23"]))
+    ROUTES.append(("3V3A", supply, F, [(-45.5, ANALOG_SUPPLY), "header.analog:25"]))
     for address in ("analog.bulk", "analog.decoupling"):
         x = PLACEMENT[address][0]
-        ROUTES.append(("5VA", supply, F, [(x, ANALOG_SUPPLY), f"{address}:1"]))
+        ROUTES.append(("3V3A", supply, F, [(x, ANALOG_SUPPLY), f"{address}:1"]))
 
 
 # --- the ADC input networks --------------------------------------------------

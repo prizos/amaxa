@@ -30,7 +30,6 @@ MCU = "mcu"
 # centre of the capacitor. ST's datasheet says "as close as possible"; an 0402
 # just outside a 0.5 mm-pitch ring, clear of its neighbours, is a little over
 # 2 mm, and this leaves room for the spread a neighbouring capacitor forces.
-DECOUPLING_REACH = 3.0  # mm
 
 # AN2867's rule: the MCU's maximum critical transconductance should be at least
 # five times what the crystal needs, or the oscillator may not start reliably
@@ -121,7 +120,11 @@ def test_every_supply_pin_has_its_own_capacitor(design, silicon, pad_net, two_pa
     check that only looked at nets. So pins and capacitors are matched one to
     one, each within reach of the pin it serves - a pairing that has to exist
     for every pin at once, not just capacitor by capacitor.
+
+    "Beside it" is `layout.decoupling_reach`, which the analog regulator's
+    input capacitor is held to as well. It used to be a bare constant here.
     """
+    _, reach = spec("layout", "decoupling_reach")
     supply_pins = [
         number
         for name in ("VDD", "VDD33_USB", "VBAT", "VDDA", "VREF+")
@@ -134,7 +137,7 @@ def test_every_supply_pin_has_its_own_capacitor(design, silicon, pad_net, two_pa
         candidates[number] = [
             address
             for address in capacitors_between(design, two_pad_parts, net, "GND")
-            if math.dist((px, py), position(address)) <= DECOUPLING_REACH
+            if math.dist((px, py), position(address)) <= reach
             and _contains(spec(address, "capacitance"), 100e-9)
         ]
 
@@ -142,7 +145,7 @@ def test_every_supply_pin_has_its_own_capacitor(design, silicon, pad_net, two_pa
     unserved = sorted((n for n in supply_pins if n not in matched), key=int)
     assert not unserved, (
         "Supply pins without their own 100 nF capacitor within "
-        f"{DECOUPLING_REACH} mm:\n"
+        f"{reach} mm:\n"
         + "\n".join(
             f"  pin {n} ({pad_net[(MCU, n)]}): candidates {candidates[n] or 'none'}"
             for n in unserved
@@ -214,7 +217,7 @@ def test_every_capacitor_is_rated_for_the_node_it_sits_on(design, two_pad_parts,
         "GND": 0.0,
         "VIN": input_high, "VIN_RAW": input_high, "VIN_FUSED": input_high,
         "RPP_GATE": input_high, "SW_5V": input_high, "UVLO": input_high,
-        "5V": v5, "SW_3V3": v5, "5VA": v5,
+        "5V": v5, "SW_3V3": v5, "3V3A": v3v3,
         "3V3": v3v3,
     }
 

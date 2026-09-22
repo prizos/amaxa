@@ -35,7 +35,7 @@ BLOCKS: list[tuple[str, tuple[str, ...], str]] = [
     ("3V3 buck", ("buck3v3",),
      "TPS562200 down to the logic rail."),
     ("Analog supply", ("analog",),
-     "5VA and its ferrite, for the sensors on the power board."),
+     "3V3A and the LDO that makes it, for the sensors on the power board."),
     ("Reference", ("vref",),
      "3.0 V series reference into VREF+, buffered out to the analog header."),
     ("Safety chain", ("safety",),

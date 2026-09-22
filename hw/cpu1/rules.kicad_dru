@@ -77,7 +77,7 @@
 # The analog supply the power board's sensors run from, and the comparator
 # outputs on their way to the trip bus.
 (rule "analog supply"
-	(condition "A.NetName == '5VA'")
+	(condition "A.NetName == '3V3A'")
 	(constraint track_width (min 0.3mm))
 	(severity error))
 

@@ -74,20 +74,25 @@ hand, near the pins they serve.
 
 ## Where it stands
 
-Everything on this board is drawn, routed and checked: 188 checks, DRC with
+Everything on this board is drawn, routed and checked: 197 checks, DRC with
 no violations and no unconnected items, gerbers for all six copper layers plus
 drill and IPC-D-356, `make reproducible` regenerating the same board, `make
 offline` building with every network call refused, both firmware BSPs
 compiling, and `NEEDS_A_HUMAN_EYE` and `WAITING_ON_A_DECISION` empty.
 
-**It is not ready to order, and `checks/config.py` says why.** One entry in
-`BLOCKING`: the analog inputs have no over-voltage protection. This board
-hands the power board's sensors 5VA, which reaches 5.2 V, and takes their
+**It is not ready to order, and `checks/config.py` says why.** Two entries in
+`BLOCKING`: the converters' capacitance is checked at nominal with nothing on
+this board knowing what DC bias does to it, and the bus terminations cannot
+take their own driver's output if anyone closes their jumper.
+
+The analog inputs' over-voltage was a third and is not any more. The board
+used to hand the power board's sensors 5 V through a bead and take their
 outputs into pins ST caps at **4.0 V absolute** with no positive-injection
-allowance at all. An op-amp rails to its own supply during exactly the
-over-current the trip chain exists for. `docs/research/07` called for clamps;
-they are not fitted and do not fit, and the requirement now sits on a board
-that does not exist yet. See `parts/HDR2X15` and the interface note.
+allowance at all, which an op-amp rails past during exactly the over-current
+the trip chain exists for. `docs/research/07` called for clamps; they do not
+fit, and three positions were tried. The rail is regulated to 3.3 V instead,
+so the worst a sensor can rail to is 3.366 V and the fault stops existing.
+What it costs is at the connector, and `parts/HDR2X15` says so.
 
 `COMPLETE` was True for a while and that was wrong - not because the board is
 bad, but because the gate behind it tested two things and the flag was read as

@@ -132,6 +132,41 @@ RES_150R_0402 = PartSpec(
     params={"resistance": pm(150, 0.01), "max_power": exact(0.0625)},
 )
 
+# The analog rail this board hands the power board's sensors. It is an LDO and
+# not a bead, and the reason is a voltage rather than noise: the sense lines
+# come back into TT_xx analog pins that ST's Table 20 caps at 4.0 V absolute,
+# with no positive-injection allowance at all, and a sensor's op-amp rails to
+# its own supply during exactly the over-current the trip chain exists for. A
+# bead off 5 V hands it 5.25 V to rail to. This hands it 3.366 V at the worst
+# corner of its own 2 % accuracy, which is inside the pin's rating with 0.6 V
+# to spare, so the fault this board cannot clamp stops being a fault.
+#
+# The noise is the second reason and it is real: 68 dB of PSRR at 1 kHz and
+# 48 uVrms of its own, in front of sensors feeding a 12-bit converter, where
+# what was there before was buck ripple through a ferrite. See SOT23_5.md.
+LDO_3V3_ANALOG = PartSpec(
+    symbol="Regulator_Linear:TLV70233_SOT23-5", footprint="SOT23_5:SOT-23-5",
+    prefix="U", manufacturer="Texas Instruments", mpn="TLV70233DBVR",
+    lcsc="C26833", value="TLV70233",
+    params={
+        "input_voltage_min": exact(2.0),
+        "input_voltage_max": exact(5.5),
+        "output_voltage": exact(3.3),
+        "output_accuracy": exact(0.02),
+        "output_current_max": exact(0.3),
+        "dropout_at_max_current": exact(0.375),
+        "output_capacitance_min": exact(100e-9),
+        # TI asks for 0.1 to 1.0 uF across IN and GND when the source is not
+        # close, which the 5 V island is not. The ESR ceiling that goes with
+        # the output figure - 200 mOhm - is not declared here: no capacitor on
+        # this board states an ESR, so it would be a float nothing could be
+        # compared against. It is in SOT23_5.md instead, where the 0402 X5R
+        # fitted is milliohms and the question does not arise.
+        "input_capacitance_min": exact(100e-9),
+        "quiescent_current": exact(55e-6),
+    },
+)
+
 # Between 3V3 and VDDA: 600 ohm at 100 MHz keeps digital noise off the analog
 # supply, and 0.9 ohm DC barely moves VDDA at the ADCs' few milliamps.
 FERRITE_600R_0402 = PartSpec(

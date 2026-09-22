@@ -374,7 +374,8 @@ def test_no_analog_input_may_be_presented_more_than_its_pin_allows(
     design, spec, networks, pad_net
 ):
     """
-    What the connector may present, against what the pin is rated for.
+    What the connector may present, against what the pin is rated for - and
+    against the rail this board hands the thing doing the presenting.
 
     These are TT_xx analog inputs and ST's Table 20 caps them at **4.0 V
     absolute**. Not VDDA plus a diode drop, which is the number everybody
@@ -382,18 +383,18 @@ def test_no_analog_input_may_be_presented_more_than_its_pin_allows(
     *plus nought* milliamps, so there is no positive-injection path to be
     inside of. The limit is a voltage and there is nothing below it.
 
-    And this board hands the sensors that drive those pins **5VA**, which
-    reaches 5.2 V. An op-amp rails to its own supply when the thing it is
-    measuring goes wrong, which is the over-current the trip chain exists for,
-    and the 10 ohm in series is what the ADC's settling window needs rather
-    than anything that limits a fault.
+    **This used to be a requirement on a board that does not exist yet.** The
+    analog rail was 5 V through a bead, an op-amp rails to its own supply when
+    the thing it measures goes wrong, and the 22 ohm in series is what the
+    ADC's settling window needs rather than anything that limits a fault. So
+    the figure was written down and handed to the power board, along with the
+    clamps that would not fit on this one.
 
-    So the requirement goes to the board that can meet it, and this is the
-    check that it has been stated and that it is inside the pin's rating.
-    `analog.input_voltage_max` is what the power board's sensors may present;
-    if anyone raises it past what the silicon takes, this fails. What it
-    cannot do is verify the far board - only that this one has said what it
-    needs and asked for something possible.
+    The rail is regulated to 3.3 V now, so the worst a sensor running from
+    this board can rail to is a number this board sets: the regulator's
+    nominal output at the top of its own accuracy. That is what the second
+    assertion derives, and it is why the first one stopped being a promise
+    nobody here could keep.
     """
     _, presented = spec("analog", "input_voltage_max")
     limit, _ = spec(MCU, "analog_input_voltage_max")
@@ -402,14 +403,23 @@ def test_no_analog_input_may_be_presented_more_than_its_pin_allows(
         f"{limit:g} V"
     )
 
-    # And the requirement is not vacuous: the rail this board sends out for
-    # those sensors is higher than the pins take, so something on the far side
-    # has to do the limiting. Saying so here is what stops the figure above
-    # being read as "nothing to do".
-    _, analog_rail = spec("rail.5v", "voltage")
-    assert analog_rail > limit, (
-        f"5VA reaches {analog_rail:g} V and the pins take {limit:g} V - if "
-        f"that ever stops being true, this requirement can be dropped"
+    # What this board actually hands the far side, from the part that makes
+    # it. A sensor powered from here cannot exceed its own supply.
+    regulator = [address for address, part in design["parts"].items()
+                 if part["symbol"].startswith("Regulator_Linear:")]
+    assert len(regulator) == 1, f"the analog supply comes from {regulator}"
+    nominal, _ = spec(regulator[0], "output_voltage")
+    _, accuracy = spec(regulator[0], "output_accuracy")
+    rails_to = nominal * (1 + accuracy)
+    assert rails_to <= limit, (
+        f"the analog rail reaches {rails_to:.3f} V and the pins take "
+        f"{limit:g} V - a sensor running from it rails to its own supply"
+    )
+    assert rails_to <= presented, (
+        f"the rail this board supplies reaches {rails_to:.3f} V, above the "
+        f"{presented:g} V the connector is documented to present. The band is "
+        f"what the power board is told; it cannot be under what this board "
+        f"itself hands out"
     )
 
     # Every fast channel, however many there are. This used to assert there

@@ -16,16 +16,6 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 COMPLETE = False
 
 BLOCKING: dict[str, str] = {
-    "analog inputs have no over-voltage protection": (
-        "This board hands the power board's sensors 5VA, which reaches 5.2 V, "
-        "and takes their outputs into TT_xx analog pins that ST's Table 20 "
-        "caps at 4.0 V absolute - with no positive-injection allowance at all "
-        "(Table 21 rates it at -5 to +0 mA). An op-amp rails to its own "
-        "supply during exactly the over-current the trip chain exists for. "
-        "`docs/research/07` called for clamps; they are not fitted and do not "
-        "fit, and the requirement now sits on a board that does not exist "
-        "yet."
-    ),
     "the converters' capacitance is checked at nominal, and nothing on this "
     "board knows what DC bias does to it": (
         "Every ceramic capacitance check here - the 3V3 buck's 10 uF input "
@@ -182,6 +172,7 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
 # test_a_confirmed_review_left_its_evidence_behind makes that checkable.
 CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOT223": ["pinout", "land_pattern"],
+    "SOT23_5": ["tlv70233_electrical"],
     "LED0603": ["polarity"],
     "LQFP144": ["power_supply_scheme", "thermal_characteristics",
                 "power_dissipation_at_85c"],

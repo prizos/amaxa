@@ -10,6 +10,8 @@ Datasheets: TI SBOS321E (TLV3501, April 2016) and the MCP4728 data recorded in
 `parts/MSOP10/MSOP10.md`, which is where the caveats about that part live.
 """
 
+import math
+
 import pytest
 
 DAC = "trip.dac"
@@ -404,63 +406,136 @@ def test_the_comparators_watch_what_the_connector_brings_in(design, pad_net, com
 
 def test_the_board_sends_out_its_reference_and_an_analog_supply(design, pad_net, spec):
     """
-    VREF+ and 5VA reach the connector, and what bounds the current they can
-    supply is a part on this board rather than the connector.
+    VREF+ and 3V3A reach the connector, and what bounds them is a part on this
+    board rather than the connector.
 
     The power board's sensors are ratiometric to the same reference the ADCs
     use, which is the only way a measurement made there means anything here.
-    5VA is the 5 V rail through a bead, and the bead's rating - not the
-    connector's three amps - is what says how much the far end may draw.
+    The supply beside it was the 5 V rail through a bead until the pins at the
+    other end of those sensors were costed; it is a regulator now, and this is
+    where its ratings are held against what the connector promises.
     """
     on_connector = {
         pad_net[(HEADER, str(number))]
         for number in range(1, 31)
         if (HEADER, str(number)) in pad_net
     }
-    assert {"VREF+", "5VA"} <= on_connector, (
+    assert {"VREF+", "3V3A"} <= on_connector, (
         f"the connector carries {sorted(on_connector)}"
     )
-    # What the far end may draw is the bead's rating, derated like everything
-    # else here, and what it costs is the drop across it.
-    #
-    # This used to assert `bead < contact` - 0.1 A against 3 A - which is true
-    # of every ferrite ever made, independent of this design, and was what
-    # kept `analog.bead.max_current` off the unread list while nothing
-    # compared it to anything. The connector is still not the limit, and that
-    # is now said by comparing the budget with both.
-    bead, _ = spec("analog.bead", "max_current")
-    resistance, _ = spec("analog.bead", "dc_resistance")
+
+    regulator = [address for address, part in design["parts"].items()
+                 if part["symbol"].startswith("Regulator_Linear:")]
+    assert len(regulator) == 1, f"the analog supply comes from {regulator}"
+    ldo = regulator[0]
+    assert pad_net[(ldo, "5")] == "3V3A", (
+        f"the regulator's output is on {pad_net[(ldo, '5')]}, not the rail the "
+        f"connector carries"
+    )
+
     contact, _ = spec(HEADER, "current_rating")
     _, budget = spec("analog", "supply_current")
     _, allowed = spec("analog", "supply_drop")
+    rated, _ = spec(ldo, "output_current_max")
+    _, accuracy = spec(ldo, "output_accuracy")
+    nominal, _ = spec(ldo, "output_voltage")
 
-    assert budget <= bead * _derating(spec), (
-        f"5VA is budgeted {budget * 1e3:g} mA against a bead rated "
-        f"{bead * 1e3:g} mA, which is past the half this board derates to"
+    assert budget <= rated * _derating(spec), (
+        f"3V3A is budgeted {budget * 1e3:g} mA against a regulator rated "
+        f"{rated * 1e3:g} mA, which is past the half this board derates to"
     )
     assert budget <= contact, (
-        f"5VA is budgeted {budget * 1e3:g} mA and a contact carries "
+        f"3V3A is budgeted {budget * 1e3:g} mA and a contact carries "
         f"{contact:g} A"
     )
-    drop = budget * resistance
-    assert drop <= allowed, (
-        f"{drop * 1e3:.0f} mV across the bead at {budget * 1e3:g} mA, against "
-        f"the {allowed * 1e3:g} mV the analog supply may lose"
+
+    # The bead's DC drop used to be the thing measured here. A regulator has
+    # no DC drop; what moves its output away from nominal is its own accuracy,
+    # and that is what the sensors' headroom is specified against.
+    assert nominal * accuracy <= allowed, (
+        f"{nominal * accuracy * 1e3:.0f} mV of {accuracy * 100:g}% accuracy on "
+        f"a {nominal:g} V rail, against the {allowed * 1e3:g} mV the analog "
+        f"supply may lose"
+    )
+
+    # And it has to have somewhere to regulate from. The dropout figure is the
+    # one at the part's full 300 mA rather than at the 50 this draws, which is
+    # the conservative end and still leaves a volt.
+    supply_low, supply_high = spec("rail.5v", "voltage")
+    _, dropout = spec(ldo, "dropout_at_max_current")
+    in_low, in_high = spec(ldo, "input_voltage_min"), spec(ldo, "input_voltage_max")
+    assert in_low[0] <= supply_low and supply_high <= in_high[1], (
+        f"{ldo} takes {in_low[0]:g} to {in_high[1]:g} V and the rail feeding it "
+        f"is {supply_low:g} to {supply_high:g} V"
+    )
+    assert supply_low - dropout >= nominal * (1 + accuracy), (
+        f"{(supply_low - dropout):.3f} V at the regulator's input against "
+        f"{nominal * (1 + accuracy):.3f} V wanted at its output"
+    )
+
+    # The 5 V rail carries this load plus whatever the regulator itself takes.
+    _, quiescent = spec(ldo, "quiescent_current")
+    _, rail_budget = spec("rail.5v", "current")
+    assert budget + quiescent <= rail_budget, (
+        f"the analog connector's {budget * 1e3:g} mA and the regulator's own "
+        f"{quiescent * 1e6:g} uA against a {rail_budget * 1e3:g} mA rail"
     )
 
 
-def test_the_analog_supply_is_decoupled_where_it_leaves(design, pad_net, spec):
-    """A bulk capacitor and a high-frequency one on 5VA, as every rail here has."""
+def test_the_analog_supply_is_decoupled_where_it_leaves(design, pad_net, spec, position):
+    """
+    A bulk capacitor and a high-frequency one on 3V3A, as every rail here has -
+    and enough of the first for the regulator to be stable.
+
+    TI's figure is an *effective* capacitance of 0.1 uF, which is its own word
+    for "after bias and temperature derating". The nominal fitted here is an
+    order of magnitude above it, which is the margin that makes the question
+    this board cannot answer elsewhere - what DC bias does to a ceramic - not
+    a question here.
+    """
+    regulator = [address for address, part in design["parts"].items()
+                 if part["symbol"].startswith("Regulator_Linear:")]
+    assert len(regulator) == 1, f"the analog supply comes from {regulator}"
+    _, needs = spec(regulator[0], "output_capacitance_min")
+
     found = []
     for address, part in design["parts"].items():
         if part["symbol"] != "Device:C":
             continue
-        if {pad_net.get((address, "1")), pad_net.get((address, "2"))} == {"5VA", "GND"}:
+        if {pad_net.get((address, "1")), pad_net.get((address, "2"))} == {"3V3A", "GND"}:
             found.append(spec(address, "capacitance")[0])
-    assert len(found) >= 2, f"5VA has {len(found)} capacitors on it"
+    assert len(found) >= 2, f"3V3A has {len(found)} capacitors on it"
     assert max(found) >= 5 * min(found), (
-        f"5VA's capacitors are {[f'{c * 1e6:.2f} uF' for c in sorted(found)]}, which is "
+        f"3V3A's capacitors are {[f'{c * 1e6:.2f} uF' for c in sorted(found)]}, which is "
         "two of the same thing rather than bulk and high frequency"
+    )
+    assert sum(found) >= needs, (
+        f"{sum(found) * 1e6:.2f} uF on 3V3A against the {needs * 1e6:g} uF the "
+        f"regulator needs to be stable"
+    )
+
+    # And the input side. TI's condition is "if the device is not located
+    # close to the power source", and the 5 V island is at the other end of
+    # this board, so it applies - which means a capacitor somewhere on the
+    # 5 V net does not answer it. It has to be *this* regulator's, and what
+    # makes it so is the same reach the MCU's own decoupling is held to.
+    supply = pad_net[(regulator[0], "1")]
+    _, wants = spec(regulator[0], "input_capacitance_min")
+    _, reach = spec("layout", "decoupling_reach")
+    here = position(regulator[0])
+    near = [address for address, part in design["parts"].items()
+            if part["symbol"] == "Device:C"
+            and {pad_net.get((address, "1")),
+                 pad_net.get((address, "2"))} == {supply, "GND"}
+            and math.dist(here, position(address)) <= reach]
+    assert near, (
+        f"nothing on {supply} sits within {reach:g} mm of {regulator[0]}, so "
+        f"its input capacitor is the rail's rather than its own"
+    )
+    across = sum(spec(address, "capacitance")[0] for address in near)
+    assert across >= wants, (
+        f"{across * 1e6:.2f} uF within {reach:g} mm of {regulator[0]} against "
+        f"the {wants * 1e6:g} uF it asks for at its input"
     )
 
 

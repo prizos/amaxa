@@ -9,9 +9,9 @@ soldered underneath it. This is the board as it stands, plotted from the same
 |---|---|
 | **Size** | 130 × 110 mm |
 | **Stackup** | 6 layers — F.Cu / In1.Cu / In2.Cu / In3.Cu / In4.Cu / B.Cu |
-| **Footprints** | 262 |
-| **Nets** | 193 |
-| **Routing** | 1286 track segments, 580 vias, 4 zones |
+| **Footprints** | 272 |
+| **Nets** | 197 |
+| **Routing** | 1325 track segments, 599 vias, 4 zones |
 | **DRC** | 0 violations, 0 connections not yet routed (`ROUTING := complete`) |
 
 ## The copper, one layer at a time
@@ -51,7 +51,7 @@ The inner signal layer, and the reason this board is six layers rather than four
 
 ### `In4.Cu`
 
-The second ground plane, and what both outer layers return to. With ground under B.Cu as well as under F.Cu, every through-hole via is a ground-to-ground layer change and any of the board's 211 ground vias will carry the return across.
+The second ground plane, and what both outer layers return to. With ground under B.Cu as well as under F.Cu, every through-hole via is a ground-to-ground layer change and any of the board's 219 ground vias will carry the return across.
 
 Zones on this layer: `GND`
 
@@ -90,21 +90,21 @@ schematic after the fact.
 | Input protection | 6 | Terminal, fuse, reverse-polarity FET with its gate Zener, and the TVS whose clamp voltage the buck has to outlive. |
 | 100 V buck | 17 | LM5164 constant-on-time buck to 5 V, rated far above that clamp - a 60 V part here would be the regulator defect from led12 again. |
 | 3V3 buck | 9 | TPS562200 down to the logic rail. |
-| Analog supply | 3 | 5VA and its ferrite, for the sensors on the power board. |
+| Analog supply | 4 | 3V3A and the LDO that makes it, for the sensors on the power board. |
 | Reference | 2 | 3.0 V series reference into VREF+, buffered out to the analog header. |
-| Safety chain | 53 | Two octal buffers and the hardware latch. Nothing reaches a gate driver unless firmware has deliberately allowed it, and a reset takes the permission away. |
+| Safety chain | 59 | Two octal buffers and the hardware latch. Nothing reaches a gate driver unless firmware has deliberately allowed it, and a reset takes the permission away. |
 | Trip comparators | 26 | Seven TLV3501s and the threshold DAC, which powers up at zero - so an unprogrammed board trips as it powers up rather than switching. |
 | ADC networks | 31 | One RC per channel, sized from both ends: low enough to stop the switching node aliasing into the measurement, high enough to recharge inside the sampling window. |
-| CAN FD | 8 | TCAN1044V with split termination on a solder jumper. |
+| CAN FD | 9 | TCAN1044V with split termination on a solder jumper. |
 | RS-485 | 6 | THVD1450, fail-safe biased on-chip, 120 ohm on a jumper. |
 | USB-C | 5 | A device port that senses VBUS and takes no power from it. The board's one differential pair, drawn to 90 ohm from the stackup rather than to a width somebody remembered. |
 | Ethernet | 22 | The LAN8742A, a 25 MHz crystal it multiplies up to make the RMII reference clock, the straps that decide it should, and a jack with the magnetics inside it. The board grew to 130 by 110 mm to hold the jack. |
 | Headers | 2 | Digital 2x20 and analog 2x15 to the power board. |
-| Plane stitching | 21 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
+| Plane stitching | 23 | Capacitors that exist for the return current rather than for any part's supply: the front of this board is referenced to ground and the back to the supply islands, and these are where a signal changing layer can hand its return across. |
 | Test points | 11 | A pad on every rail and on the signals bring-up needs. |
 
 <details>
-<summary><strong>Every footprint</strong> — all 262, by block</summary>
+<summary><strong>Every footprint</strong> — all 272, by block</summary>
 
 #### MCU core
 
@@ -202,9 +202,10 @@ schematic after the fact.
 
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
-| `FB2` | `analog.bead` | 600R | GZ1005D601TF | C14182 | `L_0402_1005Metric` |
 | `C38` | `analog.bulk` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
 | `C39` | `analog.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `U19` | `analog.ldo` | TLV70233 | TLV70233DBVR | C26833 | `SOT-23-5` |
+| `C246` | `analog.ldo_input` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
 
 #### Reference
 
@@ -221,6 +222,8 @@ schematic after the fact.
 | `C26` | `safety.buffer1.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `U6` | `safety.buffer2` | 74LVC541A | SN74LVC541APWR | C113281 | `TSSOP-20_4.4x6.5mm_P0.65mm` |
 | `C27` | `safety.buffer2.decoupling` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C245` | `safety.c_clear` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `D13` | `safety.d_clear_clamp` | BAT54A | LBAT54ALT1G | C12743 | `SOT-23` |
 | `D6` | `safety.d_faults` | BAT54A | LBAT54ALT1G | C12743 | `SOT-23` |
 | `D7` | `safety.d_reset` | BAT54A | LBAT54ALT1G | C12743 | `SOT-23` |
 | `U7` | `safety.latch` | 74LVC1G74 | SN74LVC1G74DCUR | C70285 | `VSSOP-8_2.3x2mm_P0.5mm` |
@@ -248,10 +251,14 @@ schematic after the fact.
 | `R54` | `safety.pullup.id_strap1` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R55` | `safety.pullup.id_strap2` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R56` | `safety.pullup.id_strap3` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `Q2` | `safety.q_gate_kill` | DMG1012T | DMG1012T-7 | C20512 | `SOT-523` |
 | `R20` | `safety.r_clear_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R98` | `safety.r_clear_series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `R19` | `safety.r_enable_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R17` | `safety.r_fault1_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R18` | `safety.r_fault2_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R99` | `safety.r_gate_enable_pulldown` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
+| `R100` | `safety.r_gate_kill_drain` | 150R | 0402WGF1500TCE | C25082 | `R_0402_1005Metric` |
 | `R86` | `safety.r_trip_n_pulldown` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
 | `R16` | `safety.r_trip_pullup` | 10k | 0402WGF1002TCE | C25744 | `R_0402_1005Metric` |
 | `R85` | `safety.r_tripped_pullup` | 100k | 0402WGF1003TCE | C25741 | `R_0402_1005Metric` |
@@ -310,25 +317,25 @@ schematic after the fact.
 | `C52` | `adc.board_id1.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `R74` | `adc.board_id2.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `C53` | `adc.board_id2.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
-| `R75` | `adc.comp_fast4.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C54` | `adc.comp_fast4.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R75` | `adc.comp_fast4.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
+| `C54` | `adc.comp_fast4.shunt` | 100pF | 0402CG101J500NT | C1546 | `C_0402_1005Metric` |
 | `R76` | `adc.dac_test.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
-| `R61` | `adc.fast1.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C40` | `adc.fast1.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R62` | `adc.fast2.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C41` | `adc.fast2.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R63` | `adc.fast3.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C42` | `adc.fast3.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R64` | `adc.fast4.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C43` | `adc.fast4.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R65` | `adc.fast5.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C44` | `adc.fast5.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R66` | `adc.fast6.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C45` | `adc.fast6.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R67` | `adc.fast7.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C46` | `adc.fast7.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
-| `R68` | `adc.fast8.series` | 10R | 0402WGF100JTCE | C25077 | `R_0402_1005Metric` |
-| `C47` | `adc.fast8.shunt` | 10nF | CC0402KRX7R9BB103 | C60133 | `C_0402_1005Metric` |
+| `R61` | `adc.fast1.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C40` | `adc.fast1.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `R62` | `adc.fast2.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C41` | `adc.fast2.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `R63` | `adc.fast3.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C42` | `adc.fast3.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `R64` | `adc.fast4.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C43` | `adc.fast4.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `R65` | `adc.fast5.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C44` | `adc.fast5.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `R66` | `adc.fast6.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C45` | `adc.fast6.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `R67` | `adc.fast7.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C46` | `adc.fast7.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
+| `R68` | `adc.fast8.series` | 22R | 0402WGF220JTCE | C25092 | `R_0402_1005Metric` |
+| `C47` | `adc.fast8.shunt` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
 | `R69` | `adc.slow1.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
 | `C48` | `adc.slow1.shunt` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `R70` | `adc.slow2.series` | 1k | 0402WGF1001TCE | C11702 | `R_0402_1005Metric` |
@@ -346,6 +353,7 @@ schematic after the fact.
 | `C56` | `can.decoupling_vio` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `J5` | `can.header` | bus | PZ254-1-03-Z-8.5 | C2894926 | `PinHeader_1x03_P2.54mm_Vertical` |
 | `JP1` | `can.termination_jumper` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
+| `JP3` | `can.termination_jumper_low` | open | SOLDER-JUMPER-2 | — | `SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm` |
 | `R77` | `can.termination_lower` | 60R4 | 0402WGF604JTCE | C60310 | `R_0402_1005Metric` |
 | `C57` | `can.termination_split` | 4.7nF | 0402B472K500NT | C1538 | `C_0402_1005Metric` |
 | `R97` | `can.termination_upper` | 60R4 | 0402WGF604JTCE | C60310 | `R_0402_1005Metric` |
@@ -377,7 +385,7 @@ schematic after the fact.
 | Ref | Address | Value | Part number | LCSC | Footprint |
 |---|---|---|---|---|---|
 | `R81` | `eth.bias` | 12K1 | 0402WGF1212TCE | C25852 | `R_0402_1005Metric` |
-| `C89` | `eth.c_reset` | 4.7uF | CL10A475KO8NNNC | C19666 | `C_0603_1608Metric` |
+| `C91` | `eth.c_reset` | 4.7uF | CL10A475KO8NNNC | C19666 | `C_0603_1608Metric` |
 | `C59` | `eth.core_bulk` | 1uF | CL05A105KA5NQNC | C52923 | `C_0402_1005Metric` |
 | `C60` | `eth.core_hf` | 470pF | 0402CG471J500NT | C75274 | `C_0402_1005Metric` |
 | `C62` | `eth.dec_vdd1a` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -424,6 +432,8 @@ schematic after the fact.
 | `C69` | `stitch.2` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C87` | `stitch.20` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C88` | `stitch.21` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C89` | `stitch.22` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
+| `C90` | `stitch.23` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C70` | `stitch.3` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C71` | `stitch.4` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
 | `C72` | `stitch.5` | 100nF | CL05B104KO5NNNC | C1525 | `C_0402_1005Metric` |
@@ -454,18 +464,19 @@ schematic after the fact.
 ## Nets
 
 <details>
-<summary><strong>Every net</strong> — all 193, by size</summary>
+<summary><strong>Every net</strong> — all 197, by size</summary>
 
 | Net | Nodes | Status |
 |---|--:|---|
-| `GND` | 224 |  |
-| `3V3` | 102 |  |
+| `GND` | 230 |  |
+| `3V3` | 107 |  |
 | `5V` | 29 |  |
 | `VIN` | 9 |  |
 | `TRIP_SET_N` | 8 |  |
 | `USB_VBUS_IN` | 6 |  |
 | `VREF+` | 6 |  |
-| `5VA` | 5 |  |
+| `3V3A` | 5 |  |
+| `TRIPPED` | 5 |  |
 | `TRIP_LEVEL_HIGH` | 5 |  |
 | `TRIP_LEVEL_LOW` | 5 |  |
 | `ETH_PHY_RESET` | 4 |  |
@@ -476,10 +487,12 @@ schematic after the fact.
 | `FAULT1_N` | 4 |  |
 | `FAULT2_N` | 4 |  |
 | `FB_5V` | 4 |  |
+| `GATE_ENABLE_OUT` | 4 |  |
 | `NRST` | 4 |  |
+| `PGOOD` | 4 |  |
 | `PWM_ENABLE_N` | 4 |  |
 | `SW_5V` | 4 |  |
-| `TRIPPED` | 4 |  |
+| `TRIP_CLEAR_LATCH_N` | 4 |  |
 | `TRIP_N` | 4 |  |
 | `VDDA` | 4 |  |
 | `BOARD_ID1` | 3 |  |
@@ -509,7 +522,7 @@ schematic after the fact.
 | `FAST7` | 3 |  |
 | `FAST8` | 3 |  |
 | `FB_3V3` | 3 |  |
-| `GATE_ENABLE_OUT` | 3 |  |
+| `GATE_ENABLE` | 3 |  |
 | `HSE_IN` | 3 |  |
 | `HSE_OUT` | 3 |  |
 | `ID_STRAP0` | 3 |  |
@@ -518,7 +531,6 @@ schematic after the fact.
 | `ID_STRAP3` | 3 |  |
 | `LSE_IN` | 3 |  |
 | `LSE_OUT` | 3 |  |
-| `PGOOD` | 3 |  |
 | `PWM1_A_HIGH_OUT` | 3 |  |
 | `PWM1_A_LOW_OUT` | 3 |  |
 | `PWM1_B_HIGH_OUT` | 3 |  |
@@ -547,7 +559,6 @@ schematic after the fact.
 | `STO1_FEEDBACK` | 3 |  |
 | `STO2_FEEDBACK` | 3 |  |
 | `SW_3V3` | 3 |  |
-| `TRIP_CLEAR_N` | 3 |  |
 | `TRIP_LEVEL_FAST4` | 3 |  |
 | `USB_DM_CABLE` | 3 |  |
 | `USB_DP_CABLE` | 3 |  |
@@ -559,6 +570,7 @@ schematic after the fact.
 | `CAN_RX` | 2 |  |
 | `CAN_STANDBY` | 2 |  |
 | `CAN_TERM` | 2 |  |
+| `CAN_TERM_LOW` | 2 |  |
 | `CAN_TX` | 2 |  |
 | `CONSOLE_RX` | 2 |  |
 | `CONSOLE_TX` | 2 |  |
@@ -585,8 +597,8 @@ schematic after the fact.
 | `FAST6_SENSE` | 2 |  |
 | `FAST7_SENSE` | 2 |  |
 | `FAST8_SENSE` | 2 |  |
-| `GATE_ENABLE` | 2 |  |
 | `GATE_ENABLE_B` | 2 |  |
+| `GATE_KILL_DRAIN` | 2 |  |
 | `HALL_1` | 2 |  |
 | `HALL_2` | 2 |  |
 | `HALL_3` | 2 |  |
@@ -635,6 +647,8 @@ schematic after the fact.
 | `SWCLK` | 2 |  |
 | `SWDIO` | 2 |  |
 | `SWO` | 2 |  |
+| `TRIP_CLEAR_COUPLE` | 2 |  |
+| `TRIP_CLEAR_N` | 2 |  |
 | `TRIP_FAST1_HIGH` | 2 |  |
 | `TRIP_FAST1_LOW` | 2 |  |
 | `TRIP_FAST2_HIGH` | 2 |  |
