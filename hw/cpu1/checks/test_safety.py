@@ -202,6 +202,70 @@ def test_both_buffers_are_gated_by_the_enable_and_by_the_latch(design, pad_net):
     assert not problems, "Buffer enables:\n" + "\n".join(problems)
 
 
+def test_the_latch_is_wired_as_a_latch_and_its_output_is_what_stops_the_board(
+    design, pad_net
+):
+    """
+    The flip-flop's clock and data are tied low, and its Q is the net that
+    disables the buffers.
+
+    **Nothing checked either, and the file's headline claim rests on both.**
+    Every other check here reaches the latch through the pads it cares about -
+    PRE, CLR, Q-bar - and takes `TRIPPED` on trust as a name. So the part
+    could have been wired three different wrong ways with the whole suite
+    green:
+
+      - Q disconnected entirely. `TRIPPED` is then held at 3V3 by its 100 k
+        pull-up alone, which reads as "not tripped" and can never be driven
+        low. One unwetted pin on a VSSOP-8 and the trip path is gone; the
+        design comment argues about exactly that pin and answers it with a
+        resistor rather than with a check.
+      - **CLK on a PWM line and D at ground.** Every switching edge then
+        clocks a zero into the latch, so a hardware trip clears itself inside
+        one PWM period and `TRIP_N` reads "no break" throughout. This is the
+        worst of the three and the least visible.
+      - D at 3V3, which turns a clocked edge into a latch that sets itself.
+
+    `cpu1.py` states the requirement in words - "a D flip-flop with its clock
+    and data tied low, used for its asynchronous preset and clear alone" - and
+    builds it. This is what holds it.
+
+    The pins come from the symbol rather than from pad numbers, and Q is
+    identified as the pad the buffers' second enable is on, so renaming the
+    net proves nothing.
+    """
+    names = {name: pad for pad, name in symbol_pin_names(design["parts"][LATCH]["symbol"]).items()}
+    for name in ("D", "C", "Q", "~{Q}", "~{PRE}", "~{CLR}"):
+        assert name in names, f"the latch's symbol has no {name} pin: {sorted(names)}"
+
+    # Used as a set-reset, so the synchronous half must be inert.
+    for name in ("D", "C"):
+        net = pad_net.get((LATCH, names[name]))
+        assert net == "GND", (
+            f"the latch's {name} is on {net!r}, not ground. With a clock or a "
+            f"data input that moves, this stops being a set-reset held by PRE "
+            f"and CLR alone - and a clock on a switching net clears the trip "
+            f"once per period"
+        )
+
+    # And Q is what actually stops the board: the same net both buffers take
+    # their second enable from.
+    disables = {pad_net.get((address, str(
+        {name: pad for pad, name in symbol_pin_names(design["parts"][address]["symbol"]).items()
+         }.get("~{OE2}", "19"))))
+        for address in BUFFERS}
+    assert len(disables) == 1, f"the buffers are disabled by {disables}"
+    disable = disables.pop()
+    assert pad_net.get((LATCH, names["Q"])) == disable, (
+        f"the latch's Q is on {pad_net.get((LATCH, names['Q']))!r} and what "
+        f"disables the buffers is {disable!r}. The board is stopped by "
+        f"whatever drives that net, and it has to be this part"
+    )
+    assert pad_net.get((LATCH, names["~{Q}"])) != disable, (
+        "Q and Q-bar are on the same net"
+    )
+
+
 def test_the_enable_is_pulled_to_off(design, pad_net, spec):
     """
     The MCU's enable is pulled up, so a pin nobody is driving means "off".
