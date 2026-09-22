@@ -6,7 +6,13 @@ are recorded here rather than worked around, because both are placement
 problems wearing routing clothes, and the fix for each is a decision rather
 than a technique.
 
-## The state
+> **This is a snapshot, not the state.** It records the board as it stood
+> mid-route, and the resolution of all three blockers is appended at the end.
+> cpu1 is fully routed now — `ROUTING` complete, 203 checks, DRC clean, zero
+> unconnected — and what it became is in
+> [`hw/cpu1/DESIGN-REVIEW.md`](../../hw/cpu1/DESIGN-REVIEW.md).
+
+## The state, at the time
 
 `ROUTING := incomplete`, DRC clean, 153 checks passing, 36 connections left:
 

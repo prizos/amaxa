@@ -5,10 +5,14 @@ These are design notes for a digital board that drives one soldered-on, purely a
 [U] marks unverified claims.
 
 ## Keeping the power board analog
-- **Type-specific parts on the power board:** the gain and anti-alias filter for each type are analog parts, so they belong on the power board. The digital board keeps one fixed input network (RC corner ~1–2 MHz plus clamps, as on TI controlCARDs, [SPRUIR3](https://www.ti.com/lit/pdf/spruir3)).
-- **The clamps ended up on the power board's side of that line, and this is the requirement they became.** `hw/cpu1` builds the RC and has no room for the clamps: one has to sit on the sense net *ahead* of the series resistor, because at 10 Ω that resistor is what the ADC's settling window needs and 225 mW at the fault, on a 62.5 mW part — and there is nowhere in the analog fan a SOT-363 and its two vias will go. Three positions were tried and built before this was written down.
+- **Type-specific parts on the power board:** the gain and anti-alias filter for each type are analog parts, so they belong on the power board. The digital board keeps one fixed input network — 22 Ω and 4.7 nF, a 1.27–1.73 MHz corner — after the pattern of TI's controlCARDs, [SPRUIR3](https://www.ti.com/lit/pdf/spruir3).
+- **The clamps were the requirement, and they are not any more.** This section used to say so: `hw/cpu1` builds the RC and has nowhere to put a clamp, because one has to sit on the sense net *ahead* of the series resistor and there is no room in the analog fan for a SOT-363 and its two vias. Three positions were tried and built. So the requirement went to the power board — *do not present more than 4.0 V, ever, including while your op-amp is railing* — which is a requirement on a board that did not exist, written because the digital board could not meet it.
 
-  So: **a sensor output must never present more than 4.0 V to an analog input, including while it is failing.** That is ST's Table 20 absolute maximum for a TT_xx pin, and there is no allowance below it — Table 21 rates injection on those pins at −5 to **+0 mA**, so there is no positive-injection path to be inside of. The digital board hands the sensors 5VA at up to 5.2 V and an op-amp rails to its own supply exactly when the thing it measures goes wrong, which is the over-current the trip chain exists for. A 3.3 V output stage, a divider, or a clamp beside the op-amp all satisfy it, and any of them is cheaper there than at the connector. `analog.input_voltage_max` in `hw/cpu1/cpu1.py` is the declared figure and `test_no_analog_input_may_be_presented_more_than_its_pin_allows` holds it against the silicon.
+  **It met it a different way.** The analog supply the connector carries was 5 V through a ferrite, which is what made a railing op-amp a 5.25 V fault against ST's 4.0 V absolute maximum for a TT_xx pin. It is now regulated to 3.3 V by a TLV70233, so **the worst a sensor powered from this board can present is 3.366 V** — the regulator's nominal at the top of its own 2 % accuracy — and that is inside the pin's rating with 0.6 V to spare. `analog.input_voltage_max` is that figure rather than ST's, derived from the regulator and checked against it, so the promise is now "do not present more than the rail I give you".
+
+  ST's own numbers are still the reason the limit is a voltage: Table 20 caps a TT_xx input at 4.0 V absolute, and Table 21 rates injection on those pins at −5 to **+0 mA**, so there is no positive-injection path to be inside of. Both crops are committed at `hw/cpu1/parts/LQFP144/evidence/`.
+
+  **What this costs a power board:** sensors run from 3.3 V. An ACS724, a LEM module or anything else wanting 5 V makes its own from the 12–15 V aux already on the digital header, and scales its output to this rail.
 - **Scaling:** each power board maps its rated peak to ~90% of ADC full scale.
 - **Wide range within one type:** two fixed-gain amplifier outputs from one Kelvin shunt (e.g., ×1 and ×50) on two ADC channels, or shunts switched by MOSFETs driven from a digital-board GPIO. Neither puts logic on the power board.
 - **Isolated sensing:** isolated **amplifiers** have analog outputs, so they keep the power board analog. Isolated **sigma-delta modulators** output a digital bitstream, so they break the rule.
@@ -46,6 +50,33 @@ These suit control loops up to ~50 kHz. They are too slow for a trip under 1 µs
    - Comparator plus trip takes ≤~90 ns on C2000-class MCUs.
    - A hardware latch disables every output, and only firmware can clear it.
 - **Safe state:** PWM outputs go to a hardware-enforced safe state before firmware runs (buffer with output enable, pull-downs). There is also a watchdog path that cuts PWM.
+
+### `GATE_ENABLE` is a master kill, and the timing rests on it
+
+**This is the requirement a power board most has to honour, and it was
+implied rather than stated until `hw/cpu1` was routed and measured.**
+
+The digital board's trip budget is 50 ns — set by how long a half bridge
+survives a shoot-through, not by anything on the board — and the measured
+chain is 40.5 ns of it. The last term in that chain is a gate line actually
+going low, and **only `GATE_ENABLE` gets there in time**:
+
+| line | falls in | how |
+|---|---|---|
+| `GATE_ENABLE` | **3.4 ns** | a MOSFET shorts it to ground the moment the latch trips |
+| the fourteen PWM lines | ~200 ns | their own 10 kΩ pull-downs, once the buffers let go |
+
+So: **the power board must disable every gate driver from `GATE_ENABLE`
+alone.** A design that treats it as advisory and gates on the PWM lines has a
+200 ns hole where the digital board believes it has stopped and the bridge is
+still being commanded. The PWM lines are a real second layer and they are not
+the first one.
+
+There was no resistor that made the PWM lines fast enough: the budget wanted
+pull-downs under 600 Ω and the 3V3 rail's own budget wanted over 1.4 kΩ, and
+that window is empty. Hence the transistor, and hence this requirement.
+
+It matches the convention the [Infineon MADK M3](https://www.infineon.com/assets/row/public/documents/60/44/infineon-ug-2020-12-eval-m3-302f-usermanual-en.pdf?fileId=5546d46272aa54c00172db1cf44937be) already uses — "active-low gate kill" in the table below — so it costs a power board nothing to follow.
 - **Safe Torque Off:** IEC 61800-5-2 STO with two independent channels removing gate-driver supply and logic input, with test-pulse diagnostics ([TI TIDA-01599](https://www.ti.com/lit/ug/tiduds9b/tiduds9b.pdf)).
 
 ### Open decision: smart gate drivers
