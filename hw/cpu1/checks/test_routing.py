@@ -1131,3 +1131,4 @@ def test_the_crossing_solver_finds_where_a_track_enters_and_leaves():
     # And the point it reports is on the boundary, not merely between the ends.
     (x, y), = _edge_crossings(box, (-1.0, 5.0), (5.0, 5.0))
     assert abs(x) < 1e-9 and abs(y - 5.0) < 1e-9, f"crossed at ({x}, {y}), expected (0, 5)"
+

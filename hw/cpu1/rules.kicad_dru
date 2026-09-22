@@ -60,8 +60,15 @@
 # gate enable that travels with them, and the latch's three. The buffered side
 # drives a cable to a gate driver, so it is wider than the MCU-side signal it
 # copies; the latch's nets are short and on-board.
+#
+# **The PWM patterns were missing from this condition for a long time**, so
+# that sentence was true of one of the fifteen signals on the connector and
+# all fourteen buffered PWM outputs fell through to `mcu signals` at 0.15 mm.
+# `test_every_buffered_output_is_wider_than_the_signal_it_copies` pairs each
+# buffer input with its own output off the netlist and measures both on the
+# board, so the claim is now cashed rather than asserted.
 (rule "safety chain"
-	(condition "A.NetName == 'GATE_ENABLE_B' || A.NetName == 'GATE_ENABLE_OUT' || A.NetName == 'GATE_KILL_DRAIN' || A.NetName == 'TRIP_SET_N' || A.NetName == 'TRIPPED'")
+	(condition "A.NetName == 'PWM*_B' || A.NetName == 'PWM*_OUT' || A.NetName == 'GATE_ENABLE_B' || A.NetName == 'GATE_ENABLE_OUT' || A.NetName == 'GATE_KILL_DRAIN' || A.NetName == 'TRIP_SET_N' || A.NetName == 'TRIPPED'")
 	(constraint track_width (min 0.2mm))
 	(severity error))
 

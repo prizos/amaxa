@@ -1479,3 +1479,62 @@ def test_every_trip_decision_fails_to_tripped(design, pad_net):
     assert not wrong, (
         "Trip decisions that do not fail safe:\n" + "\n".join(wrong)
     )
+
+
+def test_every_buffered_output_is_wider_than_the_signal_it_copies(
+    design, pad_net, pcb_text
+):
+    """
+    The copper leaving this board for a gate driver is wider than the copper
+    that reaches the buffer, on every channel.
+
+    `rules.kicad_dru`'s "safety chain" rule says so in as many words - "the
+    buffered side drives a cable to a gate driver, so it is wider than the
+    MCU-side signal it copies" - and it was true of exactly one of the fifteen
+    signals on that connector. The rule's condition listed the gate enable and
+    the latch's nets and **no PWM net at all**, so all fourteen buffered PWM
+    outputs fell through to `mcu signals` and were drawn at the same 0.15 mm
+    as the pin that feeds them.
+
+    Nothing noticed, because nothing compared the two. A rule file is a claim
+    about the board, and this is where that one is cashed. The pairing comes
+    off the netlist - a buffer's input pad and the output pad of the same
+    channel - so a rule that stops covering a net fails here rather than
+    quietly widening nothing.
+    """
+    import re as _re
+
+    names = {m.group(1): m.group(2)
+             for m in _re.finditer(r'\(net (\d+) "([^"]*)"\)', pcb_text)}
+    widest: dict[str, float] = {}
+    for block in _re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
+        net = _re.search(r"\(net (\d+)\)", block)
+        width = _re.search(r"\(width ([\d.]+)\)", block)
+        if net and width:
+            name = names.get(net.group(1), "")
+            widest[name] = max(widest.get(name, 0.0), float(width.group(1)))
+    assert widest, "no tracks on the board"
+
+    # Each channel's input net, and every net the netlist puts downstream of
+    # its output: the buffer's own output and whatever a series resistor
+    # carries it on to.
+    thinner, compared = [], 0
+    for _, _, source, drain in _buffer_channels(design, pad_net):
+        if not source or not drain or source == "GND" or source not in widest:
+            continue
+        downstream = {drain} | {far for _, far in
+                                _through_resistor(design, pad_net, drain)}
+        for far in sorted(downstream):
+            if far in ("GND", source) or far not in widest:
+                continue
+            compared += 1
+            if widest[far] <= widest[source]:
+                thinner.append(
+                    f"  {far} is {widest[far]:g} mm and {source}, the pin that "
+                    f"feeds it, is {widest[source]:g} mm")
+    assert compared, "no buffered channel was measured, so this proves nothing"
+    assert not thinner, (
+        "Buffered outputs no wider than the signal they copy:\n"
+        + "\n".join(sorted(set(thinner)))
+        + "\nEither widen them in rules.kicad_dru, or stop claiming it there."
+    )
