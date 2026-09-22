@@ -128,7 +128,7 @@ On this setup that run shows the banner and status lines, the replies to `+`, `s
 the safety story claims. CI built both board support packages and stopped
 there, so every property the hardware is designed around - "an unprogrammed
 board is inert", the trip latch, the buffers - was firmware behaviour that
-nothing checked, on a repository where the board next door carries 188 derived
+nothing checked, on a repository where the board next door carries 203 derived
 checks.
 
 It asserts that the firmware got far enough to configure TIM1 as a three-phase

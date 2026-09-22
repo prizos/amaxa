@@ -4,9 +4,11 @@ Boards designed as code. **SKiDL** is the design source, **KiCad** holds the
 layout and runs the rule checks, **ngspice** simulates the analog behaviour, and
 CI gates all of it.
 
-The first board, [`led12`](led12/README.md), is a 12 V LED board with no
-processor. It exists to prove the pipeline before the STM32H743 control board,
-[`cpu1`](cpu1/README.md), depends on it.
+Two boards. [`cpu1`](cpu1/README.md) is the STM32H743 control board and is
+the point of the project — 272 parts on six layers, 203 checks, DRC clean;
+[`DESIGN-REVIEW.md`](cpu1/DESIGN-REVIEW.md) says what it is and does.
+[`led12`](led12/README.md) came first, a 12 V LED board with no processor,
+and existed to prove this pipeline before the control board depended on it.
 
 **A build reaches nothing over the network** — no parts service, no registry, no
 account. `make offline` proves it, by running the design source with every route
