@@ -1,4 +1,26 @@
 {
+  "analog_input_absolute_maximum": {
+    "assumes": "",
+    "crop": "333,827,1173,1013",
+    "document": "ST STM32H742xI/G STM32H743xI/G datasheet, DocID030538 Rev 3",
+    "dpi": 200,
+    "page": 96,
+    "read": "2026-09-22",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Table 20, Voltage characteristics: input voltage on TT_xx pins is -0.3 to 4.0 V absolute maximum. Not VDD + 0.3: the TT_xx row states a flat 4.0 V of its own, where the FT_xxx row above it is written as a formula on the supplies. This is the ceiling the analog sense inputs are held to, and the reason the analog rail out of the connector is regulated to 3.3 V rather than clamped.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
+  "analog_input_injection_current": {
+    "assumes": "",
+    "crop": "333,253,1120,1200",
+    "document": "ST STM32H742xI/G STM32H743xI/G datasheet, DocID030538 Rev 3",
+    "dpi": 200,
+    "page": 97,
+    "read": "2026-09-22",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Table 21, Current characteristics: injected current on FT_xxx, TT_xx, RST and B pins except PA4, PA5 is -5/+0 mA, and note 3 reads verbatim 'Positive injection is not possible on these I/Os and does not occur for input voltages lower than the specified maximum value.' So there is no positive-injection allowance to be inside of, and the 4.0 V of Table 20 is a limit with nothing below it.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
   "power_dissipation_at_85c": {
     "assumes": "",
     "crop": "260,1250,1400,480",

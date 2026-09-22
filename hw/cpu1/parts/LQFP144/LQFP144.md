@@ -43,6 +43,22 @@ ST's hardware development guide for the part — was not read.
 | HSE load capacitors | 5 to 25 pF typical | Section 6.3.8 |
 | LSE maximum critical gm | 0.5 / 0.75 / 1.7 / 2.7 µA/V by drive | Table 44 |
 | I/O pin current | 20 mA absolute maximum | Table 21 |
+| Input voltage, TT_xx pins | **4.0 V absolute maximum** | Table 20, crop in `evidence/` |
+| Injected current, TT_xx pins | **−5 / +0 mA** | Table 21, crop in `evidence/` |
+
+**The analog inputs' ceiling is a voltage with nothing below it.** The TT_xx
+row of Table 20 states a flat 4.0 V of its own, where the FT_xxx row above it
+is written as a formula on the supplies — so the number everybody reaches for,
+V_DD plus a diode drop, is the wrong one here. And Table 21 rates injected
+current on those pins at minus five to **plus nought** milliamps, with note 3
+reading verbatim: *"Positive injection is not possible on these I/Os and does
+not occur for input voltages lower than the specified maximum value."* There
+is no positive-injection path to be inside of.
+
+Both crops are committed because this pair of figures is what decided the
+analog rail: the power board's sensors run from a 3.3 V regulator rather than
+5 V through a bead, so the worst a sensor can rail to is 3.366 V. See
+`parts/SOT23_5/SOT23_5.md`.
 | NRST capacitor | 100 nF, internal pull-up 30–50 kΩ | Figure 21, Table 62 |
 | Supply decoupling | N × 100 nF + 1 × 4.7 µF on VDD; "100 nF + 1 x 1 µF" pairs | Figure 13 |
 
