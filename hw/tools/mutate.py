@@ -80,10 +80,22 @@ def _seen(config):
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
-    before = set(_seen(item.config))
+    # **Empty it, not diff it.** `PARAMETERS_READ` is one cumulative set for
+    # the whole session, so `after - before` is non-empty only for the *first*
+    # test that reads a value - every later reader sees the key already there
+    # and registers nothing. This recorded one reader per parameter and the
+    # sweep then probed that one, which is how a resistor whose value makes
+    # `test_the_gate_kill_stays_inside_its_ratings` fail was reported as
+    # changing no outcome.
+    store = _seen(item.config)
+    union = set(store)
+    store.clear()
     yield
-    for key in set(_seen(item.config)) - before:
-        MAP.setdefault(f"{key[0]}.{key[1]}", item.nodeid)
+    mine = set(store)
+    for key in mine:
+        MAP.setdefault(f"{key[0]}.{key[1]}", []).append(item.nodeid)
+    store.clear()
+    store.update(union | mine)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -153,11 +165,18 @@ def main() -> int:
 
         if not args.intent_only:
             before = len(quiet)
+            decks = _simulation_text(HW / args.board)
             for key in parameters:
-                test = who.get(key)
-                if test is None:
-                    quiet.append((key, "no test's call phase reads it"))
+                readers = who.get(key) or []
+                if not readers:
+                    owner, _, name = key.rpartition(".")
+                    if f"@{key}:" in decks or f'"{key}"' in decks:
+                        quiet.append((key, "read only by a simulation deck, "
+                                           "which this does not run"))
+                    else:
+                        quiet.append((key, "no test's call phase reads it"))
                     continue
+                test = " ".join(sorted(set(readers)))
                 kept = list(values[key])
                 if not any(_probe(design, data, values, key, probe, test, args.board)
                            for probe in _probes(kept)):
@@ -171,6 +190,22 @@ def main() -> int:
     for key, why in quiet:
         print(f"   {key:52s} {why}")
     return 0
+
+
+def _simulation_text(board) -> str:
+    """
+    The decks and their limits, which name values this cannot probe.
+
+    `make sim` is not run here, so a figure read only by a deck looks exactly
+    like a figure nothing reads. That is a different thing and it is reported
+    as a different thing - otherwise the sequencing figures the power-up deck
+    needs would sit in this list looking like dead weight.
+    """
+    sim = board / "sim"
+    if not sim.is_dir():
+        return ""
+    files = sorted(sim.glob("*.cir.in")) + sorted(sim.glob("limits.py"))
+    return "\n".join(path.read_text() for path in files)
 
 
 def _probes(kept: list[float]) -> list[list[float]]:

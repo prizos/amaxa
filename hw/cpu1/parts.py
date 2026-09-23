@@ -1243,7 +1243,13 @@ ETH_PHY = PartSpec(
         # mode this board uses:
         "rmii_clock_period": exact(20e-9),            # tclkp, 50 MHz
         "rmii_output_valid_max": exact(7.0e-9),       # toval, PHY drives RXD
-        "rmii_output_invalid_min": exact(3.0e-9),     # toinvld
+        # `toinvld`, 3.0 ns, is **deliberately not declared.** It only widens
+        # the receive window - the PHY's data stays good that long past the
+        # next edge - and this board's skew is two hundred times inside that
+        # window either way, so no value of it changes any answer. Declared
+        # and read, it was a figure sitting in a message: `make mutate` said
+        # so, which is what that tool is for. The window is computed without
+        # it, which is the conservative reading of the same table.
         "rmii_setup_min": exact(7.5e-9),              # tsu, PHY samples TXD
         "rmii_hold_min": exact(2.0e-9),               # tihold
         # **A typical, because the datasheet has no maximum.** Table 5.5,

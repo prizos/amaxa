@@ -645,64 +645,78 @@ def test_the_rmii_bus_arrives_with_its_own_clock(spec, stack, lengths, pcb_text,
     hold, _ = spec(phy, "rmii_hold_min")
     valid, _ = spec(phy, "rmii_output_valid_max")
     setup, _ = spec(phy, "rmii_setup_min")
-    still_valid, _ = spec(phy, "rmii_output_invalid_min")
 
-    # The two windows the datasheet leaves, and the smaller of them. Receive:
-    # the PHY's data is valid from `toval` after one edge until `toinvld`
-    # after the next, so the window is a period less the first plus the
-    # second. Transmit: what is left of a period once the PHY's own setup and
-    # hold are taken out of it. Neither is this board's budget - the MCU's
-    # share is missing from both, because ST does not state it in the pages
-    # vendored here - but skew larger than either is not a tight budget, it
-    # is a bus that cannot work at all.
-    windows = {
-        "the PHY's receive valid window": period - valid + still_valid,
-        "what a period leaves after the PHY's own setup and hold":
-            period - setup - hold,
+    # **Two paths, two windows, and they are checked separately.** This took
+    # the smaller of the two and held everything to it, which made the receive
+    # window dead: the transmit one is always tighter, so the receive figures
+    # were read, put in a message and compared against nothing. The board's
+    # own mutation tester found that, which is the exact failure
+    # `tools/mutate.py` exists to catch, committed the same day.
+    #
+    # `toinvld` came out of `parts.py` entirely for the same reason: it only
+    # widens the receive window and this board is two hundred times inside it,
+    # so no value of it decides anything. The window below is a period less
+    # `toval` alone, which is the conservative reading of the same table.
+    #
+    # They are different paths. The PHY drives RXD and CRS_DV and the MCU
+    # samples them; the MCU drives TXD and TX_EN and the PHY samples those.
+    # Each has its own skew and its own window, so each is held to its own.
+    #
+    # Neither is this board's whole budget - the MCU's share is missing from
+    # both, because ST does not state it in the pages vendored here - but skew
+    # larger than a window is not a tight budget, it is a bus that cannot work.
+    paths = {
+        "receive": (["ETH_RXD0", "ETH_RXD1", "ETH_CRS_DV"],
+                    period - valid,
+                    "a period less the toval the PHY takes to drive RXD"),
+        "transmit": (["ETH_TXD0", "ETH_TXD1", "ETH_TX_EN"],
+                     period - setup - hold,
+                     "what a period leaves once the PHY's own setup and hold "
+                     "are taken out of it"),
     }
-    tightest = min(windows, key=windows.get)
 
     clock = "ETH_REF_CLK"
     assert clock in lengths, f"{clock} has no copper"
-    # The lines REF_CLK latches, both ways. MDC and MDIO are left out on
-    # purpose: the management interface is its own clock at 2.5 MHz and is
-    # not sampled against this one.
-    latched = ["ETH_RXD0", "ETH_RXD1", "ETH_CRS_DV",
-               "ETH_TXD0", "ETH_TXD1", "ETH_TX_EN"]
-    missing = [net for net in latched if net not in lengths]
+    # MDC and MDIO are left out on purpose: the management interface is its
+    # own clock at 2.5 MHz and is not sampled against this one.
+    missing = [net for nets, _, _ in paths.values() for net in nets
+               if net not in lengths]
     assert not missing, f"no copper on {missing}"
 
     width = pairs.controlled_width(pairs.tracks_of(pcb_text, (clock,)))
     per_mm = pairs.delay_per_mm(stack, width)
 
-    worst_net, worst = None, 0.0
-    for net in latched:
-        skew = abs(lengths[net] - lengths[clock]) * per_mm
-        if skew > worst:
-            worst_net, worst = net, skew
+    overall_net, overall = None, 0.0
+    for direction, (nets, window, why) in sorted(paths.items()):
+        net = max(nets, key=lambda n: abs(lengths[n] - lengths[clock]))
+        gap = abs(lengths[net] - lengths[clock])
+        skew = gap * per_mm
+        if skew > overall:
+            overall_net, overall = net, skew
 
-    print(f"    RMII: {worst_net} is {abs(lengths[worst_net] - lengths[clock]):.1f} mm "
-          f"from {clock}, {worst * 1e12:.0f} ps, {worst / period:.3%} of a "
-          f"{period * 1e9:g} ns period; {tightest} is "
-          f"{windows[tightest] * 1e9:.1f} ns")
+        print(f"    RMII {direction}: {net} is {gap:.1f} mm from {clock}, "
+              f"{skew * 1e12:.0f} ps, {skew / period:.3%} of a "
+              f"{period * 1e9:g} ns period; its window is {window * 1e9:.1f} ns")
 
-    # The physical bound first, because it is the one that is not a judgement:
-    # whatever the MCU adds, the copper alone cannot be allowed to eat a
-    # window the datasheet states.
-    assert worst < windows[tightest], (
-        f"{worst_net} is {worst * 1e12:.0f} ps from {clock}, and {tightest} is "
-        f"{windows[tightest] * 1e9:.1f} ns. The MCU's own share is on top of "
-        f"this and is not stated in the pages vendored here, so a bus this "
-        f"skewed does not have a tight budget - it has none."
-    )
+        # The physical bound, per path, because it is the one that is not a
+        # judgement: whatever the MCU adds, the copper alone cannot be allowed
+        # to eat a window the datasheet states.
+        assert skew < window, (
+            f"{net} is {skew * 1e12:.0f} ps from {clock} and the {direction} "
+            f"window is {window * 1e9:.1f} ns - {why}. The MCU's own share is "
+            f"on top of this and is not stated in the pages vendored here, so "
+            f"a bus this skewed does not have a tight budget, it has none."
+        )
 
-    assert worst <= share * period, (
-        f"{worst_net} is {abs(lengths[worst_net] - lengths[clock]):.1f} mm from "
-        f"{clock}, which is {worst * 1e12:.0f} ps - {worst / period:.2%} of a "
-        f"{period * 1e9:g} ns clock period, over the {share:.1%} this board "
-        f"holds itself to. The bound is a ratchet on the placement and not a "
-        f"timing budget; the timing it eats into is {hold * 1e9:g} ns of hold "
-        f"at the PHY, which is the smallest number in Table 5.12."
+    # And the ratchet, on the worst of the two.
+    assert overall <= share * period, (
+        f"{overall_net} is {abs(lengths[overall_net] - lengths[clock]):.1f} mm "
+        f"from {clock}, which is {overall * 1e12:.0f} ps - "
+        f"{overall / period:.2%} of a {period * 1e9:g} ns clock period, over "
+        f"the {share:.1%} this board holds itself to. The bound is a ratchet "
+        f"on the placement and not a timing budget; the timing it eats into "
+        f"is {hold * 1e9:g} ns of hold at the PHY, the smallest number in "
+        f"Table 5.12."
     )
 
 
