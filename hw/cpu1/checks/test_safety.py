@@ -11,6 +11,7 @@ January 2015), and the BAT54A data recorded in `parts/SOT23/SOT23.md`.
 """
 
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -1295,42 +1296,125 @@ def test_every_pull_the_pin_map_claims_is_on_that_pin(design, pad_net, pin_map, 
 # --- everything else on the connector ----------------------------------------
 
 
+def test_the_trip_deck_carries_as_many_junctions_as_the_bus_does(design, board_dir):
+    """
+    The simulation's trip bus has the diodes the board's trip bus has.
+
+    **A deck's values come from the build and its topology does not.** Every
+    number in `sim/trip_chain.cir.in` is an `@path:end@` the build resolves,
+    which is what stops a deck being a second copy of the design - but the
+    netlist it substitutes them into is written out by hand. Twelve Schottky
+    junctions face `TRIP_SET_N` on this board and the deck instantiates
+    twelve, and until now nothing made those two numbers the same one.
+
+    It matters for the term the deck exists to second-guess. The design check
+    computes the bus loading from the junction count it finds in the netlist;
+    the deck computes it from the junctions it was written with. Add a seventh
+    dual diode and the check's figure grows, the deck's does not, and both go
+    on passing - because both are banded against the whole 50 ns budget and
+    neither would notice a two-nanosecond divergence.
+
+    This is the narrowest possible fix for that and it is not a general one:
+    it counts one part on one net. The general problem - that a hand-written
+    deck drifts from the board it claims to model - stays open, and
+    `ADVERSARIAL-REVIEW.md` says so.
+    """
+    deck = board_dir / "sim" / "trip_chain.cir.in"
+    assert deck.is_file(), f"no {deck}"
+
+    bus = {net for net, nodes in design["nets"].items()
+           for address, pad in nodes
+           if address == LATCH and pad == "7"}
+    assert len(bus) == 1, f"the latch's preset is on {sorted(bus)}"
+    trip_bus = bus.pop()
+
+    packages = {address for address, pad in design["nets"][trip_bus]
+                if design["parts"].get(address, {}).get("symbol") == "Diode:BAT54A"
+                and pad == "3"}
+    junctions = 2 * len(packages)
+
+    instantiated = len(re.findall(r"(?m)^D\w+\s+\S+\s+\S+\s+BAT54A\b", deck.read_text()))
+    assert instantiated == junctions, (
+        f"{trip_bus} carries {junctions} Schottky junctions across "
+        f"{len(packages)} packages and {deck.name} instantiates "
+        f"{instantiated}. The deck's loading term and the design check's are "
+        f"then computed from different buses, and both would go on passing."
+    )
+
+
 def test_every_connector_signal_is_defined_with_nothing_attached(
     design, pad_net, pin_map, spec
 ):
     """
-    Each input from the power board is pulled somewhere, and to the safe side.
+    Every signal that crosses the connector says where it sits with nothing
+    attached, and the copper agrees.
 
     An unfitted or unplugged power board must not read as permission. Straps
     read as "no board" when they float high, safe-torque-off feedback reads as
     "not permitted" when it floats low, and a fault line reads as "no fault" -
     which is the one that looks wrong until you notice a board with no power
     stage cannot have a gate-driver fault.
+
+    **The scope comes from the netlist now, and it used to come from whoever
+    had filled the field in.** This asserted `len(expected) >= 10` under a
+    comment saying "there are ten of them". Ten pins declared an idle, so ten
+    was what it checked, for ever: the assertion could never notice a signal
+    that had never declared one. The digital connector carries **eighteen**
+    signals that reach an MCU pin, and the eight nobody had filled in were
+    the five encoder lines and the three Hall inputs - nothing on the board
+    holds any of them, and no file said so.
+
+    They are not a hazard, which is why it went unnoticed: they are feedback
+    and not permission, and a floating quadrature input enables nothing. But
+    "nothing holds this and here is why" is a sentence the board should have
+    to write, and `idle="float"` is where it writes it.
+
+    So three things are asserted, and the first is the one that was missing:
+
+      - **every** connector signal reaching an MCU pin declares an idle;
+      - a signal declaring a rail is pulled to that rail and to no other;
+      - a signal declaring `float` has **no** pull on the copper at all, so
+        the declaration cannot quietly drift away from the board.
     """
-    # **From the pin map, not from a dictionary here.** These ten facts used
-    # to be written out in this file - the only check on the idle polarity of
-    # the straps, the fault lines, the safe-torque-off feedback and the relay
-    # commands, and its own table of what it expected to find. A check whose
-    # expectation is a list somebody typed agrees with a mistake made twice,
-    # which is how a hand-written polarity table once enforced a backwards
-    # reverse-polarity FET on this board.
-    #
-    # The pin map is where what a signal *means* is recorded, so the intended
-    # idle rail lives there with the sentence that justifies it, and this
-    # compares the copper against it. Two artefacts, written for different
-    # reasons, that have to agree.
-    expected = {pin.net_name: pin.idle for pin in pin_map.PINS if pin.idle}
-    assert len(expected) >= 10, (
-        f"only {len(expected)} pins declare an idle rail; this check is about "
-        f"the connector signals and there are ten of them"
+    header = "header.digital"
+    assert header in design["parts"], f"no {header} on this board"
+
+    # Every net that touches the connector and also reaches the MCU. Supplies
+    # and grounds are not signals and are excluded by being on a rail.
+    rails = {"3V3", "3V3A", "5V", "GND", "VREF+"}
+    crossing = {
+        net for net, nodes in design["nets"].items()
+        if net not in rails
+        and any(address == header for address, _ in nodes)
+        and any(address == "mcu" for address, _ in nodes)
+    }
+    assert len(crossing) >= 18, (
+        f"only {len(crossing)} signals cross the connector to an MCU pin; the "
+        f"digital header carries eighteen and this check is about all of them"
     )
+
+    declared = {pin.net_name: pin.idle for pin in pin_map.PINS if pin.idle}
+    missing = sorted(crossing - set(declared))
+    assert not missing, (
+        "Connector signals that do not say where they sit with nothing "
+        "attached:\n" + "\n".join(f"  {net}" for net in missing)
+        + "\nGive each an `idle` in pinmap.py - a rail if the board holds it "
+          "there, or `float` with a note saying why nothing needs to."
+    )
+
     wrong = []
-    for net, rail in expected.items():
+    for net in sorted(crossing):
+        rail = declared[net]
         pulls = _through_resistor(design, pad_net, net)
-        rails = sorted(far for _, far in pulls if far in ("3V3", "GND"))
-        if rails != [rail]:
-            wrong.append(f"  {net}: pulled to {rails or 'nothing'}, expected {rail}")
-    assert not wrong, "Connector signals with no defined idle state:\n" + "\n".join(wrong)
+        found = sorted(far for _, far in pulls if far in ("3V3", "GND"))
+        if rail == "float":
+            if found:
+                wrong.append(
+                    f"  {net}: declares float and the copper pulls it to "
+                    f"{found} - one of the two is wrong")
+        elif found != [rail]:
+            wrong.append(f"  {net}: pulled to {found or 'nothing'}, expected {rail}")
+    assert not wrong, "Connector signals whose idle and copper disagree:\n" + "\n".join(wrong)
 
 
 def test_the_connector_carries_what_the_pin_map_says_it_does(design, pad_net, pin_map):

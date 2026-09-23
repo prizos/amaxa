@@ -71,7 +71,12 @@ PINS = [
     Pin("PA9", "USB_OTG_FS_VBUS", "USB_VBUS", note="through 1 k; USB is not a power input, and this is not a divider"),
     Pin("PD0", "FDCAN1_RX", "CAN_RX"),
     Pin("PD1", "FDCAN1_TX", "CAN_TX"),
-    Pin("PD3", "GPIO", "CAN_STANDBY", "out"),
+    Pin("PD3", "GPIO", "CAN_STANDBY", "out", idle="float",
+        note="high is standby, and this pin is high until firmware drives it. "
+             "The transceiver's own pull-up holds it there, and TI's Table 8-4 "
+             "puts standby as driver and main receiver both off - so the board "
+             "boots unable to receive CAN, not merely unable to transmit. "
+             "Drive it low before expecting a frame"),
     Pin("PA1", "ETH_REF_CLK", "ETH_REF_CLK", note="50 MHz from the PHY"),
     Pin("PA2", "ETH_MDIO", "ETH_MDIO"),
     Pin("PC1", "ETH_MDC", "ETH_MDC"),
@@ -152,9 +157,16 @@ PINS = [
     Pin("PA4", "DAC1_OUT1", "DAC_TEST", note="resolver excitation or analog test"),
 
     # --- position feedback ---------------------------------------------------------
-    Pin("PD12", "TIM4_CH1", "ENC_A"),
-    Pin("PD13", "TIM4_CH2", "ENC_B"),
-    Pin("PD14", "TIM4_CH3", "ENC_Z"),
+    # **Nothing holds these five, and that is deliberate rather than
+    # overlooked.** They are feedback and not permission: an unfitted power
+    # board leaves them floating, and a floating quadrature input cannot
+    # enable anything - the buffers need `PWM_ENABLE_N` low and the latch
+    # cleared, and firmware does both. What it does cost is the crowbar
+    # current of a CMOS input at mid-rail, which is why firmware configures
+    # an internal pull on each of them before it configures the timer.
+    Pin("PD12", "TIM4_CH1", "ENC_A", idle="float"),
+    Pin("PD13", "TIM4_CH2", "ENC_B", idle="float"),
+    Pin("PD14", "TIM4_CH3", "ENC_Z", idle="float"),
     # PB4 is NJTRST, and it is the only pin in this table that comes out of
     # reset in a JTAG alternate function without being meant as a debug pin -
     # PA13, PA14 and PB3 are. So from power-on until firmware selects TIM3_CH1
@@ -163,16 +175,23 @@ PINS = [
     # before it has configured them. Selecting TIM3_CH1 also ends any chance
     # of debugging this part over JTAG, which costs nothing here because the
     # board fits a Tag-Connect SWD footprint and no JTAG one.
-    Pin("PB4", "TIM3_CH1", "HALL_1"),
-    Pin("PB5", "TIM3_CH2", "HALL_2"),
-    Pin("PB0", "TIM3_CH3", "HALL_3"),
+    Pin("PB4", "TIM3_CH1", "HALL_1", idle="float",
+        note="the only one of the three with anything holding it, and it is "
+             "inside the MCU rather than on the board: NJTRST's reset pull-up. "
+             "It is not a board pull and the copper must show none"),
+    Pin("PB5", "TIM3_CH2", "HALL_2", idle="float",
+        note="as HALL_2 and HALL_3: nothing holds them, and firmware must "
+             "configure an internal pull before it samples or commutates"),
+    Pin("PB0", "TIM3_CH3", "HALL_3", idle="float"),
     # UART5 rather than USART1, which is the same job on the other side of the
     # package. USART1's only free pair here is PB6/PB7, on the north edge
     # beside the Hall inputs and the length of the board from the connector all
     # of this goes to; UART5's PB13/PB12 are the first two pins of the east
     # edge, five pins from the encoder's own.
-    Pin("PB13", "UART5_TX", "ENC_SERIAL_TX", note="reserved: the encoder type is undecided"),
-    Pin("PB12", "UART5_RX", "ENC_SERIAL_RX"),
+    Pin("PB13", "UART5_TX", "ENC_SERIAL_TX", idle="float",
+        note="reserved: the encoder type is undecided, so this leaves the "
+             "board as a floating output pin and nothing holds it"),
+    Pin("PB12", "UART5_RX", "ENC_SERIAL_RX", idle="float"),
 
     # --- safety chain and power-board control ----------------------------------------
     Pin("PG4", "GPIO", "PWM_ENABLE_N", "out", note="pulled up on the board, so off until driven"),

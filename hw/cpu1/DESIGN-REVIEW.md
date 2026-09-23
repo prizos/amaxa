@@ -318,7 +318,8 @@ allowance — so an op-amp railing to its own supply during the over-current the
 trip chain exists for was a 5.25 V fault this board could not clamp. Clamps do
 not fit; three positions were tried. Regulating instead makes the fault
 impossible rather than survivable. A power board that wants ACS724- or
-LEM-class 5 V sensors makes its own 5 V from the 12–15 V aux it already has,
+LEM-class 5 V sensors makes its own 5 V on its own side, from the gate-drive
+supply it already has —  **not from this connector, which has no aux pin** —
 and scales the output to this rail.
 
 ---

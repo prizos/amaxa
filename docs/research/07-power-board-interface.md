@@ -12,7 +12,7 @@ These are design notes for a digital board that drives one soldered-on, purely a
 
   ST's own numbers are still the reason the limit is a voltage: Table 20 caps a TT_xx input at 4.0 V absolute, and Table 21 rates injection on those pins at −5 to **+0 mA**, so there is no positive-injection path to be inside of. Both crops are committed at `hw/cpu1/parts/LQFP144/evidence/`.
 
-  **What this costs a power board:** sensors run from 3.3 V. An ACS724, a LEM module or anything else wanting 5 V makes its own from the 12–15 V aux already on the digital header, and scales its output to this rail.
+  **What this costs a power board:** sensors run from 3.3 V. An ACS724, a LEM module or anything else wanting 5 V makes its own from the gate-drive supply it has by definition, and scales its output to this rail. **It does not get that supply through this connector** — see the note on supplies below.
 - **Scaling:** each power board maps its rated peak to ~90% of ADC full scale.
 - **Wide range within one type:** two fixed-gain amplifier outputs from one Kelvin shunt (e.g., ×1 and ×50) on two ADC channels, or shunts switched by MOSFETs driven from a digital-board GPIO. Neither puts logic on the power board.
 - **Isolated sensing:** isolated **amplifiers** have analog outputs, so they keep the power board analog. Isolated **sigma-delta modulators** output a digital bitstream, so they break the rule.
@@ -96,7 +96,9 @@ It matches the convention the [Infineon MADK M3](https://www.infineon.com/assets
 
 ## Signals across the solder joint
 - **Signalling:** single-ended 3.3 V CMOS for a soldered board. 22–33 Ω series resistor at the source, a ground pin every 2 signals, pull-downs. LVDS or optical links are only needed for cabled systems.
-- **Supplies:** 3.3 V, 5 V analog, a reference output, and 12–15 V auxiliary for the gate-drive DC/DC. Only signals and low-power supplies cross the joint; load current stays on the power board.
+- **Supplies across the joint, as `hw/cpu1` actually builds them:** 3.3 V out on the digital header, and 3V3A plus a 3.0 V reference out on the analog one. **There is no 12–15 V auxiliary pin and no 5 V analog pin.** Both were in the plan and neither was fitted: the digital header carries 52 pins and not one of them is a supply into this board, so cpu1 is powered from its own terminal block and from nothing else.
+  That matters twice. The ideal-diode OR the plan called for, which would have let a power board supply the digital board, does not exist — so a system built on this pair needs two supplies or a wire. And the 5 V-sensor mitigation above cannot route through this connector; a power board making 5 V does it on its own side. Six documents in this repository said otherwise until an adversarial pass counted the pins.
+  Only signals and low-power supplies cross the joint; load current stays on the power board.
 - **Scale every sense output to `VREF+`, not to the sensor's own supply.** `hw/cpu1` exports a 3.000 V series reference on its own connector pin, and three things on the digital side are now fractions of it and of nothing else: the ADCs' full scale, the comparators' trip thresholds, and the code a control loop compares against. The threshold DAC's supply *is* that reference pin, so a threshold written as "a quarter of full scale" is a quarter of the same volt the converter measures against and the same volt the power board scaled its sensor to. A sensor scaled to its 3V3A supply instead loses that: two references, and a trip point that moves when either one does. The reference can supply 12.9 mA and this board has taken 7.74 of it, so **budget about 5 mA at the connector** and put a buffer on the power board if its dividers want more.
 - **Grounding:**
   - Interface ground is control ground. On high-voltage types that is the low-voltage side of the isolated drivers and amplifiers.

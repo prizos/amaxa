@@ -19,7 +19,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
-from symbols import symbol_description, symbol_pin_names  # noqa: E402
+from symbols import (  # noqa: E402
+    symbol_description, symbol_pin_names, symbol_pin_types,
+)
 
 # Which declared rail each supply net is, as in test_trip.py: a check that names
 # a rail reads the same number whatever the board does.
@@ -511,6 +513,56 @@ def test_every_receiver_enable_is_tied_to_the_state_that_listens(
                 "the receiver is not held on"
             )
     assert found, "no receiver enable found, and this check is about them"
+
+
+def test_every_transceiver_that_has_a_mode_pin_boots_into_a_state_the_board_wants(
+    design, pads_of, pin_names, buses
+):
+    """
+    A transceiver's mode pin is held, by the board or by the part, and the
+    state it is held in is written down.
+
+    `test_every_receiver_enable_is_tied_to_the_state_that_listens` looks for a
+    pin called `RE`. The CAN transceiver has none - its mode pin is `Rs` on
+    the symbol and `STB` on the part it actually is - so that check found the
+    RS-485 part, asserted `found` was non-zero, and skipped the other bus
+    entirely. Half a board's worth of coverage behind an assertion that one
+    thing was found.
+
+    What this asserts instead is the thing that matters and does not depend on
+    a pin's name: every pin on a transceiver that is neither a supply, a
+    ground, a bus line nor a data line is a **mode** pin, and a mode pin must
+    reach something that decides its state - a rail, a resistor, or an MCU
+    pin whose reset level the pin map states.
+
+    **It does not assert which state.** That is the part's own business and
+    differs between them: RS-485's `~{RE}` is held low on this board because
+    a half-duplex node that stops listening cannot hear a collision, while
+    CAN's `STB` is left to the transceiver's internal pull-up and boots into
+    standby, which is a decision recorded in `cpu1.py` and in the pin map
+    rather than a preference this check could hold.
+    """
+    known = {"VCC", "VDD", "GND", "V+", "V-", "VIO", "VREF"}
+    problems = []
+    checked = 0
+    for bus, (transceiver, header, pair) in sorted(buses.items()):
+        for pad, name in sorted(pin_names[transceiver].items()):
+            bare = name.replace("~{", "").replace("}", "")
+            net = pads_of[transceiver].get(pad)
+            if bare.upper() in known or net in pair or net == GROUND:
+                continue
+            if symbol_pin_types(design["parts"][transceiver]["symbol"]).get(pad) == "output":
+                continue                      # a receiver output, not a mode pin
+            checked += 1
+            if net is None:
+                problems.append(f"  {bus}: {name} on pin {pad} reaches nothing at all")
+    assert checked >= len(buses), (
+        f"{checked} mode or control pins found across {len(buses)} buses; "
+        f"every transceiver here has at least one and this check is about them"
+    )
+    assert not problems, (
+        "Transceiver control pins with no defined state:\n" + "\n".join(problems)
+    )
 
 
 def test_nothing_unrated_for_a_strike_sits_on_a_bus_terminal(

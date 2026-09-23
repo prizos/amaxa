@@ -148,7 +148,7 @@ INTENT: dict[str, tuple[float, float]] = {
     # sets, and `test_no_analog_input_may_be_presented_more_than_its_pin_allows`
     # derives this band's ceiling from that rail rather than taking it on
     # trust. What remains on the power board is narrower and ordinary: do not
-    # drive these pins from the 12-15 V aux.
+    # drive these pins from the gate-drive supply.
     # **3.366 V, which is the rail this board hands out, not ST's 4.0.** It
     # was 4.0 - set exactly equal to the absolute maximum above, so the
     # assertion that the promise is inside the pin's rating was true by
@@ -541,6 +541,20 @@ INTENT: dict[str, tuple[float, float]] = {
     # argued for.
     "ethernet.coupled_fraction": (0.35, 1.0),
     "ethernet.skew_share": (0.0, 0.03),
+    # How much of an RMII clock period the copper's own clock-to-data skew may
+    # take. **A ratchet, like `ethernet.coupled_fraction` above, and for the
+    # same reason**: what this placement achieves is 0.31 %, and half a per
+    # cent is just above it, so any change that lets one of the nine lines
+    # wander away from the clock has to be argued for rather than noticed
+    # later.
+    #
+    # It is not a timing budget and does not pretend to be one. Closing the
+    # real budget needs the MCU's own RMII output delay and setup window, and
+    # the pages of ST's datasheet vendored here do not give them - so what is
+    # bounded is the share the board's copper contributes, which is the share
+    # the board controls. The datasheet figures that *would* close it are
+    # declared on the PHY and the check names what it is not using them for.
+    "ethernet.rmii_skew_share": (0.0, 0.005),
     # What has to stand between the cable and the rest of the machine. IEEE
     # 802.3 asks 1500 V rms, and the jack's magnetics are the only barrier.
     "ethernet.isolation": (1500.0, 4000.0),
@@ -1382,8 +1396,11 @@ def analog_input(v5, gnd, nets) -> None:
     # part's own 2 % accuracy a sensor can rail to 3.366 V, which is inside
     # the pin's rating with 0.6 V to spare, and the fault this board could not
     # clamp stops being a fault. What it costs is stated at the connector: a
-    # power board that wants 5 V sensors makes 5 V from the 12-15 V aux it
-    # already has on the digital header, and scales their output to this rail.
+    # power board that wants 5 V sensors makes it on its own side, from the
+    # gate-drive supply it has by definition, and scales their output to this
+    # rail. **Not through this connector**: the digital header carries no
+    # supply into or out of this board except 3V3, which several files said
+    # otherwise until the pins were counted.
     ldo = part(parts.LDO_3V3_ANALOG, "analog.ldo", "U19")
     v5 += ldo["IN"], ldo["EN"]   # no enable control: the rail lives with 5 V
     gnd += ldo["GND"]
@@ -1670,12 +1687,25 @@ def field_buses(v3v3, gnd, nets) -> None:
     CAN FD and RS-485: two differential buses, each on three pins.
 
     Both transceivers are chosen for what they do when nothing is driving them.
-    The CAN part's standby pin has an integrated pull-up, so it comes out of
-    reset listening rather than talking. The RS-485 part's driver enable has a
-    2 Mohm pull-down and its receiver enable a pull-up, and it reads a logic
-    high on an idle or shorted bus with no external bias network at all - which
-    is the reason it is this part and not a cheaper one, and why the fail-safe
-    resistors the plan called for are not here.
+
+    **The CAN part comes out of reset asleep, not listening**, and this said
+    "listening" for several revisions. Its STB pin has an integrated pull-up,
+    so an MCU pin that has not been configured leaves it high - and TI's
+    Table 8-4 puts high in *standby*, where "the CAN driver and main receiver
+    are switched off and bi-directional CAN communication is not possible".
+    Only a low-power wake receiver runs, and RXD sits recessive until a valid
+    wake-up pattern arrives, which is indistinguishable from an idle bus.
+    Firmware must drive PD3 **low** before it can receive anything.
+
+    Safe, and not what the comment claimed: nothing talks, but nothing hears
+    either, and a bring-up that expected a listening transceiver would have
+    spent a day on it.
+
+    The RS-485 part's driver enable has a 2 Mohm pull-down and its receiver
+    enable a pull-up, and it reads a logic high on an idle or shorted bus with
+    no external bias network at all - which is the reason it is this part and
+    not a cheaper one, and why the fail-safe resistors the plan called for are
+    not here.
 
     Termination is on a solder jumper on both. A bus wants exactly two
     terminations, at its two ends, and a board that cannot be anything but an
@@ -1690,7 +1720,11 @@ def field_buses(v3v3, gnd, nets) -> None:
     gnd += can["GND"]
     nets["CAN_TX"] += can["D"]
     nets["CAN_RX"] += can["R"]
-    nets["CAN_STANDBY"] += can["Rs"]   # pin 8: standby, pulled up inside
+    # Pin 8. The symbol calls it Rs because the symbol is an SN65HVD230's,
+    # where pin 8 really is slope control; on this part it is STB, and high
+    # is standby. Pulled up inside, so it is high until firmware says
+    # otherwise.
+    nets["CAN_STANDBY"] += can["Rs"]
 
     for address, rail, ref in (("can.decoupling_vcc", v5, "C55"),
                                ("can.decoupling_vio", v3v3, "C56")):

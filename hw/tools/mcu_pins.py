@@ -62,8 +62,12 @@ class Pin:
 
     idle: str = ""
     """
-    For a connector signal, the rail it must be pulled to with nothing
-    attached: `3V3` or `GND`.
+    Where this pin sits with nothing attached and no firmware running.
+
+    `3V3` or `GND` when the board holds it there through a resistor.
+    `float` when nothing holds it, which is a statement and not a default -
+    a pin declaring `float` must have **no** pull on the copper, and must say
+    in its note why nothing is needed.
 
     An unfitted or unplugged power board must not read as permission, and
     which rail that means is a property of the *signal*, not of the copper -
@@ -73,6 +77,13 @@ class Pin:
     `checks/test_safety.py` held the same ten facts as a dictionary of its
     own, which is a table of beliefs inside the thing that was supposed to be
     checking them.
+
+    **Blank is no longer allowed on a pin that leaves the board.** It was,
+    and the check that read this looked only at the pins that had filled it
+    in - ten of them - under an assertion that ten was all there were. The
+    digital connector carries eighteen signals that reach an MCU pin, and the
+    eight nobody had filled in were the encoder and the Hall inputs: nothing
+    on the board holds any of them, and nothing said so.
     """
 
     note: str = ""

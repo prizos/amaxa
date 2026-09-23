@@ -22,7 +22,9 @@ import pytest
 HW_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HW_DIR / "tools"))
 
-from symbols import SymbolNotFound, footprint_pads, symbol_pins  # noqa: E402
+from symbols import (  # noqa: E402
+    SymbolNotFound, footprint_pads, symbol_pin_names, symbol_pin_types, symbol_pins,
+)
 
 STOCK_FOOTPRINTS = Path("/usr/share/kicad/footprints")
 
@@ -166,4 +168,92 @@ def test_every_designator_is_one_the_design_chose(design):
         "References that are not a plain prefix and number - SKiDL renames a "
         "part whose designator was already taken, and this is what that looks "
         "like:\n" + "\n".join(wrong)
+    )
+
+
+def test_no_pin_typed_as_an_output_sits_on_a_supply_rail(design, parts):
+    """
+    Nothing the netlist calls a driver is wired to a rail.
+
+    `test_power.py` decides which rail holds up a resistor chain by asking
+    which parts *drive* the net it starts on, and "drives" is a **pin type**
+    rather than a connection. That distinction exists because the earlier
+    version asked only whether a part powered from a rail touched the net,
+    and charged the 3V3 feedback divider to both rails at once.
+
+    The types come from KiCad's symbol, and a symbol is not always the part.
+    This board's CAN transceiver is a TCAN1044V drawn with an SN65HVD230's
+    symbol - the same eight pins in the same order, which is why it is usable
+    at all - and pin 5 differs: a reference **output** on the part the symbol
+    is of, and VIO, a supply **input**, on the part that is fitted. `cpu1.py`
+    says so at the wiring. The netlist therefore reports a part that drives
+    3V3, and it is the only part on this board that reports driving 3V3 at
+    all.
+
+    It changes no answer today, because 3V3 is a declared rail and the rail
+    check short-circuits on those before it consults the drivers. That is
+    luck, not design: the one mechanism built to stop a connection being
+    mistaken for a drive is being fed a lie, on the one kind of net where the
+    lie is never read.
+
+    So the assertion is the invariant rather than the symptom - a pin typed
+    as an output has no business on a rail, whatever the symbol thinks - and
+    a part that genuinely drives a rail would have to say so here.
+    """
+    rails = {"3V3", "3V3A", "5V", "VREF+"}
+    pad_net = {(address, pad): net
+               for net, nodes in design["nets"].items()
+               for address, pad in nodes}
+    # What each part's spec admits its symbol gets wrong, by designator.
+    misnamed = {spec.mpn: getattr(spec, "symbol_misnames", {})
+                for spec in parts.values()}
+
+    wrong = []
+    for address, part in design["parts"].items():
+        declared = misnamed.get(part.get("mpn"), {})
+        for pad, kind in symbol_pin_types(part["symbol"]).items():
+            if kind != "output" or str(pad) in declared:
+                continue
+            net = pad_net.get((address, str(pad)))
+            if net in rails:
+                name = symbol_pin_names(part["symbol"]).get(str(pad), pad)
+                wrong.append(
+                    f"  {address} pin {pad} ({name}) is typed output in "
+                    f"{part['symbol']} and sits on {net}")
+    assert not wrong, (
+        "Pins the netlist calls drivers, wired to rails:\n" + "\n".join(wrong)
+        + "\nEither the part really does drive that rail - in which case say "
+          "so here - or the symbol is a different part's, and then say **that** "
+          "in the spec's `symbol_misnames` so the stand-in is something a "
+          "check can read rather than something a reader has to notice."
+    )
+
+
+def test_every_symbol_a_part_says_is_a_stand_in_really_is_one(parts):
+    """
+    A declared misnaming names a pin that exists and gets it wrong.
+
+    `symbol_misnames` is an exemption, and an exemption nobody revisits is how
+    the list grows until it excuses everything. So each entry has to earn its
+    place twice: the pin has to be on the symbol at all, and the description
+    has to differ from the name the symbol already gives it - which is what
+    stops a stand-in declaration surviving a swap to a symbol that is right.
+    """
+    problems = []
+    for name, spec in sorted(parts.items()):
+        declared = getattr(spec, "symbol_misnames", {})
+        if not declared:
+            continue
+        names = symbol_pin_names(spec.symbol)
+        for pad, says in sorted(declared.items()):
+            if pad not in names:
+                problems.append(f"  {name}: pin {pad} is not on {spec.symbol}")
+            elif names[pad].lower() in says.lower().split(",")[0]:
+                problems.append(
+                    f"  {name}: pin {pad} is called {names[pad]!r} on "
+                    f"{spec.symbol} and the spec says {says!r} - if the symbol "
+                    f"is right, the exemption is not needed")
+    assert not problems, (
+        "Stand-in declarations that no longer describe their symbol:\n"
+        + "\n".join(problems)
     )

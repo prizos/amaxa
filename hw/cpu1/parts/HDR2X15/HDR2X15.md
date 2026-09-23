@@ -54,10 +54,14 @@ accuracy a sensor can rail to 3.366 V, which the pins take. See
 `parts/SOT23_5/SOT23_5.md`.
 
 **What a power board gives up:** sensors that need 5 V — an ACS724, a LEM
-module — cannot run from this pin. They run from the 12–15 V aux on the
-digital header, which every power board already has, and their output is
-scaled to this rail. That is the trade, and it is stated here because it is
+module — cannot run from this pin. They run from the gate-drive supply every
+power board already has, **on the power board's own side**, and their output
+is scaled to this rail. That is the trade, and it is stated here because it is
 the connector's business rather than the regulator's.
+
+It said "from the 12–15 V aux on the digital header" and there is no such pin.
+The digital header is 2×26 and carries 3V3 and nothing else that is a
+supply.
 
 **Footprint.** KiCad stock `Connector_PinHeader_2.54mm:PinHeader_2x15_P2.54mm_Vertical`,
 unmodified.

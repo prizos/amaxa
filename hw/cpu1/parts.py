@@ -1040,6 +1040,21 @@ CAN_TRANSCEIVER = PartSpec(
     symbol="Interface_CAN_LIN:SN65HVD230", footprint="SOIC8:SOIC-8_3.9x4.9mm_P1.27mm",
     prefix="U", manufacturer="Texas Instruments", mpn="TCAN1044VDRQ1", lcsc="C1852061",
     value="TCAN1044V",
+    # **The symbol is a stand-in and two of its pins lie.** Same package, same
+    # eight pins in the same order, which is what makes it usable; pin 5 is
+    # the SN65HVD230's V_REF and this part's V_IO, and pin 8 is that part's
+    # slope control and this one's standby.
+    #
+    # Pin 5 is the one that costs something. V_REF is drawn as an *output*,
+    # so the netlist reports a part driving the 3V3 rail - and `test_power.py`
+    # reads pin types precisely to tell a drive from a connection. It changes
+    # no answer today only because 3V3 is a declared rail and the rail check
+    # short-circuits on those before it asks who drives them. Declared here so
+    # a check can read it instead of a reader having to notice it.
+    symbol_misnames={
+        "5": "V_IO, this part's I/O supply input, drawn as V_REF, an output",
+        "8": "STB, standby, drawn as Rs, slope control",
+    },
     params={
         "supply_voltage": between(4.5, 5.5),
         "io_supply_voltage": between(1.7, 5.5),
@@ -1221,6 +1236,16 @@ ETH_PHY = PartSpec(
         "core_supply_voltage": between(1.14, 1.26),   # VDDCR, from the internal regulator
         "magnetics_supply_voltage": between(2.25, 3.6),
         "bias_resistance": pm(12.1e3, 0.01),          # RBIAS to ground, 1%
+        # **The RMII bus, which is nine single-ended signals at 50 MHz across
+        # forty millimetres and had no timing check of any kind.** The pairs
+        # to the jack were checked six ways; the bus that feeds them was
+        # checked for existing. Table 5.12, REF_CLK Out mode, which is the
+        # mode this board uses:
+        "rmii_clock_period": exact(20e-9),            # tclkp, 50 MHz
+        "rmii_output_valid_max": exact(7.0e-9),       # toval, PHY drives RXD
+        "rmii_output_invalid_min": exact(3.0e-9),     # toinvld
+        "rmii_setup_min": exact(7.5e-9),              # tsu, PHY samples TXD
+        "rmii_hold_min": exact(2.0e-9),               # tihold
         # **A typical, because the datasheet has no maximum.** Table 5.5,
         # "Current Consumption and Power Dissipation (REF_CLK Out, Reg.
         # Enabled)", 100BASE-TX with traffic: 59 mA for the device and 102 mA

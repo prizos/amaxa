@@ -63,7 +63,7 @@
 #define PIN_CAN_TX_PIN GPIO_PIN_1
 #define PIN_CAN_TX_AF GPIO_AF9_FDCAN1
 
-/* CAN_STANDBY: GPIO output on PD3, pin 117 */
+/* CAN_STANDBY: GPIO output on PD3, pin 117. high is standby, and this pin is high until firmware drives it. The transceiver's own pull-up holds it there, and TI's Table 8-4 puts standby as driver and main receiver both off - so the board boots unable to receive CAN, not merely unable to transmit. Drive it low before expecting a frame */
 #define PIN_CAN_STANDBY_PORT GPIOD
 #define PIN_CAN_STANDBY_PIN GPIO_PIN_3
 
@@ -338,12 +338,12 @@
 #define PIN_ENC_Z_PIN GPIO_PIN_14
 #define PIN_ENC_Z_AF GPIO_AF2_TIM4
 
-/* HALL_1: TIM3_CH1 on PB4, pin 134 */
+/* HALL_1: TIM3_CH1 on PB4, pin 134. the only one of the three with anything holding it, and it is inside the MCU rather than on the board: NJTRST's reset pull-up. It is not a board pull and the copper must show none */
 #define PIN_HALL_1_PORT GPIOB
 #define PIN_HALL_1_PIN GPIO_PIN_4
 #define PIN_HALL_1_AF GPIO_AF2_TIM3
 
-/* HALL_2: TIM3_CH2 on PB5, pin 135 */
+/* HALL_2: TIM3_CH2 on PB5, pin 135. as HALL_2 and HALL_3: nothing holds them, and firmware must configure an internal pull before it samples or commutates */
 #define PIN_HALL_2_PORT GPIOB
 #define PIN_HALL_2_PIN GPIO_PIN_5
 #define PIN_HALL_2_AF GPIO_AF2_TIM3
@@ -353,7 +353,7 @@
 #define PIN_HALL_3_PIN GPIO_PIN_0
 #define PIN_HALL_3_AF GPIO_AF2_TIM3
 
-/* ENC_SERIAL_TX: UART5_TX on PB13, pin 74. reserved: the encoder type is undecided */
+/* ENC_SERIAL_TX: UART5_TX on PB13, pin 74. reserved: the encoder type is undecided, so this leaves the board as a floating output pin and nothing holds it */
 #define PIN_ENC_SERIAL_TX_PORT GPIOB
 #define PIN_ENC_SERIAL_TX_PIN GPIO_PIN_13
 #define PIN_ENC_SERIAL_TX_AF GPIO_AF14_UART5

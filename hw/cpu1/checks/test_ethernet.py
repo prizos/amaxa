@@ -606,6 +606,106 @@ def test_the_pairs_arrive_together_enough(spec, stack, lengths, pcb_text):
         )
 
 
+def test_the_rmii_bus_arrives_with_its_own_clock(spec, stack, lengths, pcb_text, design):
+    """
+    Nine single-ended signals at 50 MHz, and how far each lands from the clock
+    that samples it.
+
+    **This block had twenty-one checks and none of them was about the RMII.**
+    The two differential pairs to the jack are checked for impedance, for
+    coupling, for skew, for what runs beside them and for what plane returns
+    them. The bus that feeds those pairs - REF_CLK, RXD[1:0], CRS_DV,
+    TXD[1:0], TX_EN, MDC, MDIO - was checked for being wired to the right
+    pins and for nothing else, and it is the only 50 MHz bus on the board.
+
+    What is asserted is the copper's share of the timing and not the timing:
+    closing the real budget needs the MCU's own RMII output delay and setup
+    window, and the pages of ST's datasheet vendored here do not state them.
+    The board's copper contributes skew between a data line and the clock
+    edge that latches it, and that share is what the board controls.
+
+    `ethernet.rmii_skew_share` is a **ratchet**, in the same sense as
+    `ethernet.coupled_fraction`: this placement achieves 0.31 % of a clock
+    period and the bound is half a per cent, so a change that lets one of the
+    nine wander has to be argued for rather than discovered on a bench.
+
+    The datasheet's own figures are declared and printed beside it, so the
+    margin the copper is eating into is visible even though this does not
+    spend it: at 20 ns of period, the PHY's data is valid from 7.0 ns after
+    one edge until 3.0 ns after the next, and it wants 7.5 ns of setup and
+    2.0 of hold on what the MCU sends back. Two nanoseconds of hold is the
+    smallest of those and the one skew subtracts from directly.
+    """
+    phy = next((address for address, part in design["parts"].items()
+                if part["symbol"].startswith("Interface_Ethernet:")), None)
+    assert phy, "no Ethernet PHY on this board, and this check is about its bus"
+
+    _, period = spec(phy, "rmii_clock_period")
+    _, share = spec("ethernet", "rmii_skew_share")
+    hold, _ = spec(phy, "rmii_hold_min")
+    valid, _ = spec(phy, "rmii_output_valid_max")
+    setup, _ = spec(phy, "rmii_setup_min")
+    still_valid, _ = spec(phy, "rmii_output_invalid_min")
+
+    # The two windows the datasheet leaves, and the smaller of them. Receive:
+    # the PHY's data is valid from `toval` after one edge until `toinvld`
+    # after the next, so the window is a period less the first plus the
+    # second. Transmit: what is left of a period once the PHY's own setup and
+    # hold are taken out of it. Neither is this board's budget - the MCU's
+    # share is missing from both, because ST does not state it in the pages
+    # vendored here - but skew larger than either is not a tight budget, it
+    # is a bus that cannot work at all.
+    windows = {
+        "the PHY's receive valid window": period - valid + still_valid,
+        "what a period leaves after the PHY's own setup and hold":
+            period - setup - hold,
+    }
+    tightest = min(windows, key=windows.get)
+
+    clock = "ETH_REF_CLK"
+    assert clock in lengths, f"{clock} has no copper"
+    # The lines REF_CLK latches, both ways. MDC and MDIO are left out on
+    # purpose: the management interface is its own clock at 2.5 MHz and is
+    # not sampled against this one.
+    latched = ["ETH_RXD0", "ETH_RXD1", "ETH_CRS_DV",
+               "ETH_TXD0", "ETH_TXD1", "ETH_TX_EN"]
+    missing = [net for net in latched if net not in lengths]
+    assert not missing, f"no copper on {missing}"
+
+    width = pairs.controlled_width(pairs.tracks_of(pcb_text, (clock,)))
+    per_mm = pairs.delay_per_mm(stack, width)
+
+    worst_net, worst = None, 0.0
+    for net in latched:
+        skew = abs(lengths[net] - lengths[clock]) * per_mm
+        if skew > worst:
+            worst_net, worst = net, skew
+
+    print(f"    RMII: {worst_net} is {abs(lengths[worst_net] - lengths[clock]):.1f} mm "
+          f"from {clock}, {worst * 1e12:.0f} ps, {worst / period:.3%} of a "
+          f"{period * 1e9:g} ns period; {tightest} is "
+          f"{windows[tightest] * 1e9:.1f} ns")
+
+    # The physical bound first, because it is the one that is not a judgement:
+    # whatever the MCU adds, the copper alone cannot be allowed to eat a
+    # window the datasheet states.
+    assert worst < windows[tightest], (
+        f"{worst_net} is {worst * 1e12:.0f} ps from {clock}, and {tightest} is "
+        f"{windows[tightest] * 1e9:.1f} ns. The MCU's own share is on top of "
+        f"this and is not stated in the pages vendored here, so a bus this "
+        f"skewed does not have a tight budget - it has none."
+    )
+
+    assert worst <= share * period, (
+        f"{worst_net} is {abs(lengths[worst_net] - lengths[clock]):.1f} mm from "
+        f"{clock}, which is {worst * 1e12:.0f} ps - {worst / period:.2%} of a "
+        f"{period * 1e9:g} ns clock period, over the {share:.1%} this board "
+        f"holds itself to. The bound is a ratchet on the placement and not a "
+        f"timing budget; the timing it eats into is {hold * 1e9:g} ns of hold "
+        f"at the PHY, which is the smallest number in Table 5.12."
+    )
+
+
 def test_the_centre_taps_sit_where_the_transmitter_can_use_them(
     spec, pads_of, design, pcb_text
 ):
