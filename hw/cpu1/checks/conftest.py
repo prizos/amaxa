@@ -102,106 +102,39 @@ def layer_stack(board_dir):
     """
     Copper layer -> the dielectric between it and the nearest plane.
 
-    Derived from the stackup and from which layers the design pours on, rather
-    than written out: a layer's neighbour changes the moment the layer roles
-    do, and the number that changes with it is a capacitance nobody would
-    think to re-derive.
-
-    **The nearest plane, not the nearest ground.** A microstrip's field stops
-    at the first plane it meets whatever net that plane carries - a supply
-    plane is an equipotential at these frequencies too - and this said ground
-    while `plane_layers` in test_routing.py said plane, so two fixtures gave
-    In3.Cu two different heights, 0.43 mm and 0.175. Only outer pours are
-    excluded, because a pour on a signal layer is local copper rather than a
-    reference: the same distinction `plane_layers` draws.
+    The derivation moved to `tools/layout_lib.reference_stack` when the
+    capacitance it feeds had to be readable by a simulation deck as well as by
+    a check. What is here is the board's own stackup handed to it.
     """
     module = _layout(board_dir)
-    from layout_lib import Microstrip
+    from layout_lib import reference_stack
 
-    board = module.BOARD
-    grounds = {p["layer"] for p in module.PLANES} - {"F.Cu", "B.Cu"}
-
-    copper = ["F.Cu"] + [f"In{n}.Cu" for n in range(1, board["copper_layers"] - 1)] + ["B.Cu"]
-    dielectrics = board["stack"]
-    assert len(dielectrics) == len(copper) - 1, "a dielectric between every pair of layers"
-
-    out = {}
-    for index, layer in enumerate(copper):
-        if layer in grounds:
-            continue
-        # Walk outward from this layer until a ground plane turns up, adding
-        # the dielectric crossed at each step. The nearer side wins.
-        best = None
-        for other, name in enumerate(copper):
-            if name not in grounds:
-                continue
-            low, high = sorted((index, other))
-            spanned = dielectrics[low:high]
-            height = sum(d["thickness"] for d in spanned)
-            # Thickness-weighted, because a stack of two dielectrics behaves as
-            # one of the total thickness only if they share a permittivity.
-            epsilon = sum(d["thickness"] * d["epsilon_r"] for d in spanned) / height
-            if best is None or height < best.height:
-                best = Microstrip(height=height, epsilon_r=epsilon)
-        assert best is not None, f"{layer} has no ground plane anywhere in the stack"
-        out[layer] = best
-    return out
+    return reference_stack(module.BOARD, module.PLANES)
 
 
 @pytest.fixture(scope="session")
-def board_capacitance(pcb_text, layer_stack):
+def board_capacitance(build_dir):
     """
-    net -> farads of copper against the ground planes, tracks and pads together.
+    net -> farads of copper against the planes, tracks and pads together.
 
-    The board's own stray capacitance, measured off the board file instead of
-    declared. It is what the crystal load capacitors are sized against, and a
-    declared figure there is a belief about copper that the copper can answer
-    for itself.
+    Measured off the routed board rather than declared, and **measured by the
+    layout rather than here**. It used to be computed in this file, which made
+    it reachable from a check and from nothing else; the simulation decks need
+    the same figures - the trip bus is 137 pF of which sixteen is copper - and
+    a deck that typed that number would be the second copy of the design this
+    repository exists to avoid. The layout writes `build/copper.json` beside
+    `lengths.json`, `tools/simulate.py` offers it to a deck as
+    `@copper.<NET>.capacitance:end@`, and this reads the same file.
 
-    Vias are left out. A via on a signal net passes through an antipad in every
-    plane it crosses, so what it adds is a fraction of what the same area of
-    pad would, and counting it as though it were a pad would be worse than
-    leaving it out.
+    The computation itself, and what it leaves out, is in
+    `tools/layout_lib.net_capacitance`.
     """
-    from layout_lib import microstrip_capacitance, pad_capacitance
-
-    names = dict(re.findall(r'\(net (\d+) "([^"]*)"\)', pcb_text))
-    totals: dict[str, float] = {}
-
-    for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
-        start = re.search(r"\(start ([-\d.]+) ([-\d.]+)\)", block)
-        end = re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", block)
-        width = re.search(r"\(width ([\d.]+)\)", block)
-        layer = re.search(r'\(layer "([^"]+)"\)', block)
-        number = re.search(r"\(net (\d+)\)", block)
-        if not (start and end and width and layer and number):
-            continue
-        net = names.get(number.group(1), "")
-        length = math.dist(
-            (float(start.group(1)), float(start.group(2))),
-            (float(end.group(1)), float(end.group(2))),
-        )
-        per_mm = microstrip_capacitance(float(width.group(1)), layer_stack[layer.group(1)])
-        totals[net] = totals.get(net, 0.0) + length * per_mm
-
-    for block in re.findall(r'\t\t\(pad "[^"]*" \w+ \w+\n(?:\t\t\t[^\n]*\n)+?\t\t\)', pcb_text):
-        number = re.search(r'\(net \d+ "([^"]*)"\)', block)
-        size = re.search(r"\(size ([\d.]+) ([\d.]+)\)", block)
-        layers = re.search(r'\(layers ([^\n]*)\)', block)
-        if not (number and size and layers):
-            continue
-        # A through-hole pad is on both outer layers; a surface pad on one. It
-        # is the copper facing a plane that matters, so each face counts.
-        faces = [name for name in ("F.Cu", "B.Cu") if f'"{name}"' in layers.group(1)
-                 or '"*.Cu"' in layers.group(1)]
-        # The wider side is the one the microstrip model is asked about: a pad
-        # is a very wide, very short line, and it is the width across the
-        # field that sets the capacitance per unit of the other direction.
-        across = max(float(size.group(1)), float(size.group(2)))
-        area = float(size.group(1)) * float(size.group(2))
-        for face in faces:
-            totals[number.group(1)] = totals.get(number.group(1), 0.0) + pad_capacitance(
-                area, across, layer_stack[face])
+    report = build_dir / "copper.json"
+    assert report.is_file(), (
+        f"no {report}. The layout writes it; run `make -C hw layout`."
+    )
+    totals = {net: entry["capacitance"]
+              for net, entry in json.loads(report.read_text()).items()}
 
     def lookup(net: str) -> float:
         assert net in totals, f"no copper on {net}"

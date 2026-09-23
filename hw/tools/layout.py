@@ -34,6 +34,9 @@ import uuid
 from pathlib import Path
 
 HW_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from layout_lib import net_capacitance, reference_stack  # noqa: E402
 
 # Marks every object this script owns, so it can take them away again. KiCad
 # has nowhere to put a custom attribute on a track, so the mark goes in the one
@@ -685,6 +688,27 @@ def main() -> int:
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(dict(sorted(lengths.items())), indent=1) + "\n")
 
+    # And what that copper is worth as capacitance against the planes under
+    # it. The same file serves two readers that could not share before: the
+    # checks, where it was a fixture computing this from the board file, and
+    # the simulation decks, which could not reach a fixture at all and would
+    # otherwise have had to type the figure. `tools/simulate.py` offers these
+    # to a deck as `@copper.<NET>.capacitance:nom@`.
+    #
+    # A board that does not describe a stackup gets no file rather than a
+    # guessed one - led12 is two layers and says only how thick its core is,
+    # which is not enough to place a reference plane under a track. Nothing
+    # falls back to a default: `board_capacitance` asserts the file exists,
+    # and a deck asking for a net it does not have fails on the missing path.
+    farads = {}
+    if {"copper_layers", "stack"} <= set(description.BOARD):
+        stack = reference_stack(description.BOARD, planes)
+        farads = {net: value for net, value in net_capacitance(board.text, stack).items()
+                  if net}
+        (board_dir / "build" / "copper.json").write_text(
+            json.dumps({net: {"capacitance": value}
+                        for net, value in sorted(farads.items())}, indent=1) + "\n")
+
     tracks = sum(1 for o in objects if o.lstrip().startswith("(segment"))
     vias = sum(1 for o in objects if o.lstrip().startswith("(via"))
     edges = sum(1 for o in objects if o.lstrip().startswith(("(gr_line", "(gr_arc")))
@@ -692,6 +716,8 @@ def main() -> int:
         f"placed {len(description.PLACEMENT)} parts, "
         f"{tracks} track segments, {vias} vias, {edges} outline segments, "
         f"{len(planes)} plane{'s' if len(planes) != 1 else ''}"
+        + (f", {len(farads)} nets measured for capacitance" if farads
+           else ", no stackup so no capacitance")
     )
     return 0
 

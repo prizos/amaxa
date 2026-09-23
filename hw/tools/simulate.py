@@ -30,12 +30,32 @@ PLACEHOLDER = re.compile(r"@([A-Za-z0-9_.\[\]]+):(nom|min|max)([-+][\d.]+)?@")
 MEASUREMENT = re.compile(r"^\s*([a-z_][a-z0-9_]*)\s*=\s*([-\d.eE+]+)", re.MULTILINE)
 
 def design_values(board: Path) -> dict[str, tuple[float, float]]:
-    """Every value the design states, as (low, high) in SI units."""
+    """
+    Every value the design states, as (low, high) in SI units.
+
+    Two files, one namespace. `design.json` is what the circuit is - every
+    part parameter and every declared intent. `copper.json` is what the layout
+    made of it: the farads each net's routed copper is worth against the
+    planes under it, offered here as `copper.<NET>.capacitance` so a deck can
+    drive a real node instead of a typed figure.
+
+    They are kept apart on disk because `checks/test_check_count.py` demands a
+    reader for every value in `design.json` whose owner is not a part, and a
+    board's worth of nets would arrive as two hundred orphans. Merging them
+    only here gives the decks the numbers without moving that gate.
+    """
     report = board / "build" / "design.json"
     if not report.is_file():
         sys.exit(f"no design at {report}. Run `make -C hw build` first.")
     values = json.loads(report.read_text())["values"]
-    return {key: (float(low), float(high)) for key, (low, high) in values.items()}
+    resolved = {key: (float(low), float(high)) for key, (low, high) in values.items()}
+
+    copper = board / "build" / "copper.json"
+    if copper.is_file():
+        for net, entry in json.loads(copper.read_text()).items():
+            for name, farads in entry.items():
+                resolved[f"copper.{net}.{name}"] = (float(farads), float(farads))
+    return resolved
 
 
 def render(template: str, values: dict[str, tuple[float, float]], name: str) -> str:
@@ -74,11 +94,19 @@ def run(deck: Path) -> dict[str, float]:
     )
     output = result.stdout + result.stderr
 
+    # **Both, because neither alone is enough.** ngspice says "Error" on the
+    # things it recognises as errors and exits zero for several of them; it
+    # also exits non-zero on things it does not narrate at all. Reading only
+    # the text was what this did, and the first deck that fails some new way
+    # would have come back with no measurements and no explanation.
     fatal = [
         line
         for line in output.splitlines()
         if re.search(r"\berror\b", line, re.I) and "no error" not in line.lower()
     ]
+    if result.returncode != 0 and not fatal:
+        fatal = [f"ngspice exited {result.returncode} and said nothing about why",
+                 *output.splitlines()[-5:]]
     if fatal:
         print(f"\n{deck.name}: ngspice reported a problem")
         for line in fatal[:10]:

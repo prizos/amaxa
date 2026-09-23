@@ -31,8 +31,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # cpu1 is being built block by block: its board.mk declares routing
-        # incomplete and no simulation decks, and the Makefile holds it to that.
+        # Both boards are complete and both declare simulation decks; a board
+        # that does not says so in its own board.mk and the Makefile holds it
+        # to that. This comment described cpu1 mid-build for several months
+        # after it stopped being true.
         board: [led12, cpu1]
     env:
       BOARD: ${{ matrix.board }}
@@ -98,14 +100,23 @@ jobs:
 
       # The decks take their values from the build, so a component change moves
       # the simulation with it.
+      #
+      # Through ci_run.sh like every other step, which this one was not: a deck
+      # landing outside its band went to the run summary and nowhere else, and
+      # a summary needs a browser while an annotation needs only the API. The
+      # table still reaches the summary - ci_run.sh prints the output as well
+      # as annotating it - so this adds a reader rather than moving one.
       - name: Simulation
         run: |
+          set -o pipefail
           {
             echo "### Simulation: ${BOARD}"
             echo '```'
-            make sim
-            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          tools/ci_run.sh "Simulation" make sim | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Renders, 3D model and fab package
         run: tools/ci_run.sh "Renders, 3D model and fab package" make outputs
