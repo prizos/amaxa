@@ -1,0 +1,122 @@
+* cpu1: which rail arrives when, and what gets ahead of what.
+*
+* `docs/research/09` lists "power-up sequencing and inrush" under the things
+* **no pipeline we can build catches**. This is the first thing to contradict
+* that, and it exists because the board broke a sequencing rule once and every
+* check on it was blind: `c297e58`, "two things that were only wrong in time,
+* not in steady state", which says in its own message that both were
+* "invisible to every check on the board because every check compared
+* steady-state numbers".
+*
+* That defect was the reference on the 5 V rail, regulating at 3.006 V for the
+* millisecond before the 3V3 converter had cleared its own UVLO and started
+* VDDA from zero - with ST's Table 86 giving VREF+ a maximum of VDDA.
+*
+* **The check that guards it now is topological**, and deliberately so:
+* `test_the_reference_runs_from_the_rail_it_is_given` asserts that the
+* reference's supply reaches VDDA through nothing but two-terminal passives,
+* which is stronger than any one simulated corner. This deck is the other
+* half - it holds the *relationship* rather than the wiring, at every instant
+* of the ramp, and it covers three more relationships that have no guard of
+* either kind.
+*
+* **Read models/SOURCE.md before believing anything here.** None of these
+* converters has a control loop. They are soft-start ramps with a turn-on
+* condition and a current limit: enough to answer what comes up when, and
+* enough for nothing else. No ripple, no stability, no inrush.
+*
+* Every timing figure is a declared one, and all four were prose until this
+* deck needed them - `cpu1.py` said the 3V3 converter's UVLO was "about
+* 4.1 V", which is outside the datasheet's own 3.45 to 4.05 band.
+*
+* Values come from the build; @path:end@ is an instance path and which end of
+* its resolved range to take.
+
+.include ../models/converters.lib
+
+* The supply arriving. A hundred microseconds is fast against the converters'
+* own millisecond ramps, which is the point: what orders these rails is the
+* parts and not the bench supply, and a slower input only spreads them
+* further apart.
+Vin vin 0 PWL(0 0 100u @input.voltage:nom@ 20m @input.voltage:nom@)
+
+* --- 5 V, the first thing that happens -------------------------------------
+*
+* The lockout divider on EN/UVLO, and the converter behind it. Worst case is
+* the longest soft start, because everything downstream is measured from when
+* this rail arrives.
+Rlock_top vin lockout @buck5.r_uvlo_top.resistance:max@
+Rlock_bot lockout 0 @buck5.r_uvlo_bottom.resistance:min@
+
+Xbuck5 vin lockout n5v buck
++ vout=@rail.5v.voltage:nom@
++ uvlo=@buck5.ic.v_in:min@
++ ven=@buck5.ic.enable_threshold:max@
++ tss=@buck5.ic.soft_start_time:max@
++ ilim=@buck5.ic.load_current_max:min@
+C5v n5v 0 @buck5.c_out1.capacitance:min@
+R5v n5v 0 {@rail.5v.voltage:nom@ / @rail.5v.current:max@}
+
+* --- 3V3, and VDDA behind its ferrite ---------------------------------------
+*
+* EN is hard-tied to the 5 V rail - `cpu1.py:975` - so what holds this off is
+* its own input UVLO and nothing else. Worst case again: the highest UVLO and
+* the longest soft start, which is the latest this rail can arrive.
+Xbuck3 n5v n5v n3v3 buck
++ vout=@rail.3v3.voltage:nom@
++ uvlo=@buck3v3.ic.input_uvlo:max@
++ ven=@buck3v3.ic.enable_high_voltage_min:max@
++ tss=@buck3v3.ic.soft_start_time:max@
++ ilim=@buck3v3.ic.load_current_max:min@
+C3v3 n3v3 0 @buck3v3.c_out1.capacitance:min@
+R3v3 n3v3 0 {@rail.3v3.voltage:nom@ / @rail.3v3.current:max@}
+
+Rbead n3v3 vdda @core.vdda.bead.dc_resistance:max@
+Cvdda vdda 0 @core.vdda.c1u.capacitance:min@
+
+* --- VREF+, from 3V3, which is the whole point ------------------------------
+Xref n3v3 vrefp vref
++ vout=@vref.ic.output_voltage:min@
++ tsettle=@vref.ic.turn_on_settling_typical:max@
++ headroom=@vref.ic.dropout_at_10ma:max@
++ ilim=@vref.ic.output_current_max:min@
+Cvref vrefp 0 @core.vref.c1u.capacitance:min@
+Cvref_dac vrefp 0 @trip.dac.bulk.capacitance:min@
+Rvref vrefp 0 {@vref.ic.output_voltage:min@ / @vref.supply_current:max@}
+
+* --- 3V3A, from 5 V, which nothing has ever ordered against anything --------
+Xldo n5v n3v3a ldo
++ vout=@analog.ldo.output_voltage:max@
++ rpass={@analog.ldo.dropout_at_max_current:max@ / @analog.ldo.output_current_max:min@}
++ ilim=@analog.ldo.output_current_max:min@
+C3v3a n3v3a 0 @analog.bulk.capacitance:min@
+R3v3a n3v3a 0 {@analog.ldo.output_voltage:max@ / @analog.supply_current:max@}
+
+.tran 2u 20m
+
+* --- what happened -----------------------------------------------------------
+
+* **The one that was broken once.** ST's Table 86 gives VREF+ a maximum of
+* VDDA, and this is the worst instant of the whole ramp rather than the
+* steady state the checks compare.
+.meas tran v_ref_above_vdda_max MAX par('v(vrefp) - v(vdda)') FROM=0 TO=20m
+
+* How long the threshold DAC is outside its own supply range while the logic
+* rail is already up - the window in which the buffers and the latch are alive
+* at 1.65 V and every trip threshold is undefined. Nothing has ever put a
+* number on it.
+.meas tran tmp_3v3_up WHEN v(n3v3)=@rail.3v3.voltage:min@ RISE=1
+.meas tran tmp_dac_in_spec WHEN v(vrefp)=@trip.dac.supply_voltage:min@ RISE=1
+.meas tran t_dac_below_spec PARAM='tmp_dac_in_spec - tmp_3v3_up'
+
+* The analog supply's own ceiling, at every instant. 3V3A comes off an LDO on
+* the 5 V rail while VDDA comes off a buck *and* a ferrite, so it leads - and
+* that lead is safe only because the pins it eventually reaches are rated
+* absolutely rather than against VDDA. This is the assertion that says so.
+.meas tran v_3v3a_max MAX v(n3v3a) FROM=0 TO=20m
+
+* And the ordering itself, which was four prose sentences.
+.meas tran tmp_5v_up WHEN v(n5v)=@rail.5v.voltage:min@ RISE=1
+.meas tran t_5v_to_3v3 PARAM='tmp_3v3_up - tmp_5v_up'
+
+.end

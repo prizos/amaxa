@@ -23,14 +23,21 @@ EXPECTED_CHECKS = 207
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
-    ("buck5.c_out1", "capacitance"): (
-        "the 5 V buck's output bulk. The LM5164's datasheet gives an input "
-        "capacitance minimum and no output figure, so there is nothing to "
-        "compare these against: the value follows from the ripple wanted, and "
-        "this board states no ripple target for the 5 V rail. Worth one before "
-        "a second spin - it is a loop-stability number as well as a ripple one"
+    ("buck5.c_out2", "capacitance"): (
+        "the second half of the 5 V buck's output bulk. The LM5164's "
+        "datasheet gives an input capacitance minimum and no output figure, "
+        "so there is nothing to compare these against: the value follows from "
+        "the ripple wanted, and this board states no ripple target for the "
+        "5 V rail.\n"
+        "      `buck5.c_out1` is no longer excused - `sim/power_up.cir.in` "
+        "reads it as the rail's capacitance while it ramps - and that is "
+        "worth being precise about, because it is **not** the comparison this "
+        "exemption was about. The deck uses it as a lump of capacitance on a "
+        "node; what neither it nor anything else does is hold it against a "
+        "loop-stability or ripple figure, because no such figure exists to "
+        "hold it against. The gap the original note named is still open and "
+        "is still worth closing before a second spin"
     ),
-    ("buck5.c_out2", "capacitance"): "the second half of buck5.c_out1, and the same gap",
     ("can.decoupling_vcc", "capacitance"): (
         "a 100 nF bypass at a supply pin. That it exists, and sits beside its own pin, is checked; its *value* is convention and neither this part's datasheet nor anything else on this board states a figure to hold it to. It became visible when the converters' input-capacitance checks stopped summing the whole 5 V net - which is how these were being 'read' before, as part of an answer to a different question"
     ),
@@ -114,8 +121,10 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
                 "power_dissipation_at_85c",
                 "analog_input_absolute_maximum",
                 "analog_input_injection_current",
-                "current_consumption_scheme"],
+                "current_consumption_scheme",
+                "vref_against_vdda"],
     "MSOP10": ["factory_default", "absolute_maximum"],
+    "TSOT23_6": ["uvlo_and_soft_start"],
     "QFN24": ["package_outline", "front_end"],
     "RJ45HR": ["schematic"],
     "SMB": ["cathode"],

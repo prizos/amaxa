@@ -42,7 +42,7 @@ three, and why the other count was the wrong way to read the diagram.)
 | Rails | 5 V (LM5164, 100 V-class), 3V3 (TPS562200), 3V3A (TLV70233 LDO), VREF+ 3.0 V |
 | To the power board | digital 2×26 (52 pins), analog 2×15 (30 pins) |
 | Comms | USB-C device, CAN FD, RS-485, 100BASE-TX Ethernet |
-| Checks | 206, all passing; DRC 0 violations, 0 unconnected |
+| Checks | 207 and 22 simulated measurements, all passing; DRC 0 violations, 0 unconnected |
 
 The part count is dominated by the safety chain (59) and the MCU core (39) —
 which is the right shape for what this board is for.
@@ -379,6 +379,28 @@ DAC that came out of examining it is a real improvement and went in anyway.
 
 Everything below is uncertain in the weaker sense: nothing is known to be
 wrong, and nothing has been measured.
+
+**What the rails do on the way up**, which was four sentences of prose until
+`sim/power_up.cir.in` ran them. Every figure behind it is declared now, and
+one of the sentences was wrong: the 3V3 converter's UVLO is 3.45–4.05 V and
+`cpu1.py` said "about 4.1".
+
+| | |
+|---|---|
+| 5 V to 3V3 | **576 µs** |
+| VREF+ above VDDA, worst instant | **0 V** — ST's Table 86 allows none |
+| the DAC below its 2.7 V minimum, with 3V3 already up | **53 µs** |
+| 3V3A's ceiling at any instant | **3.303 V** against a 4.0 V pin limit |
+
+The third of those is a number nobody had: a window in which the latch and
+both buffers are alive at 1.65 V and every trip threshold is undefined. It is
+harmless — firmware has not run, so nothing is enabling a buffer — and it is
+now bounded rather than unmentioned.
+
+Put the reference back on the 5 V rail, which is the defect `c297e58` fixed,
+and the deck reports VREF+ **2.99 V above VDDA** and fails. That is the
+historical defect reproduced, and it is why `docs/research/09` no longer lists
+power-up sequencing among the things no pipeline can catch. Inrush still is.
 
 **Assumptions carried deliberately, each declared in one place and each
 wanting a measurement on the first assembled board:**

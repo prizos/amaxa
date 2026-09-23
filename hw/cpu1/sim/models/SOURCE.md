@@ -205,6 +205,60 @@ model.
 
 ---
 
+## `converters.lib` — the LM5164, the TPS562200, the TLV70233 and the REF3030
+
+**Behavioural, not vendor, and narrower than anything else in this file.**
+None of these has a control loop. They are soft-start ramps with a turn-on
+condition and a current limit: enough to answer *what comes up when, and does
+anything get ahead of anything*, and enough for nothing else.
+
+`buck` — armed when its input passes `uvlo` **and** its enable passes `ven`,
+then ramping monotonically to its setpoint over `tss`. Monotonic is what both
+datasheets promise and the only shape either states. Arming latches, because a
+converter that has started does not un-start when its input dips back below
+the threshold that let it start — that is what the hysteresis row in both
+datasheets is about. Probed: armed at 0.5 ms, at its setpoint at 3.50 ms with
+`tss = 3 ms`, and holding 4.9999 V of a 5.000 V setpoint.
+
+Figures, all declared: LM5164 `soft_start_time` 1.75/3/4.75 ms and
+`enable_threshold` 1.45–1.55 V; TPS562200 `input_uvlo` 3.45/3.75/4.05 V,
+`soft_start_time` 0.7/1/1.3 ms and `enable_high_voltage_min` 1.6 V. **All four
+were prose in `cpu1.py` until this deck needed them**, and one of them was
+wrong: "its own UVLO at about 4.1 V" is outside the datasheet's own band at
+the top.
+
+`ldo` — the same three figures as led12's `ldo_3v3.lib`, in the same shape: a
+setpoint, a pass resistance from the dropout point, and a current limit. No
+soft start is declared for the TLV70233 and none is modelled, so it holds its
+setpoint as soon as its input can support it.
+
+`vref` — the REF3030's output with a first-order settling in front of it, and
+it cannot exceed its own input less the dropout, which is what makes it follow
+3V3 up rather than appearing at 3.0 V the moment it has a supply.
+`turn_on_settling_typical` is 120 µs **with no load capacitance**, and this
+board hangs 2.2 µF on the node, so the model settles sooner than the part
+will. Which way that matters: VREF+ arriving *late* is the safe direction
+here, so an optimistic model is the conservative one for the question being
+asked.
+
+**What they do not represent, and it is most of a converter.** No control
+loop, so nothing about stability — and `parts/TSOT23_6/TSOT23_6.md` records
+that the 3V3 rail's decoupling is part of that loop whether it was chosen to
+be or not, which is a question this touches at no point. No switching, no
+ripple, no inductor, no inrush, no line or load transient response, no
+pre-bias, no hiccup or over-voltage protection, no thermal shutdown. The
+current limits are there so the rails are not sources of infinite current and
+for no other reason.
+
+**And no rail can fall.** `cpu1.py:937` describes the brown-out: the input
+dips, 5 V decays, the 3V3 buck stops switching, and 3V3 falls on 44 µF into a
+770 mA load at about 17.5 V/ms while the MCU is still executing and the
+comparators are below their minimum supply. Every figure in that paragraph is
+prose, and nothing in this file could check it — these models go up and stay
+up.
+
+---
+
 ## What none of these represent
 
 - **Supply current, and therefore supply collapse.** Every model here takes its

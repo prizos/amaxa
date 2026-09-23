@@ -1,0 +1,79 @@
+* The three regulators and the reference, for sequencing only.
+*
+* Behavioural, not vendor - see SOURCE.md, and read what they do **not**
+* represent before believing anything downstream of them. None of these has a
+* control loop. They are soft-start ramps with a turn-on condition and a
+* current limit, which is enough to answer "what comes up when, and does
+* anything get ahead of anything" and enough for nothing else.
+*
+* In particular: no ripple, no loop stability, no line or load transient, no
+* inductor, no switching. A deck built on these says nothing about whether a
+* converter is stable - `parts/TSOT23_6/TSOT23_6.md` records that the 3V3
+* rail's decoupling is part of that loop whether it was chosen to be or not,
+* and that question is untouched here.
+
+* --- a switching converter that soft-starts ---------------------------------
+*
+* Off until its input passes `uvlo` and its enable passes `ven`, then its
+* output ramps to `vout` over `tss` and holds. The ramp is monotonic, which is
+* what both datasheets promise and is the only shape either states.
+*
+* `ilim` is the part's own current limit; without it the model would hold its
+* setpoint into any load, and the rails it feeds are the whole point.
+.subckt buck in en out params: vout=5 uvlo=4 ven=1.6 tss=3m ilim=1
+
+* Armed once, and it stays armed: a converter that has started does not
+* un-start when its input dips below the threshold that let it start, which is
+* what the hysteresis row in both datasheets is about. The capacitor is the
+* memory and the diode is what stops it discharging.
+Barm arm_raw 0 V = 10 * (0.5+0.5*tanh(20*(v(in)-uvlo))) * (0.5+0.5*tanh(20*(v(en)-ven)))
+Darm arm_raw arm DARM
+Carm arm 0 1n
+Rarm arm 0 1e12
+.model DARM D(IS=1e-14 N=1 RS=1)
+
+* The ramp, started by that: a 1 nF capacitor fed a current that takes it from
+* zero to one volt in exactly `tss`, and then stops. One volt of `ramp` is the
+* setpoint, so the output ramps over the soft-start time the datasheet gives.
+Cramp ramp 0 1n
+Bslew 0 ramp I = (0.5+0.5*tanh(20*(v(arm)-5))) * 1n/tss
++                * (0.5+0.5*tanh(200*(1 - v(ramp))))
+Rramp ramp 0 1e12
+
+* And the output: the ramp times the setpoint, delivered through a source that
+* cannot give more than the part can, and never more than its own input.
+Bout 0 out I = min(max(1e3*(min(v(ramp),1)*vout - v(out)), -ilim), ilim)
+Rleak out 0 1e9
+
+.ends buck
+
+* --- a linear regulator that follows its input -------------------------------
+*
+* No soft start is declared for the TLV70233 and none is modelled: it holds
+* its setpoint as soon as its input can support it, which on the way up means
+* it tracks the input minus its dropout until the setpoint is reachable. That
+* is the same shape as led12's `ldo_3v3.lib` and the same three figures.
+.subckt ldo in out params: vout=3.3 rpass=1.25 ilim=0.3
+Bpass in out I = min(min(1e4*max(0, vout - v(out)), max(0, (v(in)-v(out))/rpass)), ilim)
+Rleak out 0 1e9
+.ends ldo
+
+* --- a series voltage reference ----------------------------------------------
+*
+* The REF3030, as its output with a first-order settling time in front of it.
+* `tsettle` is the datasheet's turn-on figure, which is quoted with **no load
+* capacitance** while this board hangs 2.2 uF on the node - so the model
+* settles sooner than the part will and the deck is optimistic about how
+* quickly VREF+ arrives. Which way that matters: VREF+ arriving *late* is the
+* safe direction on this board, so an optimistic model is the conservative
+* one for the question being asked.
+*
+* It cannot exceed its own input less the dropout, which is what makes it
+* follow 3V3 up rather than appearing at 3.0 V the moment it has a supply.
+.subckt vref in out params: vout=3.0 tsettle=120u headroom=0.05 ilim=25m
+Btarget target 0 V = min(vout, max(0, v(in) - headroom))
+Rset target settled {tsettle/1n/0.6931472}
+Csettle settled 0 1n
+Bout 0 out I = min(max(1e3*(v(settled) - v(out)), -ilim), ilim)
+Rleak out 0 1e9
+.ends vref

@@ -57,7 +57,15 @@ Vendor device models are copied into the repo with a record of source URL, date 
 ## Human sign-off before fabrication
 No pipeline we can build catches these:
 - **Every footprint checked against its datasheet drawing**, including pin 1 and pad numbering. The most likely and most expensive failure.
-- **Power-up sequencing and inrush.**
+- **Inrush.** ~~Power-up sequencing and inrush.~~ Sequencing came off this
+  list: `hw/cpu1/sim/power_up.cir.in` runs the rails up and holds VREF+ to
+  ST's "maximum VDDA" at every instant of the ramp rather than only in steady
+  state, which is the relationship `c297e58` broke for a millisecond with
+  every check on the board comparing steady-state numbers and seeing nothing.
+  Put the reference back on the 5 V rail and the deck reports VREF+ 2.99 V
+  above VDDA and fails. **Inrush is still here**, and so is everything a
+  control loop does: the models under that deck are soft-start ramps with a
+  turn-on condition, with no loop, no switching and no falling rail.
 - **Connector genders, keying and mating orientation.**
 - **Thermal path** for shunts and switches at high current.
 - **Creepage and clearance across any isolation barrier**, against the standard rather than the number in our rules file.

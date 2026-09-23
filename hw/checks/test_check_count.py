@@ -33,6 +33,23 @@ def test_expected_number_of_checks_ran(collected_check_count, board_config, boar
     )
 
 
+def _simulation_text(board_dir) -> str:
+    """
+    Every file on the simulation side that can name a declared value.
+
+    The decks name them as `@path:end@`. **`limits.py` names them as
+    `values["path"]`**, and that is not a lesser kind of reader: a band
+    derived from the design is the thing that stops a measurement having a
+    constant somebody widens the next time it fails, and this gate used to
+    treat it as no reader at all. `mcu.vref_above_vdda_max` is read by the
+    power-up deck's band and by nothing else, which is exactly the right
+    place for it and was an orphan until this looked here too.
+    """
+    sim = board_dir / "sim"
+    files = sorted(sim.glob("*.cir.in")) + sorted(sim.glob("limits.py"))
+    return "\n".join(path.read_text() for path in files)
+
+
 def test_every_design_intent_is_read_by_something(design, board_dir, parameters_read):
     """
     Every value in the design that is not a part parameter is consumed.
@@ -68,7 +85,7 @@ def test_every_design_intent_is_read_by_something(design, board_dir, parameters_
     # of a key count as a reader - including one inside a comment saying the
     # key was *not* checked yet, which is the exact opposite of what this
     # asserts, and which a mutation test walked straight through.
-    decks = "\n".join(p.read_text() for p in sorted((board_dir / "sim").glob("*.cir.in")))
+    decks = _simulation_text(board_dir)
 
     def is_read(key: str) -> bool:
         owner, _, name = key.rpartition(".")
@@ -110,11 +127,11 @@ def test_every_declared_parameter_is_read(design, board_dir, board_config, param
     # Decks name parameters literally, as `@path:end@`, with no indirection to
     # resolve, so reading them textually is exact here in a way it is not for
     # the checks.
-    decks = "\n".join(p.read_text() for p in sorted((board_dir / "sim").glob("*.cir.in")))
+    decks = _simulation_text(board_dir)
     read_by_a_deck = {
         (owner, name)
         for owner, name in declared
-        if f"@{owner}.{name}:" in decks
+        if f"@{owner}.{name}:" in decks or f'"{owner}.{name}"' in decks
     }
 
     exempt = board_config.UNREAD_PARAMETERS

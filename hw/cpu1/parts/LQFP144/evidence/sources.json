@@ -64,5 +64,16 @@
     "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
     "shows": "Section 7.9's equation T_J max = T_A max + (P_D max x theta_JA) and Table 126 beside it, where the LQFP144 20x20 mm 0.5 mm pitch row reads 43.7 degC/W. It is the figure the board's declared ambient is derived from.",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
+  "vref_against_vdda": {
+    "assumes": "",
+    "crop": "180,320,1290,270",
+    "document": "ST STM32H742xI/G STM32H743xI/G datasheet, DocID030538 Rev 3",
+    "dpi": 200,
+    "page": 163,
+    "read": "2026-09-23",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Table 86: VREF+ positive reference voltage, minimum 1.80 V and **maximum VDDA**. The relationship is a recommended operating condition and not an absolute maximum - Table 20 has no VREF-to-VDDA row at all and treats VREF+ as one of the 4.0 V 'any other pins'. It is the constraint the power-up deck holds the rails to at every instant of the ramp rather than only in steady state, which is what commit c297e58 violated for a millisecond with nothing on the board able to see it.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
   }
 }

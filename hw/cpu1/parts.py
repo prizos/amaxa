@@ -53,6 +53,21 @@ MCU_H743 = PartSpec(
         # milliamps. There is no current this pin may be driven above its
         # supply with; the limit is the voltage.
         "analog_input_voltage_max": exact(4.0),
+        # **VREF+ may not exceed VDDA.** Table 86 gives the positive reference
+        # as 1.80 V minimum and V_DDA maximum, and that is a *recommended
+        # operating condition*, not an absolute one: Table 20 has no
+        # VREF-to-VDDA row and treats VREF+ as one of the 4.0 V "any other
+        # pins". Stated here as the headroom VREF+ may have over VDDA, which
+        # is none.
+        #
+        # It is a relationship no steady-state check can express, and the
+        # board broke it once - `c297e58`, the reference on the 5 V rail,
+        # regulating at 3.006 V for the millisecond before the 3V3 buck had
+        # cleared its own UVLO. The topology check that guards it now proves
+        # the two rails share a source; `sim/power_up.cir.in` holds the
+        # relationship itself, at every instant of the ramp. See the crop in
+        # LQFP144/evidence.
+        "vref_above_vdda_max": exact(0.0),
         # The magnitude of that same row, as a current. Table 21 rates
         # I_INJ(PIN) on FT_xxx, TT_xx, RST and B pins at **-5 to +0 mA**, so
         # five milliamps is the most this part may have pushed through any of
@@ -395,6 +410,13 @@ BUCK_100V = PartSpec(
         "bst_voltage_max": exact(5.0),
         "input_capacitance_min": exact(2.2e-6),
         "pgood_pullup": between(10e3, 100e3),
+        # Internally fixed, 1.75 / 3 / 4.75 ms. It is the first thing that
+        # happens on this board and everything downstream is measured from it:
+        # the 3V3 converter's own UVLO sits partway up this ramp, and the
+        # reference and the analog LDO follow from there. Read by
+        # `sim/power_up.cir.in`; nothing needed it until the ordering stopped
+        # being prose.
+        "soft_start_time": between(1.75e-3, 4.75e-3),
     },
 )
 
@@ -425,6 +447,22 @@ BUCK_3V3 = PartSpec(
         # the switch node, so 6 V is the worst case the part permits.
         "bst_voltage_max": exact(6.0),
         "input_capacitance_min": exact(10e-6),
+        # **When it starts, and how long it takes.** Both of these were prose
+        # in cpu1.py - "its own UVLO at about 4.1 V" and "soft-start VDDA from
+        # zero over a millisecond" - describing the sequencing argument the
+        # whole 3V3 rail rests on, and neither was a figure anything could
+        # read. SLVSCB0B 7.5 and 7.6: wake-up V_IN 3.45 / 3.75 / 4.05 V, and
+        # an internal soft start of 0.7 / 1 / 1.3 ms.
+        #
+        # Note that 4.05 is the top of the band and the comment said 4.1, so
+        # the prose was outside the datasheet as well as unread. See the crop
+        # in TSOT23_6/evidence.
+        "input_uvlo": between(3.45, 4.05),
+        "soft_start_time": between(0.7e-3, 1.3e-3),
+        # EN is hard-tied to the 5 V rail on this board, so what holds the
+        # converter off on the way up is the UVLO above and not this - but the
+        # deck needs to know when the enable is satisfied to know that.
+        "enable_high_voltage_min": exact(1.6),
         "output_capacitance": between(20e-6, 68e-6),   # Table 2, V_out = 3.3 V
         "inductance": between(2.2e-6, 4.7e-6),         # Table 2, V_out = 3.3 V
     },
@@ -478,6 +516,11 @@ VREF_3V0 = PartSpec(
         # that uses it before that - a datasheet figure living somewhere
         # nothing else could see - and it was the 25 degC one.
         "quiescent_current_max": exact(59e-6),
+        # 120 us typical, to 0.1 % at V_IN = 5 V with no load capacitance -
+        # which is not this board's condition, since VREF+ carries 2.2 uF, so
+        # this is the floor on how late the reference is rather than the
+        # figure itself. On the same crop as everything else here.
+        "turn_on_settling_typical": exact(120e-6),
         # 120 uV/V typical, 375 maximum. This is the *residual* path from the
         # logic rail to every trip threshold: the DAC's full scale is this
         # node, so whatever the rail does to this node it does to the trip

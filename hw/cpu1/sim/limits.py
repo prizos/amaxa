@@ -60,6 +60,53 @@ def _clear_asserted_high(values: dict[str, tuple[float, float]]) -> float:
     return _clear_asserted(values) * 1.1
 
 
+def _vref_below_vdda_floor(values: dict[str, tuple[float, float]]) -> float:
+    """
+    And how far below VDDA it may sit, which is the whole rail.
+
+    A floor is needed because the band has two ends, and the honest one is
+    that VREF+ cannot be more than a rail below VDDA: anything lower and the
+    measurement is reading a node that is not there.
+    """
+    return -values["rail.3v3.voltage"][1]
+
+
+def _vref_above_vdda(values: dict[str, tuple[float, float]]) -> float:
+    """How far VREF+ may get above VDDA, which ST says is nowhere."""
+    return values["mcu.vref_above_vdda_max"][1]
+
+
+def _dac_out_of_spec_allowed(values: dict[str, tuple[float, float]]) -> float:
+    """
+    How long the DAC may be under its minimum supply once 3V3 is up.
+
+    The reference hangs off the rail the 3V3 converter makes, so the longest
+    that rail's own soft start can be is the longest anything downstream of
+    it can reasonably take to follow.
+    """
+    return values["buck3v3.ic.soft_start_time"][1]
+
+
+def _analog_pin_limit(values: dict[str, tuple[float, float]]) -> float:
+    """What a TT_xx pin takes, absolutely: ST's Table 20."""
+    return values["mcu.analog_input_voltage_max"][1]
+
+
+def _rail_ordering_allowed(values: dict[str, tuple[float, float]]) -> float:
+    """
+    How long 3V3 may lag 5 V.
+
+    The 5 V rail has to climb to the 3V3 converter's UVLO before that
+    converter starts, and then it soft-starts. Both figures are declared and
+    the 5 V ramp is its own declared soft start, so the whole thing follows
+    from three numbers and none of it is typed.
+    """
+    five = values["rail.5v.voltage"][1]
+    uvlo = values["buck3v3.ic.input_uvlo"][1]
+    return (values["buck5.ic.soft_start_time"][1] * uvlo / five
+            + values["buck3v3.ic.soft_start_time"][1])
+
+
 def _rail_high(values: dict[str, tuple[float, float]]) -> float:
     """The logic rail's own ceiling: a pulled-up node cannot settle above it."""
     return values["rail.3v3.voltage"][1]
@@ -149,7 +196,7 @@ def _after_sharing(values: dict[str, tuple[float, float]]) -> float:
 # The guard on the guards, as checks/test_check_count.py is for the design
 # checks. A deck that quietly stops measuring something leaves a suite that
 # passes with less coverage than it had.
-EXPECTED_MEASUREMENTS = 18
+EXPECTED_MEASUREMENTS = 22
 
 LIMITS = {
     "adc_corner": {
@@ -307,6 +354,58 @@ LIMITS = {
             "asserted, so the band's top is the same figure the pulse's own "
             "length is held to: a clear that outlasts its own pulse has not "
             "cleared anything.",
+        ),
+    },
+    "power_up": {
+        "v_ref_above_vdda_max": (
+            _vref_below_vdda_floor, _vref_above_vdda,
+            "**The relationship the board broke once.** ST's Table 86 gives "
+            "VREF+ a maximum of VDDA, and `mcu.vref_above_vdda_max` states "
+            "that as the headroom it may have, which is none. `c297e58` had "
+            "the reference on the 5 V rail regulating at 3.006 V for the "
+            "millisecond before the 3V3 converter had started VDDA from "
+            "zero, and every check on the board compared steady-state "
+            "numbers and saw nothing.\n"
+            "      The topology check guards the wiring; this guards the "
+            "relationship, at every instant of the ramp. Move the "
+            "reference's supply in this deck back to the 5 V rail and it "
+            "fails, which is the historical defect reproduced.",
+        ),
+        "t_dac_below_spec": (
+            0.0, _dac_out_of_spec_allowed,
+            "How long the threshold DAC sits outside its own 2.7 V minimum "
+            "*after* the logic rail is already up - the window in which the "
+            "latch and both buffers are alive at 1.65 V and every trip "
+            "threshold is undefined. `cpu1.py:946` describes that window on "
+            "the way **down** and says nothing about the way up, and nothing "
+            "has ever put a number on either.\n"
+            "      The bound is the 3V3 converter's own longest soft start: "
+            "the reference hangs off the rail that converter makes, so a "
+            "window longer than the ramp that made it would mean something "
+            "other than the ramp is holding VREF+ back.",
+        ),
+        "v_3v3a_max": (
+            0.0, _analog_pin_limit,
+            "The analog supply's ceiling at every instant, against the 4.0 V "
+            "ST's Table 20 allows on a TT_xx pin. 3V3A comes off an LDO on "
+            "the 5 V rail while VDDA comes off a buck *and* a ferrite, so it "
+            "arrives first and nothing on the board orders the two.\n"
+            "      That lead is safe, and this is the measurement that says "
+            "why rather than the comment: the pin limit is **absolute** and "
+            "not referred to VDDA - Table 21 rates positive injection on "
+            "these pins at minus five to plus nought milliamps, so there is "
+            "no injection path to be inside of. A sensor at 3.366 V while "
+            "VDDA is still at one volt is inside its rating. What would not "
+            "be is an LDO that overshot on start-up, and that is what this "
+            "band catches.",
+        ),
+        "t_5v_to_3v3": (
+            0.0, _rail_ordering_allowed,
+            "And the ordering itself, which was four sentences of prose. The "
+            "bound is the two declared soft-start times plus the 3V3 "
+            "converter's own UVLO time on the 5 V ramp - if the gap were "
+            "longer than that, something other than the parts' own figures "
+            "is deciding when this board comes up.",
         ),
     },
     "adc_settling": {

@@ -20,7 +20,7 @@ finding.
 
 | | | |
 |---|---|---|
-| run against a circuit simulator | **13** | 6 % |
+| run against a circuit simulator | **22** | 11 % |
 | derive a number from the netlist, the routed copper or the stackup | **130** | 64 % |
 | assert structure only — this is wired to that, this exists | **72** | 35 % |
 
@@ -45,9 +45,15 @@ a figure nobody verified against a measurement.
 
 *This section described the board before the trip chain was simulated; what it
 says about the power path and comms is still true, and the count above has
-moved from 6 measurements to 13. `sim/trip_chain.cir.in` now integrates the
-chain end to end and gets 33.5 ns where the arithmetic sums to 40.5 - see
-`DESIGN-REVIEW.md` §3. What follows is the argument that got it built.*
+moved from 6 measurements to 22, across five decks. `sim/trip_chain.cir.in`
+integrates the chain end to end and gets 33.5 ns where the arithmetic sums to
+40.5; `sim/trip_clear.cir.in` runs the AC-coupled clear with its clamp as a
+diode; `sim/power_up.cir.in` holds the rails' ordering at every instant and
+reproduces `c297e58` when the reference is moved back to the 5 V rail. See
+`DESIGN-REVIEW.md` §3 and §8. What follows is the argument that got them
+built, and what it says about the power path's **loops** - as opposed to its
+ordering - is still true: nothing simulates a control loop, ripple, inrush or
+a falling rail.*
 
 Two ngspice decks, `sim/adc_corner.cir.in` and `sim/adc_settling.cir.in`, six
 `.meas` statements between them. Both are about one ADC input network.
