@@ -1748,15 +1748,37 @@ def test_every_trip_decision_fails_to_tripped(design, pad_net):
 
     This is the check that says the board still fails safe when a part is
     missing, rather than only when every part is present and working.
+
+    **Which of a comparator's two inputs is the threshold is derived, not
+    matched on a name.** This asked whether the net was called `TRIP_LEVEL*`,
+    which is a naming convention holding up a safety check: rename a
+    threshold and it drops silently out of scope. What distinguishes them is
+    where they come from - a signal arrives from the power board and reaches
+    the analog connector, a threshold is made on this board and does not - so
+    that is the question now, and every comparator input answers one way or
+    the other.
     """
+    header = "header.analog"
+    assert header in design["parts"], f"no {header} on this board"
+    from_the_connector = {
+        net for net, nodes in design["nets"].items()
+        if any(address == header for address, _ in nodes)
+    }
+
     wanted = {"TRIPPED": "3V3", "TRIP_N": "GND"}
+    thresholds = 0
     for address, part in design["parts"].items():
         if not part["symbol"].startswith("Comparator:"):
             continue
         for pad, side in COMPARATOR_INPUTS.items():
             net = pad_net.get((address, pad))
-            if net and net.startswith("TRIP_LEVEL"):
+            if net and net not in from_the_connector:
+                thresholds += 1
                 wanted[net] = TRIPPED_BY[side]
+    assert thresholds, (
+        "every comparator input reaches the analog connector, so nothing here "
+        "is a threshold this board makes - which cannot be right"
+    )
 
     wrong = []
     for net, rail in sorted(wanted.items()):
