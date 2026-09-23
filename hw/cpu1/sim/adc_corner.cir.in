@@ -1,4 +1,4 @@
-* cpu1: where a fast ADC channel rolls off.
+* cpu1: where a fast ADC channel rolls off, at both ends of its band.
 *
 * Measured as a step response rather than a frequency sweep. For a single-pole
 * RC the two say the same thing - the time to 63.2 % of a step is RC, and the
@@ -14,27 +14,60 @@
 * `checks/test_adc.py` computes the same corner from the same values. This is
 * the second method, and it is worth having only while the two can disagree.
 *
+* **Two networks, because one could only ever agree.** This deck ran a single
+* branch with the source impedance, the series resistor and the shunt capacitor
+* all at `:max`, under a comment saying that was "the end that matters: too low
+* and the loop measures a current that happened a moment ago". Half of that was
+* right. `adc.fast_corner` is a band with two ends, the check holds the network
+* to both, and a deck evaluating only the low one cannot contradict the check
+* about the high one whatever it finds. Fit a 3.3 nF part instead of the 4.7
+* and the single-branch version reported 1.81 MHz, inside the declared 1 to 2,
+* and passed - while the check computed 2.46 MHz at the other corner and
+* rejected it. The simulation would have signed off a network the design
+* refuses.
+*
+* So: `low` is every value at the end that makes the corner lowest, `high` is
+* every value at the end that makes it highest, and both are held against the
+* same declared band. They share one source so the two are driven identically.
+*
 * Values come from the build; @path:end@ is an instance path and which end of
-* its resolved range to take. Both are at the end that makes the corner lowest,
-* which is the end that matters: too low and the loop measures a current that
-* happened a moment ago.
+* its resolved range to take.
 
 Vin in 0 PULSE(0 1 0 10p 10p 5u 10u)
-Rsource in src @header.source_impedance:max@
-Rseries src pin @adc.fast1.series.resistance:max@
-Cshunt pin 0 @adc.fast1.shunt.capacitance:max@
+
+* The slowest the channel may be: the most source impedance the power board is
+* allowed to present, the largest series resistor, the largest capacitor.
+Rsource_low in src_low @header.source_impedance:max@
+Rseries_low src_low pin_low @adc.fast1.series.resistance:max@
+Cshunt_low pin_low 0 @adc.fast1.shunt.capacitance:max@
+
+* And the fastest: a power board that presents nothing, and both passives at
+* the bottom of their tolerance. This is the end that decides whether an
+* aliasing filter is still a filter.
+Rsource_high in src_high @header.source_impedance:min@
+Rseries_high src_high pin_high @adc.fast1.series.resistance:min@
+Cshunt_high pin_high 0 @adc.fast1.shunt.capacitance:min@
 
 .tran 0.2n 2u
 
-* The time constant, straight off the step, and the corner that follows from it.
-.meas tran t_tau WHEN v(pin)=0.6321206 RISE=1
+* The time constant, straight off the step, and the corner that follows from
+* it. `t_tau` is banded as well as the corner it produces, because a deck that
+* stops converging and returns a time of zero would otherwise report an
+* infinite corner and pass nothing but the wrong test.
+.meas tran t_tau WHEN v(pin_low)=0.6321206 RISE=1
 .meas tran f_corner PARAM='1/(6.283185307*t_tau)'
+
+.meas tran tmp_tau_high WHEN v(pin_high)=0.6321206 RISE=1
+.meas tran f_corner_high PARAM='1/(6.283185307*tmp_tau_high)'
 
 * And how long the pin takes to become a faithful copy. The measurement below
 * is to a tenth of a per cent, which is ln(1000) = **6.9** time constants, not
 * the four and a half this used to say - 4.5 leaves 1.1 % and is the figure for
 * a per cent, not a tenth of one. The comment was wrong and the measurement was
 * right, which is the way round that goes unnoticed.
-.meas tran t_settled WHEN v(pin)=0.999 RISE=1
+*
+* Taken on the slow branch, which is the one that bounds how soon a channel may
+* be re-read.
+.meas tran t_settled WHEN v(pin_low)=0.999 RISE=1
 
 .end

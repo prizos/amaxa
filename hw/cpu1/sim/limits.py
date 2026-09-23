@@ -12,6 +12,24 @@ methods shows up as a failure rather than as nobody noticing.
 MEGA = 1e6
 
 
+def _corner_low(values: dict[str, tuple[float, float]]) -> float:
+    """The bottom of the band a fast channel's corner is declared in."""
+    return values["adc.fast_corner"][0]
+
+
+def _corner_high(values: dict[str, tuple[float, float]]) -> float:
+    """
+    The top of it.
+
+    Written as a function of the declared band rather than as `2.0 * MEGA`,
+    because the two entries that used a constant here are the two the band
+    could drift away from without anything saying so - and the whole reason
+    this measurement exists is that a band with only one end tested is a band
+    half tested.
+    """
+    return values["adc.fast_corner"][1]
+
+
 def _after_sharing(values: dict[str, tuple[float, float]]) -> float:
     """
     How far the pin must *still* be below a 1 V input once the sampling
@@ -31,7 +49,7 @@ def _after_sharing(values: dict[str, tuple[float, float]]) -> float:
 # The guard on the guards, as checks/test_check_count.py is for the design
 # checks. A deck that quietly stops measuring something leaves a suite that
 # passes with less coverage than it had.
-EXPECTED_MEASUREMENTS = 6
+EXPECTED_MEASUREMENTS = 7
 
 LIMITS = {
     "adc_corner": {
@@ -42,6 +60,21 @@ LIMITS = {
             "this measures it with the sampling switch and the converter's own "
             "resistance in the circuit. The two should agree to a few percent, "
             "and the deck is worth having only while they can disagree.",
+        ),
+        "f_corner_high": (
+            _corner_low, _corner_high,
+            "The same channel at the other end of its tolerance: nothing in "
+            "front of it, and both passives at the bottom of their bands. It "
+            "is here because the deck used to measure only the slow corner, "
+            "which meant it could agree with `checks/test_adc.py` about the "
+            "low end and had nothing to say about the high one - and a 3.3 nF "
+            "part in place of the 4.7 put the fast corner at 2.46 MHz, "
+            "outside the declared band, while this deck reported 1.81 and "
+            "passed.\n"
+            "      The band is the declared `adc.fast_corner`, both ends, "
+            "worked out here from the corner frequency rather than typed: an "
+            "aliasing filter whose corner has left the band it was specified "
+            "in is not doing the job either way round.",
         ),
         "t_tau": (
             80e-9, 160e-9,
