@@ -384,6 +384,58 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     )
 
 
+def test_the_comparator_the_deck_models_stands_for_all_of_them(design, spec, comparators):
+    """
+    Every comparator on the trip bus is the same part with the same figures.
+
+    `sim/trip_chain.cir.in` builds **one** comparator - `trip.fast4_high`,
+    because the check beside it picks FAST4_SENSE as the worst node - and
+    takes its declared figures as standing for the other six. Nothing made
+    that true. Fit a faster part to one channel, or a slower one, and the
+    deck would go on simulating the channel it was written for while the
+    board's worst case moved somewhere it does not look.
+
+    So this asserts the premise rather than the deck asserting it in a
+    comment: same symbol, and the same value for every figure the deck reads
+    off one of them.
+
+    It is also what reads `output_short_circuit_current` on the six the deck
+    does not instantiate. That figure exists because the model's output stage
+    needs a ceiling - 50 mV at 1 mA is 50 ohm, and 50 ohm across a 5 V rail
+    would ask for 100 mA from a part whose own absolute maximum is 74 - and a
+    rating declared on seven parts and read on one is the shape of thing this
+    repository keeps finding to be wrong.
+    """
+    modelled = "trip.fast4_high"
+    assert modelled in comparators, (
+        f"the deck models {modelled} and the board's comparators are "
+        f"{sorted(comparators)}"
+    )
+    figures = ("propagation_delay_max", "delay_load_reference", "delay_per_farad",
+               "output_short_circuit_current", "output_swing_from_rail",
+               "input_offset_voltage", "input_hysteresis")
+
+    symbol = design["parts"][modelled]["symbol"]
+    problems = []
+    for address in sorted(comparators):
+        if design["parts"][address]["symbol"] != symbol:
+            problems.append(
+                f"  {address}: {design['parts'][address]['symbol']}, "
+                f"and the deck models a {symbol}")
+            continue
+        for name in figures:
+            if spec(address, name) != spec(modelled, name):
+                problems.append(
+                    f"  {address}.{name} is {spec(address, name)[1]:g} and "
+                    f"{modelled}'s is {spec(modelled, name)[1]:g}")
+    assert not problems, (
+        "Comparators the trip deck's one model does not stand for:\n"
+        + "\n".join(problems)
+        + f"\nEither give them the same part, or model each in "
+          f"sim/trip_chain.cir.in rather than taking {modelled} as the worst."
+    )
+
+
 def test_the_dac_resolves_finer_than_the_comparator_can_use(design, spec, pad_net, comparators):
     """
     More bits than the comparator's own offset can make use of, which is the

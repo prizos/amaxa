@@ -1,0 +1,36 @@
+* DMG1012T - small-signal N-channel MOSFET, the gate kill. Diodes Inc.
+*
+* Behavioural, not vendor - see SOURCE.md. Three declared figures, and the
+* third is the one that matters:
+*
+*   vth      gate_threshold_max, 1.0 V
+*   rds      on_resistance_at_2v5, 0.5 ohm
+*   vgs_rds  on_resistance_gate_voltage, the 2.5 V that resistance is at
+*   qg       gate_charge_gate_source + gate_charge_gate_drain, 210.2 pC
+*
+* **Charge, not capacitance.** parts.py declines to declare C_iss and says why:
+* it is a lone typical measured at V_DS = 16 V, where a MOSFET's input
+* capacitance is at its smallest, and a trip budget built on it would be built
+* on the most optimistic number in the datasheet. What the datasheet does give
+* is the charge to drive the gate through its plateau, and that is what this
+* model presents to whatever is driving it - as a capacitance of qg/vgs_rds,
+* which is the same charge arriving over the same gate swing.
+*
+* That is the same abstraction `test_a_trip_stops_the_outputs_inside_the_budget`
+* uses, so the deck is not a second opinion on the charge. It is a second
+* opinion on **who pays it**: the check divides qg by the latch's full 24 mA,
+* and on this board that 24 mA is also holding two buffer enables and 4.5 pF
+* of copper. Here they share one source.
+.subckt dmg1012t g s d params: vth=1.0 rds=0.5 vgs_rds=2.5 qg=210.2p
+
+* The gate, as the charge the datasheet quotes spread over the swing it quotes
+* it across.
+Cgate g s {qg/vgs_rds}
+
+* The channel. Two declared points - off at the threshold, 0.5 ohm at 2.5 V -
+* and nothing in between, so what is between them is a smooth ramp in
+* conductance and is stated as an assumption rather than a reading.
+Bchan d s I = (v(d) - v(s)) / rds
++ * (0.5 + 0.5*tanh(4*(v(g) - v(s) - (vth + vgs_rds)/2)))
+
+.ends dmg1012t

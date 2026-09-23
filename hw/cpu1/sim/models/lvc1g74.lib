@@ -1,0 +1,74 @@
+* 74LVC1G74 used as a set-reset latch. TI SN74LVC1G74DCUR.
+*
+* Behavioural, not vendor - see SOURCE.md. This board ties D and C low and
+* uses only ~PRE and ~CLR, so what is modelled is the two cross-coupled gates
+* those two pins reach and nothing else: no clock, no data path, no setup or
+* hold.
+*
+* **Cross-coupled rather than a delayed follower**, because the state is the
+* point. A model that simply followed ~PRE would come out of a trip the moment
+* the comparator released, which is the failure the latch exists to prevent,
+* and the clear deck beside this one would then prove nothing at all.
+*
+*   tpre  preset_to_output_max, 5.9 ns
+*   cref  delay_load_reference, the 50 pF that figure is measured into
+*   vmeas delay_threshold, the 1.5 V it is measured at
+*   ilim  output_current_max, 24 mA
+*   vil   input_low_voltage_max, 0.8 V
+*   vih   input_high_voltage_min, 2.0 V
+.subckt lvc1g74 pre clr q qn vcc
++ params: tpre=5.9n cref=50p vmeas=1.5 ilim=24m vil=0.8 vih=2.0 tfit=6.6653n
+
+* **`tfit` is solved, not derived, and the deck checks it every run.** The
+* gate's ramp and the output stage's charging overlap rather than add, so
+* there is no closed form relating the intrinsic delay to the 5.9 ns measured
+* in the jig: 2.775 ns of gate delay, which is 5.9 less the 3.1 it takes to
+* drive 50 pF to 1.5 V at 24 mA, comes out at 3.36 ns in the jig and not 5.9.
+* What is here was found by bisection against the jig itself.
+*
+* A fitted constant in a model is a number that goes quietly wrong when
+* something upstream of it moves - change `ilim` and this is silently
+* mis-calibrated - so `trip_chain.cir.in` builds the datasheet's load circuit
+* beside the real board and measures it, banded against the declared
+* `preset_to_output_max`. If the fit drifts, that measurement says so before
+* anything downstream of it is believed.
+*
+* **Most of the datasheet's 5.9 ns is the datasheet's own load.** SCES794E
+* Figure 3 measures it into 50 pF with 500 ohm to ground, taken at 1.5 V, and
+* driving 50 pF to 1.5 V at 24 mA is 3.1 ns on its own. What is intrinsic is
+* the rest. A model handed 5.9 ns as a gate delay and then given this board's
+* 4.5 pF on top would be charging TI's test jig twice.
+*
+* ~PRE reaches Q through one gate; the loop closes through the other, which is
+* what holds the state and not what sets this delay.
+.param vmid = {(vil+vih)/2}
+.param rg   = 1k
+.param tint = {tfit}
+.param cg   = {tint/(rg*0.6931472)}
+
+* Q = NAND(~PRE, ~Q) and ~Q = NAND(~CLR, Q). Both inputs low is the state this
+* board can reach - a comparator asserting while firmware is clearing - and in
+* a NAND latch that puts both outputs high, which is what `TRIP_N` reading "no
+* break" while `TRIPPED` reads "tripped" means. The model reproduces it
+* because it is the same two gates, not because anything here says so.
+Bqa qa_raw 0 V = v(vcc) * (1 - (0.5+0.5*tanh(10*(v(pre)-vmid)))
++                            * (0.5+0.5*tanh(10*(v(qnb)-vmid))))
+Rqa qa_raw qa {rg}
+Cqa qa 0 {cg}
+
+Bqnb qnb_raw 0 V = v(vcc) * (1 - (0.5+0.5*tanh(10*(v(clr)-vmid)))
++                              * (0.5+0.5*tanh(10*(v(qa)-vmid))))
+Rqnb qnb_raw qnb {rg}
+Cqnb qnb 0 {cg}
+
+* The outputs, current-limited at the figure the datasheet gives and at
+* nothing else. **This is what the deck is for on this part**: one Q drives
+* both buffers' second enable and the gate-kill transistor's gate, and the
+* design check gives each of them the full 24 mA by taking a max over them.
+* Here they share it, because there is one source.
+Bq  0 q  I = min(max(1.0*(v(qa)  - v(q)),  -ilim), ilim)
+Bqn 0 qn I = min(max(1.0*(v(qnb) - v(qn)), -ilim), ilim)
+Rleakq  q  0 1e9
+Rleakqn qn 0 1e9
+
+.ends lvc1g74

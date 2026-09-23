@@ -12,6 +12,40 @@ methods shows up as a failure rather than as nobody noticing.
 MEGA = 1e6
 
 
+def _trip_budget(values: dict[str, tuple[float, float]]) -> float:
+    """How long a trip may take, as the design declares it."""
+    return values["trip.budget"][1]
+
+
+def _comparator_delay_low(values: dict[str, tuple[float, float]]) -> float:
+    """
+    The comparator's own figure, less the residual its calibration leaves.
+
+    A tenth either side. The model is fitted to reproduce
+    `propagation_delay_max` at the datasheet's own reference load, and the
+    correction for that load is approximate because the output's current
+    ceiling makes the first part of an edge a ramp; 0.4 % is what it actually
+    leaves, and a tenth is the room that gets without becoming a band that
+    would accept a model fitted to something else.
+    """
+    return values["trip.fast4_high.propagation_delay_max"][1] * 0.9
+
+
+def _comparator_delay_high(values: dict[str, tuple[float, float]]) -> float:
+    """The other side of it."""
+    return values["trip.fast4_high.propagation_delay_max"][1] * 1.1
+
+
+def _latch_delay_low(values: dict[str, tuple[float, float]]) -> float:
+    """The latch's own figure, less a tenth, for the same reason."""
+    return values["safety.latch.preset_to_output_max"][1] * 0.9
+
+
+def _latch_delay_high(values: dict[str, tuple[float, float]]) -> float:
+    """And the other side."""
+    return values["safety.latch.preset_to_output_max"][1] * 1.1
+
+
 def _corner_low(values: dict[str, tuple[float, float]]) -> float:
     """The bottom of the band a fast channel's corner is declared in."""
     return values["adc.fast_corner"][0]
@@ -49,7 +83,7 @@ def _after_sharing(values: dict[str, tuple[float, float]]) -> float:
 # The guard on the guards, as checks/test_check_count.py is for the design
 # checks. A deck that quietly stops measuring something leaves a suite that
 # passes with less coverage than it had.
-EXPECTED_MEASUREMENTS = 7
+EXPECTED_MEASUREMENTS = 13
 
 LIMITS = {
     "adc_corner": {
@@ -92,6 +126,71 @@ LIMITS = {
             "and the deck is what said so. It bounds how quickly a channel may "
             "be re-read after the thing it measures moves, and it is a fiftieth "
             "of a PWM period at 20 kHz.",
+        ),
+    },
+    "trip_chain": {
+        "t_trip_total": (
+            0.0, _trip_budget,
+            "The whole chain: a fault current crossing the threshold at the "
+            "connector, to the gate line below the threshold the power board "
+            "is promised. `trip.budget` is 50 ns and "
+            "`test_a_trip_stops_the_outputs_inside_the_budget` sums five "
+            "terms to 40.5 of it. This is the same quantity with one "
+            "excitation integrated instead, and the band is the declared "
+            "budget itself - so the deck is a second method on the number "
+            "the board exists to make true, not on a proxy for it.",
+        ),
+        "t_comparator_out": (
+            0.0, _trip_budget,
+            "The tap and the comparator together, which the check computes "
+            "separately as `R_source * sum of the shunt capacitors` and "
+            "`propagation_delay_max`. It is a smaller share here than there, "
+            "because the check sums both shunt capacitors as though both sat "
+            "on the sense node when one is behind 22 ohm and the other "
+            "behind 1 k. Banded against the whole budget rather than against "
+            "a share of it: what matters is that no single term eats it, and "
+            "a share would be a number chosen to fit what the term does.",
+        ),
+        "t_bus_low": (
+            0.0, _trip_budget,
+            "And the bus. The check extrapolates the comparator's Figure 5 "
+            "straight line to 137 pF, past the 100 pF the fit was taken "
+            "from; here the output stage is a resistance and a current "
+            "ceiling and the bus is twelve diode junctions whose "
+            "capacitance falls as it discharges. The two should be close and "
+            "the deck is worth having only while they can part company.",
+        ),
+        "t_tripped_high": (
+            0.0, _trip_budget,
+            "One latch output holding two buffer enables and a transistor "
+            "gate. The check gives each of them the full 24 mA by taking a "
+            "max over the buffer's disable time and the FET's turn-on; here "
+            "they share one source, so this is the term most likely to come "
+            "out worse than the arithmetic says.",
+        ),
+        "t_comp_in_jig": (
+            _comparator_delay_low, _comparator_delay_high,
+            "**Not part of the board.** The comparator's own datasheet test "
+            "circuit - its 13 pF reference load - built beside the chain so "
+            "that a model which has drifted from the figure it was fitted to "
+            "fails here rather than downstream, where it would look like a "
+            "finding about copper. The band is the declared "
+            "`propagation_delay_max` with a tenth either side, which is the "
+            "residual the fit leaves: the current ceiling makes the first "
+            "volt of an edge a ramp rather than an exponential, so the "
+            "correction for the reference load is approximate and measured "
+            "rather than assumed. See models/SOURCE.md.",
+        ),
+        "t_latch_in_jig": (
+            _latch_delay_low, _latch_delay_high,
+            "The same for the latch, and it matters more: `tfit` in "
+            "`lvc1g74.lib` is the one number in these models that the design "
+            "does not state. It was solved by bisection against this jig - "
+            "50 pF with 500 ohm to ground, taken at 1.5 V, SCES794E Figure 3 "
+            "- because the gate's ramp and the output stage's charging "
+            "overlap rather than add and there is no closed form. A fitted "
+            "constant goes quietly wrong when something upstream of it "
+            "moves; this is what stops it being quiet.",
         ),
     },
     "adc_settling": {

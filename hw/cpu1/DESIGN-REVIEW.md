@@ -115,6 +115,43 @@ chain, printed on every test run:
 | pulling the gate line below 0.8 V once Q2 is on | 3.4 |
 | **total** | **40.5 of 50** |
 
+### And the same thing simulated
+
+`sim/trip_chain.cir.in` builds that chain - the tap, the comparator, twelve
+Schottky junctions, the latch, the buffer and the gate-kill transistor - and
+runs a fault current ramping into it. One excitation, one number:
+
+| | the sum above | the deck |
+|---|---|---|
+| comparator output falls | 17.6 ns | **13.2** |
+| trip bus at a valid low | 22.6 | **21.7** |
+| `TRIPPED` high | 28.5 | **27.6** |
+| **gate line below 0.8 V** | **40.5** | **33.5** |
+
+Both are inside the 50 ns budget and **the arithmetic is 21 % conservative**,
+which is the direction to be wrong in. Two things account for most of it:
+
+- **the tap.** The check sums both of FAST4_SENSE's shunt capacitors as
+  though both sat on the sense node, when one is behind 22 Ω and the other
+  behind 1 kΩ. In the deck they are where the board puts them.
+- **the bus.** The check extrapolates the comparator's Figure 5 to 137 pF,
+  past the 100 pF the straight line was fitted from, and counts each Schottky
+  junction at the datasheet's 10 pF — which is its value at 1 V of reverse
+  bias, where the bus sits nearer 1.6 and the junctions are 8.5 pF.
+
+Neither is a defect. Both are the kind of conservatism that is worth knowing
+the size of, because 9.5 ns of spare and 16.5 ns of spare are different
+boards.
+
+**And the models are checked before they are believed.** Two of them are
+calibrated rather than derived, so the deck rebuilds the datasheet's own test
+circuit beside the board and measures it: the comparator's 13 pF reference
+load returns **7.030 ns** against a declared 7.000, and the latch's 50 pF with
+500 Ω returns **5.900** against 5.900. Halve the latch's declared drive and
+that second measurement moves to 7.22 ns and fails, which is what stops a
+fitted constant going quietly wrong. `sim/models/SOURCE.md` says what each
+model does and does not represent.
+
 The two terms worth knowing about: the **tap** was for a long time a
 *reservation* — 40 % of the budget held back for "a filter this board has not
 drawn" — when the filter had been fitted all along as the ADC's own capacitor

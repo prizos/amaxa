@@ -1,0 +1,25 @@
+* BAT54A - two Schottky diodes with a common anode. LRC LBAT54ALT1G.
+*
+* Fitted, not vendor - see SOURCE.md for what it does and does not represent.
+*
+* IS and N are solved from the two lowest of the three forward-voltage maxima
+* the datasheet gives, which are in parts.py as `forward_voltage_at_100ua`,
+* `_at_1ma` and `_at_10ma`:
+*
+*     N  = (0.32 - 0.24) / (Vt * ln 10)   = 1.34327
+*     IS = 1e-4 / exp(0.24 / (N * Vt))    = 1.000e-7 A
+*
+* RS is zero because the fit leaves nothing for it. The third point predicts
+* 0.40000 V against a datasheet 0.400 - the three maxima lie exactly on one
+* ideal-diode line, to less than a microvolt. That is worth knowing about the
+* datasheet rather than about the part: those three numbers came out of one
+* equation, so the third is not an independent check on the first two and this
+* model is not validated by reproducing it.
+*
+* CJO is set so that the model gives the declared `total_capacitance` of 10 pF
+* at the 1 V reverse bias the datasheet states it at. VJ and M are conventional
+* Schottky values and are not fitted; what rests on them is how the junction
+* capacitance falls with reverse bias, which is a real effect the design checks
+* do not model at all - they use 10 pF flat.
+.model BAT54A D(IS=1.0e-7 N=1.34327 RS=0 CJO=16.33p VJ=0.6 M=0.5 TT=0
++ EG=0.69 XTI=2)

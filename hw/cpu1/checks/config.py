@@ -19,7 +19,7 @@ BLOCKING: dict[str, str] = {
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 206
+EXPECTED_CHECKS = 207
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -72,13 +72,18 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "is, turning off, is disable_time_max, which the trip budget uses"
     ),
     ("safety.buffer2", "enable_time_max"): "as buffer1: turning on is not timed",
-    ("safety.buffer1", "input_low_voltage_max"): (
+    ("safety.buffer2", "input_low_voltage_max"): (
         "0.8 V, against what the MCU's pins drive low to - which the pages of "
         "ST's datasheet read for this board do not state. The high side is "
         "checked; this end waits for V_OL, and for the same measurement at "
-        "bring-up that VDDA's current needs"
+        "bring-up that VDDA's current needs. buffer1's copy of this figure is "
+        "no longer excused: `sim/trip_chain.cir.in` reads it as the threshold "
+        "its enable model switches at. That is not the comparison this "
+        "exemption was about - the deck uses it as a property of the part, "
+        "not as a bound on what drives it - but it is a reader, and the gate "
+        "does not distinguish. The open question is the same one for both "
+        "packages and it is recorded here"
     ),
-    ("safety.buffer2", "input_low_voltage_max"): "as buffer1",
     ("usb.receptacle", "current_rating"): (
         "5 A per contact against a port that draws none: VBUS reaches a sense "
         "pin and a clamp and stops there, which is the whole design of it. "
@@ -120,8 +125,9 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
               "rs485_common_mode", "rs485_esd_ratings"],
     "SOT23": ["ref3030_electrical", "bat54a_common_anode", "bat54a_forward_voltage",
               "bat54a_reverse_current", "ref3030_dropout"],
-    "SOT23_6": ["tlv3501_delay_vs_load"],
-    "TSSOP20": ["lvc541a_current_ratings"],
+    "SOT23_6": ["tlv3501_delay_vs_load", "tlv3501_output_drive"],
+    "TSSOP20": ["lvc541a_current_ratings", "lvc541a_dc_limits"],
+    "VSSOP8": ["test_load"],
     "TC2030": ["pad_signals"],
     "XTAL5032_4P": ["parameters"],
     "XTAL_MC306": ["internal_connection"],

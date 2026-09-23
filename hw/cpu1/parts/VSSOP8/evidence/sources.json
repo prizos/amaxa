@@ -1,0 +1,13 @@
+{
+  "test_load": {
+    "assumes": "",
+    "crop": "133,253,1247,533",
+    "document": "TI SN74LVC1G74, SCES794E (October 2009, revised January 2015), served by LCSC for C70285",
+    "dpi": 200,
+    "page": 8,
+    "read": "2026-09-23",
+    "sha256": "be9952765c368693137d6a0293502a37b811e08a65c8ec1412232473b6796cf0",
+    "shows": "The load the switching table's figures are measured into, which is what the trip-chain deck's latch model has to reproduce before anything it says about this board's loading means anything. At V_CC = 3.3 V that is C_L = 50 pF and R_L = 500 ohm, with S1 open for a propagation delay so only the resistor to ground is in circuit, and the delay taken at V_M = 1.5 V rather than at half the rail. The declared preset_to_output_max of 5.9 ns is that measurement; nearly two thirds of it is the output stage driving 50 pF at 24 mA, so a model that treated 5.9 ns as intrinsic and then added this board's load on top would be counting the datasheet's own test jig as though it were copper.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/d81fc89027ae4813b4418e722d351b7c.pdf"
+  }
+}

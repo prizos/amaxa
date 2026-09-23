@@ -1,0 +1,35 @@
+* 74LVC541A octal buffer, the output-enable half of it. TI SN74LVC541APWR.
+*
+* Behavioural, not vendor - see SOURCE.md. Only what the trip chain uses is
+* here: an enable that puts the output into high impedance, and an output
+* stage while it is not. No input threshold, no per-channel skew, no
+* propagation delay on the data path - the trip deck drives a line that is
+* already high and is interested only in when this part lets go of it.
+*
+*   tdis  disable_time_max, 7 ns
+*   ilim  output_current_max, 24 mA
+*
+* **Letting go is the whole contribution.** What happens next - the line
+* falling through its pull-down, or through the gate-kill transistor - is not
+* this part's doing and is not modelled here, which is the point: the design
+* comment at cpu1.py:1281 is that "the '541 going high-impedance is not the
+* same event as the gate line going low", and a model that discharged the line
+* itself would hide exactly that.
+.subckt lvc541 oe a y vcc params: tdis=7n ilim=24m vil=0.8 vih=2.0
+
+.param vmid = {(vil+vih)/2}
+
+* The enable, delayed. High disables.
+Bdis raw 0 V = 0.5 + 0.5*tanh(10*(v(oe) - vmid))
+Tdis raw 0 dis 0 Z0=50 TD={tdis}
+Rmdis dis 0 50
+
+* The output stage, gated by it. Current-limited at the figure the datasheet
+* gives, and at nothing else.
+By 0 y I = (1 - v(dis)) * min(max(1.0*(v(a) - v(y)), -ilim), ilim)
+
+* High impedance has to mean it: with the drive gated off, this is all that
+* remains, and it is nine orders above the 10 k pull-down that does the work.
+Rleak y 0 1e9
+
+.ends lvc541

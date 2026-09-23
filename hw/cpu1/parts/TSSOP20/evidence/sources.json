@@ -9,5 +9,16 @@
     "sha256": "17a630f61943db2ee11e487c0871be6dfcfa50748b308b420d7ca34e0c051087",
     "shows": "Absolute Maximum Ratings: continuous output current +-50 mA, and continuous current through VCC or GND +-100 mA. The second is the package total; the first is per output. The review note recorded '50 mA per part', which is neither - it is the per-output figure read as a package one, and it was the floor used for the gate-line pull-down resistance.",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/d165a1c51de346ea942fce9f45b4f954.pdf"
+  },
+  "lvc541a_dc_limits": {
+    "assumes": "that 4 pF is usable as a maximum. The row has a single column under TYP and no MAX at all, so it is a typical being read as though it were a bound - the same species as the LAN8742A's supply current, and covered by the same instruction to measure it on the first assembled board",
+    "crop": "147,280,1400,640",
+    "document": "TI SN54LVC541A, SN74LVC541A, SCAS298N (January 1993, revised June 2014), served by LCSC for C113281",
+    "dpi": 200,
+    "page": 6,
+    "read": "2026-09-23",
+    "sha256": "17a630f61943db2ee11e487c0871be6dfcfa50748b308b420d7ca34e0c051087",
+    "shows": "Input capacitance C_i = 4 pF at V_CC = 3.3 V, which is what the trip-chain deck needs: the latch's one Q output holds both buffers' second enable as well as the gate-kill transistor's gate, and the design check gives each of them the full 24 mA by taking a max over them rather than letting them share it. Also V_OL = 0.55 V at I_OL = 24 mA, the figure behind this part's 24 mA rating.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/d165a1c51de346ea942fce9f45b4f954.pdf"
   }
 }

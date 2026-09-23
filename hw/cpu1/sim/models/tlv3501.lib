@@ -1,0 +1,59 @@
+* TLV3501 - push-pull rail-to-rail comparator, TI TLV3501AIDBVR.
+*
+* Behavioural, not vendor - see SOURCE.md for what it does and does not
+* represent. Four declared figures shape it, all from parts.py:
+*
+*   vshift  input_offset_voltage + half input_hysteresis, as a static shift
+*   tpd     propagation_delay_max, 7 ns at 20 mV of overdrive
+*   cref    delay_load_reference, the 13 pF that 7 ns is measured into
+*   rout    output_swing_from_rail / 1 mA = 50 ohm
+*   isc     output_short_circuit_current, 74 mA
+*
+* **The load-dependent delay is deliberately not in here.** The datasheet's
+* Figure 5 plots delay against capacitive load, and parts.py reduces it to a
+* straight line - 40.2 ps per picofarad past a 13 pF reference - which
+* `test_a_trip_stops_the_outputs_inside_the_budget` then extrapolates to the
+* 137 pF of the trip bus, well past the 100 pF the fit was taken from. Putting
+* that slope in this model would make the deck restate the check. What is here
+* instead is the mechanism the slope is a fit *of*: an output stage with a
+* resistance and a current ceiling. Whatever delay the bus adds, the simulator
+* works out.
+*
+* So `tpd` is the datasheet's own figure at the datasheet's own 13 pF, and the
+* deck subtracts nothing and adds nothing to it.
+.subckt tlv3501 inp inn out vcc params: vshift=9.5m tpd=7n cref=13p rout=50 isc=74m
+
+* **The datasheet's 7 ns is measured into the datasheet's own 13 pF**, so the
+* intrinsic part of it is 7 ns less what this output stage takes to drive that
+* load to half a swing. Subtracting it is what stops the model counting the
+* reference load twice and arriving at 7.5 ns where the datasheet says 7.
+*
+* `rout*cref*ln 2` is the first-order figure; the current ceiling makes the
+* first volt and a bit of the edge a ramp rather than an exponential, so the
+* correction is approximate and the residual is measured rather than assumed.
+* SOURCE.md records it.
+.param tdint = {tpd - rout*cref*0.6931472}
+
+* The decision. `tanh` rather than an ideal comparator because a step in a
+* behavioural source is what makes ngspice give up; a hundred microvolts of
+* transition width is sharp against six millivolts of offset and costs nothing
+* in accuracy here.
+Bdecide logic 0 V = v(vcc) * (0.5 + 0.5*tanh(1e4*(v(inp) - v(inn) - vshift)))
+
+* The intrinsic delay, as a matched lossless line: the far end is terminated
+* in the line's own impedance so nothing reflects, and what arrives there is
+* what left, tpd later. An RC would have been the wrong shape - it would put a
+* rise time on a delay.
+Tdelay logic 0 delayed 0 Z0=50 TD={tdint}
+Rmatch delayed 0 50
+
+* The output stage. A resistance and a ceiling, and nothing about the load:
+* 50 ohm across a 5 V rail would ask for 100 mA and this part's own absolute
+* maximum is 74, so the ceiling binds on the first instant of an edge into
+* anything capacitive - which is the instant the trip bus is.
+Bdrive 0 out I = min(max((v(delayed) - v(out))/rout, -isc), isc)
+
+* So the node is never floating when nothing else holds it.
+Rleak out 0 1e9
+
+.ends tlv3501

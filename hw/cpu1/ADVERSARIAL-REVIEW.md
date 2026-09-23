@@ -20,7 +20,7 @@ finding.
 
 | | | |
 |---|---|---|
-| run against a circuit simulator | **2** | 1 % |
+| run against a circuit simulator | **13** | 6 % |
 | derive a number from the netlist, the routed copper or the stackup | **130** | 64 % |
 | assert structure only — this is wired to that, this exists | **72** | 35 % |
 
@@ -42,6 +42,12 @@ a figure nobody verified against a measurement.
 ---
 
 ## 1. What is simulated: almost nothing
+
+*This section described the board before the trip chain was simulated; what it
+says about the power path and comms is still true, and the count above has
+moved from 6 measurements to 13. `sim/trip_chain.cir.in` now integrates the
+chain end to end and gets 33.5 ns where the arithmetic sums to 40.5 - see
+`DESIGN-REVIEW.md` §3. What follows is the argument that got it built.*
 
 Two ngspice decks, `sim/adc_corner.cir.in` and `sim/adc_settling.cir.in`, six
 `.meas` statements between them. Both are about one ADC input network.

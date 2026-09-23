@@ -1,0 +1,254 @@
+* cpu1: a fault current rising, to the gate line going low.
+*
+* `trip.budget` is 50 ns - how long a half bridge survives a shoot-through -
+* and `checks/test_safety.py::test_a_trip_stops_the_outputs_inside_the_budget`
+* spends it as five terms summed:
+*
+*     latch + max(buffer disable, gate turn-on)   14.7 ns
+*     comparator                                   7.0
+*     bus loading, (C_bus - 13 pF) * 40.2 ps/pF    5.0
+*     tap, R_source * sum of the shunt capacitors 10.6
+*     gate line falling                            3.4
+*                                                 ----
+*                                                 40.5 of 50
+*
+* **Three of those five are coupled, and the sum treats all five as though
+* they were not.**
+*
+*   - One latch output drives three things. `TRIPPED` carries both buffers'
+*     second enable and the gate-kill transistor's gate, on 4.5 pF of copper,
+*     and the check takes a *max* over the buffer's disable time and the FET's
+*     turn-on - which gives each of them the whole 24 mA. Here there is one
+*     source and they share it.
+*   - The bus loading term is a straight line through two points of the
+*     comparator's Figure 5, 13 pF and 100 pF, extrapolated to the 137 pF of
+*     this bus. Here the comparator has an output resistance and a current
+*     ceiling and the bus is twelve diode junctions, and whatever that costs
+*     is what it costs.
+*   - The tap sums both shunt capacitors as though both sat on the sense node,
+*     when one is behind 22 ohm and the other behind 1 k.
+*
+* And the excitation is the one the argument has twice gone wrong over: a
+* **ramp**, because a fault current rises through an inductance and does not
+* step. A deck cannot confuse a ramp's delay with a step's amplitude deficit
+* the way two checks did, because it integrates one excitation and reports one
+* number.
+*
+* FAST4_SENSE is modelled because it is the worst node: the check picks it,
+* and it is the only one carrying two branches.
+*
+* **Two of the models are calibrated rather than derived**, and this deck
+* measures the calibration instead of trusting it. `t_comp_in_jig` and
+* `t_latch_in_jig` rebuild the datasheet's own test circuit beside the board
+* and are banded against the declared figures. If a model drifts, they say so
+* before anything below them is believed. See models/SOURCE.md.
+*
+* Values come from the build; @path:end@ is an instance path and which end of
+* its resolved range to take. `@copper.<NET>.capacitance@` is what the layout
+* measured that net's copper to be worth against the planes under it.
+
+.include ../models/tlv3501.lib
+.include ../models/lvc1g74.lib
+.include ../models/lvc541.lib
+.include ../models/dmg1012t.lib
+.include ../models/bat54a.lib
+
+.param v3v3 = @rail.3v3.voltage:min@
+.param v5   = @rail.5v.voltage:min@
+
+V3v3 n3v3 0 DC {v3v3}
+V5v  n5v  0 DC {v5}
+
+* --- the fault, and the tap the comparator watches ---------------------------
+*
+* A ramp through the impedance the power board is required to present. The
+* slope is fast enough that the threshold is crossed early in the window and
+* slow enough to be a ramp rather than a step against this network's own
+* 125 ns time constant: a quarter of full scale in a microsecond is a fault
+* current that any bridge would survive and is the hard case for the tap,
+* since a slower ramp only delays and a faster one is a step the lead-lag
+* passes straight through.
+Vfault fault 0 PWL(0 0 200n 0 1.2u {v3v3})
+Rsource fault sense @header.source_impedance:max@
+
+* Both branches on the node, each behind its own series resistor - which is
+* the thing the check's sum of the two capacitors leaves out.
+Rser_adc  sense adc_pin  @adc.fast4.series.resistance:max@
+Cshunt_adc adc_pin 0     @adc.fast4.shunt.capacitance:max@
+Rser_comp sense comp_pin @adc.comp_fast4.series.resistance:max@
+Cshunt_comp comp_pin 0   @adc.comp_fast4.shunt.capacitance:max@
+Csense sense 0 @copper.FAST4_SENSE.capacitance:nom@
+
+* The threshold, at the lowest this board undertakes to set - where the fixed
+* errors are the largest share of it and the tap has the least signal to work
+* with.
+.param vth = @trip.threshold_floor:min@ * @vref.ic.output_voltage:min@
+Vthresh thresh 0 DC {vth}
+
+* --- the comparator ----------------------------------------------------------
+*
+* Signal on the inverting input and threshold on the non-inverting one, which
+* is what makes the output fall when the current rises past it: `cpu1.py`
+* wires every "above" comparator this way so that seven push-pull outputs can
+* share one bus through Schottky diodes.
+Xcomp thresh sense trip_out n5v tlv3501
++ vshift={@trip.fast4_high.input_offset_voltage:max@
++       + @trip.fast4_high.input_hysteresis:max@/2}
++ tpd=@trip.fast4_high.propagation_delay_max:max@
++ cref=@trip.fast4_high.delay_load_reference:max@
++ isc=@trip.fast4_high.output_short_circuit_current:max@
+
+* --- the trip bus ------------------------------------------------------------
+*
+* Twelve Schottky junctions face TRIP_SET_N through six common anodes, and
+* eleven of them are reverse biased by whatever holds their own cathode up.
+* They are here as diodes rather than as a lumped capacitance because their
+* junction capacitance falls with reverse bias and the bus is falling: the
+* check uses the datasheet's 10 pF flat, which is the figure at 1 V, and these
+* sit nearer 1.6.
+Dtrip trip_bus trip_out BAT54A
+Rpullup n3v3 trip_bus @safety.r_trip_pullup.resistance:min@
+Cbus trip_bus 0 @copper.TRIP_SET_N.capacitance:nom@
+
+* The other six comparators, not tripping, their outputs at the 5 V rail.
+Dc1 trip_bus n5v BAT54A
+Dc2 trip_bus n5v BAT54A
+Dc3 trip_bus n5v BAT54A
+Dc4 trip_bus n5v BAT54A
+Dc5 trip_bus n5v BAT54A
+Dc6 trip_bus n5v BAT54A
+
+* The two gate-driver faults and the two supply supervisors, all idling high
+* on the logic rail: FAULT1_N, FAULT2_N, NRST and PGOOD.
+Df1 trip_bus n3v3 BAT54A
+Df2 trip_bus n3v3 BAT54A
+Dr1 trip_bus n3v3 BAT54A
+Dr2 trip_bus n3v3 BAT54A
+
+* And the twelfth, whose cathode is a no-connect. Its junction is in series
+* with nothing, so what it adds to the bus is its own capacitance in series
+* with the strays of an unconnected pad - near enough nothing, and it is here
+* so the count is twelve rather than eleven with a comment.
+Dnc trip_bus nc BAT54A
+Rnc nc 0 1e12
+
+* --- the latch ---------------------------------------------------------------
+*
+* **The board starts running, not tripped.** A set-reset latch has no defined
+* state until something sets it, and on this board that is deliberate - the
+* latch powers up tripped and firmware clears it before PWM leaves the buffers.
+* So the deck clears it first and then faults, which is the sequence the
+* budget is about; starting from an undefined operating point would measure
+* whichever way the solver happened to fall.
+Vclear clr_n 0 PWL(0 0 50n 0 50.1n {v3v3} 2u {v3v3})
+
+Xlatch trip_bus clr_n tripped trip_n n3v3 lvc1g74
++ tpre=@safety.latch.preset_to_output_max:max@
++ cref=@safety.latch.delay_load_reference:max@
++ vmeas=@safety.latch.delay_threshold:max@
++ ilim=@safety.latch.output_current_max:min@
++ vil=@safety.latch.input_low_voltage_max:max@
++ vih=@safety.latch.input_high_voltage_min:min@
+
+Ctripped tripped 0 @copper.TRIPPED.capacitance:nom@
+Rtripped n3v3 tripped @safety.r_tripped_pullup.resistance:min@
+Ctrip_n trip_n 0 @copper.TRIP_N.capacitance:nom@
+Rtrip_n trip_n 0 @safety.r_trip_n_pulldown.resistance:min@
+
+* **What the one output is actually holding.** Two buffer enables at their own
+* input capacitance, and the transistor's gate below. The check gives each of
+* these the full drive by taking a max over them.
+Cenable1 tripped 0 @safety.buffer1.input_capacitance_typical:max@
+Cenable2 tripped 0 @safety.buffer2.input_capacitance_typical:max@
+
+* --- the gate kill, and the buffer letting go --------------------------------
+Xfet tripped 0 kill_drain dmg1012t
++ vth=@safety.q_gate_kill.gate_threshold_max:max@
++ rds=@safety.q_gate_kill.on_resistance_at_2v5:max@
++ vgs_rds=@safety.q_gate_kill.on_resistance_gate_voltage:max@
++ qg={@safety.q_gate_kill.gate_charge_gate_source:max@
++   + @safety.q_gate_kill.gate_charge_gate_drain:max@}
+
+Rdrain kill_drain gate_out @safety.r_gate_kill_drain.resistance:max@
+
+* The buffer, driving the gate line high until the latch tells it to stop. Its
+* enable is TRIPPED, the same net the transistor's gate is on.
+Xbuf tripped n3v3 gate_b n3v3 lvc541
++ tdis=@safety.buffer1.disable_time_max:max@
++ ilim=@safety.buffer1.output_current_max:min@
++ vil=@safety.buffer1.input_low_voltage_max:max@
++ vih=@safety.buffer1.input_high_voltage_min:min@
+
+Rseries gate_b gate_out @safety.series.gate_enable.resistance:max@
+Cgate_b gate_b 0 @copper.GATE_ENABLE_B.capacitance:nom@
+
+Rpulldown gate_out 0 @safety.pulldown.gate_enable_out.resistance:max@
+Cgate_out gate_out 0 @copper.GATE_ENABLE_OUT.capacitance:nom@
+Cfar gate_out 0 @header.gate_line_capacitance:max@
+
+* --- the two calibration jigs, beside the board ------------------------------
+*
+* Not part of the chain. These are the datasheet's own test circuits, so that
+* a model which has drifted from the figure it was fitted to fails here rather
+* than somewhere downstream where it would look like a finding about copper.
+*
+* **At the datasheet's conditions, not the board's.** Both figures are
+* specified at a nominal rail, and the chain above runs at the low corner of
+* its own - so a jig sharing those rails would report a model drifting when
+* what had actually happened is that the board's rail sagged. `:nom` is the
+* midpoint of a declared band, which for the logic rail is 3.3 V exactly.
+Vjc_vcc jc_vcc 0 DC @rail.5v.voltage:nom@
+Vjl_vcc jl_vcc 0 DC @rail.3v3.voltage:nom@
+
+Vjc_th jc_th 0 DC 1.0
+Vjc_in jc_in 0 PWL(0 0.9 10n 0.9 10.001n 1.1 2u 1.1)
+Xjc jc_in jc_th jc_out jc_vcc tlv3501
++ vshift=0
++ tpd=@trip.fast4_high.propagation_delay_max:max@
++ cref=@trip.fast4_high.delay_load_reference:max@
++ isc=@trip.fast4_high.output_short_circuit_current:max@
+Cjc jc_out 0 @trip.fast4_high.delay_load_reference:max@
+
+Vjl_clr jl_clr 0 PWL(0 0 10n 0 10.1n @rail.3v3.voltage:nom@ 2u @rail.3v3.voltage:nom@)
+Vjl_pre jl_pre 0 PWL(0 @rail.3v3.voltage:nom@ 40n @rail.3v3.voltage:nom@ 40.1n 0 2u 0)
+Xjl jl_pre jl_clr jl_q jl_qn jl_vcc lvc1g74
++ tpre=@safety.latch.preset_to_output_max:max@
++ cref=@safety.latch.delay_load_reference:max@
++ vmeas=@safety.latch.delay_threshold:max@
++ ilim=@safety.latch.output_current_max:min@
+Cjl jl_q 0 @safety.latch.delay_load_reference:max@
+Rjl jl_q 0 @safety.latch.delay_load_resistance:max@
+
+.tran 0.02n 1.6u
+
+* --- what happened -----------------------------------------------------------
+*
+* Everything is measured from the instant the fault current itself crosses the
+* threshold at the connector, which is where `trip.budget` starts: "from the
+* current leaving its sensor to the buffer letting go".
+.meas tran tmp_t_fault WHEN v(fault)={vth} RISE=1
+
+.meas tran tmp_t_comp WHEN v(trip_out)={v5/2} FALL=1
+.meas tran t_comparator_out PARAM='tmp_t_comp - tmp_t_fault'
+
+.meas tran tmp_t_bus WHEN v(trip_bus)=@safety.latch.input_low_voltage_max:max@ FALL=1
+.meas tran t_bus_low PARAM='tmp_t_bus - tmp_t_fault'
+
+.meas tran tmp_t_tripped WHEN v(tripped)=@safety.buffer1.input_high_voltage_min:min@ RISE=1
+.meas tran t_tripped_high PARAM='tmp_t_tripped - tmp_t_fault'
+
+* The headline: the gate line at the far side's own threshold, which is what
+* the power board is promised.
+.meas tran tmp_t_gate WHEN v(gate_out)=@header.gate_line_low:max@ FALL=1
+.meas tran t_trip_total PARAM='tmp_t_gate - tmp_t_fault'
+
+* And the two jigs.
+.meas tran tmp_jc_edge WHEN v(jc_in)=1.0 RISE=1
+.meas tran tmp_jc_out WHEN v(jc_out)=@rail.5v.voltage:nom-2.5@ RISE=1
+.meas tran t_comp_in_jig PARAM='tmp_jc_out - tmp_jc_edge'
+
+.meas tran tmp_jl_edge WHEN v(jl_pre)=@safety.latch.delay_threshold:max@ FALL=1
+.meas tran tmp_jl_out WHEN v(jl_q)=@safety.latch.delay_threshold:max@ CROSS=LAST
+.meas tran t_latch_in_jig PARAM='tmp_jl_out - tmp_jl_edge'
+
+.end

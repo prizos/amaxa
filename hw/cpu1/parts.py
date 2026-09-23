@@ -707,6 +707,15 @@ BUF_OCTAL = PartSpec(
         # 500 uA per input applies only to an input sitting at an intermediate
         # level, which every input on this part is held away from.
         "supply_current_max": exact(10e-6),
+        # What one of these presents to whatever drives its enable. The latch's
+        # single Q output holds both of these *and* the gate-kill transistor's
+        # gate, and the trip budget's check gives each of them the full 24 mA
+        # by taking a max over them; the deck lets them share it, and cannot do
+        # that without knowing what they weigh. 4 pF at 3.3 V, SCAS298N 7.5 -
+        # and it is a **typical with no maximum column**, the same species as
+        # the PHY's supply current, so it is a figure to measure on the first
+        # assembled board. See TSSOP20/evidence.
+        "input_capacitance_typical": exact(4e-12),
     },
 )
 
@@ -721,6 +730,19 @@ LATCH_DFF = PartSpec(
     params={
         "supply_voltage": between(1.65, 5.5),
         "preset_to_output_max": exact(5.9e-9),
+        # **And the jig that figure is measured in**, which matters because
+        # most of it is the jig. SCES794E Figure 3: at V_CC = 3.3 V the load
+        # is 50 pF with 500 ohm to ground, and a propagation delay is taken at
+        # V_M = 1.5 V with S1 open, so only the resistor to ground is in
+        # circuit. Driving 50 pF to 1.5 V at 24 mA is 3.1 ns of the 5.9.
+        #
+        # Nothing needed these until the trip chain got a transient model. A
+        # model given 5.9 ns as an intrinsic delay and then this board's own
+        # copper on top would be counting TI's test jig as though it were a
+        # net. See the crop in VSSOP8/evidence.
+        "delay_load_reference": exact(50e-12),
+        "delay_load_resistance": exact(500.0),
+        "delay_threshold": exact(1.5),
         "output_current_max": exact(24e-3),
         # SCES794E 7.5: I_CC 10 uA maximum over the recommended free-air
         # temperature range, V_I at 5.5 V or GND, I_O = 0.
@@ -863,6 +885,17 @@ COMPARATOR = PartSpec(
         "input_hysteresis": exact(6e-3),
         "common_mode_headroom": exact(0.2),      # from either rail
         "output_swing_from_rail": exact(50e-3),  # at 1 mA
+        # 50 mV at 1 mA is an output resistance of 50 ohm, and 50 ohm across a
+        # 5 V rail would push 100 mA into the trip bus on the first instant of
+        # an edge. This part cannot: its absolute maximum output current,
+        # short-circuit to ground with one comparator per package, is 74 mA.
+        # The pair of them is the output stage the trip-chain deck drives the
+        # bus with - a resistance and a ceiling - which is why the ceiling is
+        # declared here rather than left in the deck. See the crop in
+        # SOT23_6/evidence. It is an absolute maximum and not a guaranteed
+        # drive, so a model bounded by it is optimistic rather than
+        # conservative about how fast the output moves a capacitive load.
+        "output_short_circuit_current": exact(74e-3),
         # The shutdown pin is measured *down from the positive supply*, which
         # is the trap in it: "within 0.9 V of the most positive supply, the
         # part is disabled. When it is more than 1.7 V below the most positive
