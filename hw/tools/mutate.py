@@ -37,9 +37,17 @@ read into a message - which `test_every_design_intent_is_read_by_something`
 accepts, because it asks whether a value is looked up. This is the thing that
 notices, and it only notices when it is run.
 
-At the time of writing, cpu1: 0 of 56 intent bands and 150 of 677 part
-parameters change no outcome, and every one of the 150 falls into a category
-above or is already declared in `UNREAD_PARAMETERS` with its reason.
+At the time of writing, cpu1: **0 of 67 intent bands** change no outcome.
+That figure was 0 of 56 when this was written and the count has grown with
+the board - `trip.prompt_overshoot`, `ethernet.rmii_skew_share` and the rest
+- without anything falling dead, which is the only way that number stays
+worth printing.
+
+The part-parameter half was 150 of 677 at that time and **has not been re-run
+since**, because a full sweep is a pytest run per value and takes the better
+part of a day. `--intent-only` is the half-hour version and is what the
+adversarial pass in `cpu1/CHANNEL-REVIEW.md` used; the other half is worth a
+night before a spin.
 """
 
 import argparse

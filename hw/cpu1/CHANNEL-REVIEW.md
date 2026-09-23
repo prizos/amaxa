@@ -10,8 +10,9 @@ a claim no check reads, a check whose scope is whatever happened to be
 declared, a number typed rather than derived, and a feature with no check at
 all. Datasheets were re-read where a claim rested on one.
 
-**Seven findings, all fixed in `9b3e7f6` except where marked open.** The
-board's own mutation tester was run afterwards and its result is at the end.
+**Seven findings, all fixed in `9b3e7f6` except where marked open**, plus an
+eighth in `23f4a92`. The board's own mutation tester was run afterwards and
+its result is at the end.
 
 ---
 
@@ -264,3 +265,32 @@ What each one has, and what it still does not.
    A power board that is unfitted leaves eight MCU pins at mid-rail; firmware
    is expected to configure an internal pull before it samples them, and
    nothing enforces that because nothing here can.
+
+---
+
+## The mutation sweep
+
+`tools/mutate.py` changes every number the design declares and runs the checks
+that read it, which is a different question from whether anything *looks it
+up*: a check can read a figure, put it in a message, and compare something
+else.
+
+Over the board's declared promises — the intent bands, which are the numbers
+this board asserts about itself rather than the ones it read off a datasheet:
+
+> **0 of 67 intent bands change no outcome.**
+
+Every promise this board makes is held to something that fails when the
+promise moves. The count was 56 when `mutate.py`'s own headline was written
+and has grown with the board — `trip.prompt_overshoot`,
+`ethernet.rmii_skew_share`, the four sequencing figures — without anything
+falling dead.
+
+**The other half was not re-run.** A full sweep is a pytest run per value,
+867 of them, and takes the better part of a day; the last recorded figure is
+150 of 677 part parameters unmoved, every one of which fell into one of the
+categories `mutate.py` lists — a resistor that dissipates nothing being
+unmoved by its power rating, one of seven identical comparators being unmoved
+by a check that takes the worst of them. That is worth a night before a spin
+rather than an afternoon during a review, and it is the one thing this pass
+did not finish.
