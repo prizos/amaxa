@@ -1,0 +1,98 @@
+* cpu1: clearing the trip latch, and the latch letting go by itself.
+*
+* PG5 does not reach the latch's ~CLR. It reaches a 1 k resistor and a 4.7 nF
+* capacitor, and the pull-up that holds ~CLR high is on the *far* side of that
+* capacitor. `cpu1.py:1121` says why: a pin driven low and abandoned - an ISR
+* spinning, a fault handler that still feeds the watchdog, a debugger halt -
+* would otherwise hold the clear asserted for ever, and a held clear does not
+* leave the board tripped. It leaves it oscillating: the comparator releases,
+* the latch clears itself, PWM resumes, and it over-currents again.
+*
+* `test_the_clear_reaches_a_valid_low_and_lets_go_by_itself` computes this as
+* three closed-form RCs. This runs it, and the reason that is worth doing is
+* the **clamp**: D13 sits on the clear node with its cathode on the rail and
+* it is the only nonlinear thing in the circuit. Without it the release
+* overshoot is the rail plus what the capacitor is still holding - 6.61 V from
+* this board's own declared values, against a latch whose absolute maximum is
+* 6.5 and which has no clamp diode of its own, because that absence is what
+* makes an LVC input 5 V tolerant. The check approximates the clamp as a
+* capacitance. Here it is a diode with an I-V curve.
+*
+* **This is also the circuit that passed 203 checks with its capacitor set to
+* zero.** The clamps were holding the node and nothing noticed, because every
+* check was arithmetic that the clamps satisfied too. A deck cannot be fooled
+* that way: take the capacitor out and there is no pulse to measure.
+*
+* Values come from the build; @path:end@ is an instance path and which end of
+* its resolved range to take.
+
+.include ../models/lvc1g74.lib
+.include ../models/bat54a.lib
+
+.param v3v3 = @rail.3v3.voltage:max@
+V3v3 n3v3 0 DC {v3v3}
+
+* --- the clear path ----------------------------------------------------------
+*
+* PG5: low at 10 us and **left there**, which is the abandoned-pin case, and
+* released at 300 us so the overshoot the clamp exists for has somewhere to
+* happen. An MCU pin drives to its own rail, so the high level is the rail.
+Vpg5 pg5 0 PWL(0 {v3v3} 10u {v3v3} 10.001u 0 300u 0 300.001u {v3v3} 500u {v3v3})
+
+Rseries pg5 couple @safety.r_clear_series.resistance:max@
+Ccouple couple clr @safety.c_clear.capacitance:max@
+Rpullup n3v3 clr @safety.r_clear_pullup.resistance:min@
+Cclr clr 0 @copper.TRIP_CLEAR_LATCH_N.capacitance:nom@
+
+* The clamp. Common anode on the clear node, one cathode on the rail and the
+* other a no-connect, so what limits the release is one junction and the 1 k
+* in front of it.
+Dclamp clr n3v3 BAT54A
+
+* --- the latch, so the clear is tested by what it is for ---------------------
+*
+* Preset first - something tripped - and then cleared, so this measures the
+* latch coming out of a trip rather than a waveform on a node.
+Vpre pre 0 PWL(0 {v3v3} 1u {v3v3} 1.001u 0 2u 0 2.001u {v3v3} 500u {v3v3})
+
+Xlatch pre clr tripped trip_n n3v3 lvc1g74
++ tpre=@safety.latch.preset_to_output_max:max@
++ cref=@safety.latch.delay_load_reference:max@
++ vmeas=@safety.latch.delay_threshold:max@
++ ilim=@safety.latch.output_current_max:min@
++ vil=@safety.latch.input_low_voltage_max:max@
++ vih=@safety.latch.input_high_voltage_min:min@
+
+Ctripped tripped 0 @copper.TRIPPED.capacitance:nom@
+Rtripped n3v3 tripped @safety.r_tripped_pullup.resistance:min@
+Ctrip_n trip_n 0 @copper.TRIP_N.capacitance:nom@
+Rtrip_n trip_n 0 @safety.r_trip_n_pulldown.resistance:min@
+
+.tran 2n 500u
+
+* --- what happened -----------------------------------------------------------
+
+* The low the clear reaches, which has to be a low the latch will act on.
+.meas tran v_clr_low MIN v(clr) FROM=10u TO=300u
+
+* How long it stays one. This is the number the whole arrangement exists to
+* bound: the pin is still low at 300 us and this must have ended long before.
+.meas tran tmp_clr_falls WHEN v(clr)=@safety.latch.input_low_voltage_max:max@ FALL=1
+.meas tran tmp_clr_rises WHEN v(clr)=@safety.latch.input_low_voltage_max:max@ RISE=1
+.meas tran t_clr_asserted PARAM='tmp_clr_rises - tmp_clr_falls'
+
+* And that it really did let go, with the pin still held low: the node is back
+* at the rail two hundred microseconds later and the pull-up owns it again.
+.meas tran v_clr_released FIND v(clr) AT=290u
+
+* The release, which is the clamp's whole job. Without D13 this is 6.61 V from
+* this board's declared values against a 6.5 V absolute maximum on an input
+* with no clamp of its own.
+.meas tran v_clr_overshoot MAX v(clr) FROM=300u TO=400u
+
+* And the thing it is all for: the latch coming out of the trip it was preset
+* into.
+.meas tran tmp_q_falls WHEN v(tripped)=@safety.latch.input_low_voltage_max:max@ FALL=1
+.meas tran t_clear_to_q PARAM='tmp_q_falls - tmp_clr_falls'
+
+.end

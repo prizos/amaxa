@@ -9,7 +9,73 @@ design checks compute analytically, so that a disagreement between the two
 methods shows up as a failure rather than as nobody noticing.
 """
 
+import math
+
 MEGA = 1e6
+
+
+def _clear_valid_low(values: dict[str, tuple[float, float]]) -> float:
+    """What the latch calls a low, which the clear has to get under."""
+    return values["safety.latch.input_low_voltage_max"][1]
+
+
+def _latch_input_absolute_max(values: dict[str, tuple[float, float]]) -> float:
+    """And what it cannot be taken above, clamp or no clamp."""
+    return values["safety.latch.input_voltage_absolute_max"][1]
+
+
+def _clear_asserted(values: dict[str, tuple[float, float]]) -> float:
+    """
+    How long the clear stays a valid low, from the declared parts.
+
+    The pin goes low, the node drops to the divider of the series resistor
+    against the pull-up, and then climbs back toward the rail on the two of
+    them in series with the coupling capacitor. It stops being a low when it
+    passes the latch's own threshold:
+
+        tau = (Rs + Rpu) * C,  V_low = V * Rs/(Rs + Rpu)
+        t   = tau * ln((V - V_low) / (V - V_IL))
+
+    Worst case throughout: the largest resistors and capacitor, which is the
+    longest the clear can be asserted, against the smallest pull-up, which is
+    the lowest it goes.
+    """
+    rail = values["rail.3v3.voltage"][1]
+    series = values["safety.r_clear_series.resistance"][1]
+    pull_up = values["safety.r_clear_pullup.resistance"][0]
+    coupling = values["safety.c_clear.capacitance"][1]
+    threshold = values["safety.latch.input_low_voltage_max"][1]
+    low = rail * series / (series + pull_up)
+    tau = (series + pull_up) * coupling
+    return tau * math.log((rail - low) / (rail - threshold))
+
+
+def _clear_asserted_low(values: dict[str, tuple[float, float]]) -> float:
+    """A tenth under it."""
+    return _clear_asserted(values) * 0.9
+
+
+def _clear_asserted_high(values: dict[str, tuple[float, float]]) -> float:
+    """And a tenth over."""
+    return _clear_asserted(values) * 1.1
+
+
+def _rail_high(values: dict[str, tuple[float, float]]) -> float:
+    """The logic rail's own ceiling: a pulled-up node cannot settle above it."""
+    return values["rail.3v3.voltage"][1]
+
+
+def _clear_released_low(values: dict[str, tuple[float, float]]) -> float:
+    """
+    Where the clear node has to be back to, with the pin still held low.
+
+    The latch's own high threshold is the weaker statement - the node must be
+    a valid high - but what this is really asserting is that the pull-up owns
+    the node again, so it is held to within a tenth of the rail rather than
+    to the threshold. Anything between those two is a circuit that let go
+    later than it should have.
+    """
+    return values["rail.3v3.voltage"][1] * 0.9
 
 
 def _trip_budget(values: dict[str, tuple[float, float]]) -> float:
@@ -83,7 +149,7 @@ def _after_sharing(values: dict[str, tuple[float, float]]) -> float:
 # The guard on the guards, as checks/test_check_count.py is for the design
 # checks. A deck that quietly stops measuring something leaves a suite that
 # passes with less coverage than it had.
-EXPECTED_MEASUREMENTS = 13
+EXPECTED_MEASUREMENTS = 18
 
 LIMITS = {
     "adc_corner": {
@@ -191,6 +257,56 @@ LIMITS = {
             "overlap rather than add and there is no closed form. A fitted "
             "constant goes quietly wrong when something upstream of it "
             "moves; this is what stops it being quiet.",
+        ),
+    },
+    "trip_clear": {
+        "v_clr_low": (
+            0.0, _clear_valid_low,
+            "The low the clear reaches at the latch. It is a divider - the "
+            "series resistor against the pull-up on the far side of the "
+            "coupling capacitor - and it has to land under the voltage the "
+            "latch calls a low, because a clear the latch does not act on is "
+            "not a clear. The band's top is the declared "
+            "`input_low_voltage_max` itself.",
+        ),
+        "t_clr_asserted": (
+            _clear_asserted_low, _clear_asserted_high,
+            "How long that low lasts **with the pin still held low**, which "
+            "is the abandoned-pin case the coupling capacitor exists for. "
+            "Derived from the same three declared values the design check "
+            "uses - tau ln((V-V_low)/(V-V_IL)) - with a tenth either side "
+            "for the clamp's junction capacitance and the copper, neither of "
+            "which is in that arithmetic. If the two ever part company by "
+            "more than that, something in this circuit is not the single RC "
+            "both of them think it is.",
+        ),
+        "v_clr_released": (
+            _clear_released_low, _rail_high,
+            "And that it really did let go. Measured at 290 us, with PG5 "
+            "still low: the node must be back at the rail and the pull-up "
+            "must own it again. A capacitor that had leaked, or a clamp "
+            "conducting when it should not, shows up here and nowhere else.",
+        ),
+        "v_clr_overshoot": (
+            0.0, _latch_input_absolute_max,
+            "**The clamp's whole job.** When the pin goes high again the "
+            "capacitor is still holding most of the rail, so the clear node "
+            "is driven above it: 6.61 V from this board's own declared "
+            "values, against a latch whose absolute maximum is 6.5 V and "
+            "which has **no clamp diode to V_CC of its own** - that absence "
+            "is what makes an LVC input tolerant of 5 V on a 3.3 V rail, and "
+            "it is why D13 is fitted. The design check approximates D13 as a "
+            "capacitance; here it is a diode, and this is the measurement "
+            "that would notice the difference.",
+        ),
+        "t_clear_to_q": (
+            0.0, _clear_asserted_high,
+            "The latch actually coming out of the trip it was preset into, "
+            "which is what makes this a test of the clear rather than of a "
+            "waveform on a node. It has to happen while the clear is still "
+            "asserted, so the band's top is the same figure the pulse's own "
+            "length is held to: a clear that outlasts its own pulse has not "
+            "cleared anything.",
         ),
     },
     "adc_settling": {

@@ -92,7 +92,13 @@ be alive.
 3. **A hardware latch** (74LVC1G74 used as a set-reset, clock and data tied
    low) holds the trip. Only PG5 clears it, and only as an AC-coupled
    *pulse* — a pin stuck low cannot hold the clear asserted, because the
-   coupling capacitor lets go in 7.6 µs.
+   coupling capacitor lets go. `sim/trip_clear.cir.in` runs that: with PG5
+   driven low and **left there**, the clear is a valid low for **9.22 µs**
+   against a closed form of 9.33, the latch comes out of its trip 12 ns in,
+   and 280 µs later the node is back at the rail with the pin still low. The
+   deck is there for the clamp, which is the only nonlinear thing in the
+   circuit — take D13 out and the release overshoot is **6.59 V** against an
+   absolute maximum of 6.5 on an input that has no clamp of its own.
 4. **Two octal buffers** with both enables used: one from the MCU, one from
    the latch. Either one high is high-impedance. Reset floats the pins, which
    turns the buffers off *and* presets the latch.
