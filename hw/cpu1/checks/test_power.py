@@ -1707,7 +1707,7 @@ def _drivers_of(design, pad_net, net, pin_types):
 
 
 def test_each_rail_carries_no_more_than_it_is_budgeted(
-    design, pad_net, two_pad_parts, spec, spec_has
+    design, pad_net, two_pad_parts, spec, spec_has, unguaranteed
 ):
     """
     Add up what is actually on each rail, and hold it against the band the
@@ -1754,7 +1754,6 @@ def test_each_rail_carries_no_more_than_it_is_budgeted(
     rail_nets = {rail_net for rail_net, _ in RAILS}
     drivers = {source: _drivers_of(design, pad_net, source, pin_types)
                for source in paths}
-    _, margin = spec("loads", "unguaranteed_margin")
     problems = []
     for net, rail in RAILS:
         _, volts = spec(rail, "voltage")
@@ -1776,8 +1775,14 @@ def test_each_rail_carries_no_more_than_it_is_budgeted(
                     continue
                 draws = spec(address, parameter)[1]
                 if parameter.endswith(UNGUARANTEED):
-                    draws *= 1.0 + margin
-                    items.append((f"{address}.{parameter}+{margin * 100:g}%", draws))
+                    # The part's own worst typical-to-maximum ratio where it
+                    # publishes one, and the house quarter as a floor. The
+                    # comparator's table says 1.67 and the DAC's 1.75; a flat
+                    # quarter on either would be the board contradicting the
+                    # datasheet it is quoting.
+                    factor = unguaranteed(address)
+                    draws *= factor
+                    items.append((f"{address}.{parameter}x{factor:.2f}", draws))
                 else:
                     items.append((f"{address}.{parameter}", draws))
 

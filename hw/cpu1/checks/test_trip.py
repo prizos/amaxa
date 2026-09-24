@@ -285,7 +285,7 @@ def test_the_comparators_can_see_the_whole_signal_range(spec, pad_net, comparato
 
 
 def test_the_thresholds_are_as_accurate_as_the_board_claims(
-    design, spec, spec_has, pad_net, comparators
+    design, spec, spec_has, pad_net, comparators, unguaranteed
 ):
     """
     What the trip point is worth, worked from where the DAC's reference comes
@@ -317,12 +317,18 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     offset = max(spec(address, "input_offset_voltage")[0] for address in comparators)
     # **A typical read as a bound, carrying the board's own margin for that.**
     # SBOS321E's hysteresis row has a figure under TYP and nothing under MIN
-    # or MAX. `loads.unguaranteed_margin` is the quarter this board adds to
-    # any figure a datasheet did not guarantee, declared once and applied by
-    # name; this is the same species and takes the same quarter.
-    _, unguaranteed = spec("loads", "unguaranteed_margin")
+    # or MAX, so something has to stand in for the bound TI did not give.
+    #
+    # **Not the house quarter, because this part's own table disagrees with
+    # it.** `loads.unguaranteed_margin` adds a flat 25 % and calls itself a
+    # judgement; SBOS321E bounds three plainly-written rows of its own and
+    # they run 1.56 to 1.67 times their typical. The `unguaranteed` fixture
+    # takes the worst a part publishes about itself, with the house quarter
+    # as a floor - see its docstring for why a plus-or-minus row is not the
+    # same kind of thing.
     hysteresis = max(spec(address, "input_hysteresis_typical")[0]
-                     for address in comparators) * (1 + unguaranteed)
+                     * unguaranteed(address)
+                     for address in comparators)
 
     # **And what temperature does to the two figures stated at one.** The
     # comparator's offset and the reference's accuracy are both 25 degC
@@ -911,7 +917,7 @@ def test_every_comparator_is_switched_on(design, pad_net, spec, comparators, boa
 
 
 def test_the_threshold_bus_and_the_dac_can_arm_between_them(
-    design, spec, pad_net, board_capacitance, board_dir
+    design, spec, pad_net, board_capacitance, board_dir, unguaranteed
 ):
     """
     The thresholds arrive over I2C, and **that bus had no electrical check.**
@@ -959,8 +965,6 @@ def test_the_threshold_bus_and_the_dac_can_arm_between_them(
 
     sys.path.insert(0, str(board_dir.parent / "tools"))
     from symbols import symbol_pin_names
-
-    _, unguaranteed = spec("loads", "unguaranteed_margin")
 
     # The rail the bus is pulled up to, from the part that makes it rather
     # than from a number: `test_the_threshold_dac_is_wired_...` already
@@ -1041,11 +1045,12 @@ def test_the_threshold_bus_and_the_dac_can_arm_between_them(
 
     # And the point of all of it.
     settling, _ = spec(DAC, "output_settling_typical")
-    settled = settling * (1.0 + unguaranteed)
+    settled = settling * unguaranteed(DAC)
     a_byte = 9.0 / rate                      # eight bits and the acknowledge
     assert settled < a_byte, (
-        f"{DAC} settles in {settled * 1e6:.1f} us with the {unguaranteed:.0%} "
-        f"this board adds to a figure with no maximum, and a byte at "
+        f"{DAC} settles in {settled * 1e6:.1f} us at the "
+        f"{unguaranteed(DAC):.2f}x this part's own table says it travels "
+        f"from typical, and a byte at "
         f"{rate / 1e3:g} kHz takes {a_byte * 1e6:.1f}. Writing the four "
         f"thresholds back to back would no longer settle them on the way, so "
         f"firmware needs a wait and nothing here says how long."

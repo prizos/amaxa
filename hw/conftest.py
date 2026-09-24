@@ -238,6 +238,47 @@ def spec(design):
 
 
 @pytest.fixture(scope="session")
+def unguaranteed(spec, spec_has):
+    """
+    What to multiply a figure its datasheet declined to bound.
+
+    `unguaranteed("trip.fast1_high")` -> 1.667.
+
+    **The board's own figure was a judgement, and the parts disagree with
+    it.** `loads.unguaranteed_margin` adds a flat quarter to anything called
+    `*_typical` or `*_at_25c`, and its own comment says so: "a judgement
+    rather than a measurement ... there to be replaced by a measurement on
+    the first assembled board". It is applied to the comparator's hysteresis,
+    which is a term in the trip point's error budget.
+
+    A datasheet that gives no maximum for one row usually gives one for
+    others, and **that is the vendor's own statement of how far its parts
+    travel from typical.** Where a part declares
+    `typical_to_maximum_worst` - the worst ratio its own table publishes -
+    that number is used instead.
+
+    Two things keep this from being a way of choosing a smaller number:
+
+      - the house quarter is a **floor**. A part whose own table happens to
+        be tight cannot argue its way below it, only above;
+      - the ratio is taken from rows of the same *kind*. A datasheet writes a
+        mismatch specification with a plus-or-minus - the TLV3501's offset is
+        `+-1` typ against `+-6.5` max - and a designed quantity as a plain
+        number. Those spread differently and by large factors, and the
+        distinction is visible in the datasheet's own notation rather than
+        being a reading of it. Each part's declaration names the rows it came
+        from.
+    """
+    def factor(address: str) -> float:
+        floor = 1.0 + spec("loads", "unguaranteed_margin")[1]
+        if spec_has(address, "typical_to_maximum_worst"):
+            return max(floor, spec(address, "typical_to_maximum_worst")[1])
+        return floor
+
+    return factor
+
+
+@pytest.fixture(scope="session")
 def spec_has(design):
     """
     Whether a part declares a parameter at all, without failing if it does not.

@@ -231,14 +231,41 @@ reference.
 | term | share |
 |---|---|
 | the DAC's offset, 20 mV at a 0.750 V threshold | 2.67 % |
-| the comparator's offset and hysteresis | 1.87 % |
+| the comparator's offset and hysteresis | 2.20 % |
 | the DAC's nonlinearity, 13 LSB | 1.27 % |
 | the DAC's gain error | 1.25 % |
 | **VREF+ itself**, the REF3030's ±0.2 % at 25 °C | 0.20 % |
 | the reference drifting over 25 °C of ambient | 0.19 % |
 | the comparator drifting over the same 25 °C | 0.02 % |
 | the reference's line regulation, from 3V3 | 0.004 % |
-| **total** | **7.46 % of 12 declared** |
+| **total** | **7.79 % of 12 declared** |
+
+The comparator's row is 2.20 % and it was 1.87 %, and the difference is
+**the board no longer contradicting the datasheet it is quoting.** Its
+hysteresis is 6 mV under TYP with MIN and MAX empty, and
+`loads.unguaranteed_margin` added a flat quarter to it — a figure whose own
+comment calls it "a judgement rather than a measurement". SBOS321E bounds
+three plainly-written rows of its own: the output swing from rail at 1.67
+times typical, the quiescent current at 1.56, and §6.7's propagation delay
+at 1.56 over the full temperature range. They cluster, which is the reason to
+believe any of them, and the worst is what an unbounded plain row now
+carries.
+
+The distinction that makes this a derivation rather than a second judgement
+is in the datasheet's own notation: a **plus-or-minus** row is a mismatch
+specification — V_OS is ±1 typ against ±6.5 max — describing a zero-mean
+random quantity, and its ratio is a distribution statistic. A **plain** row
+is a designed quantity. Hysteresis is written plain. Applying V_OS's 6.5 to
+it would be the wrong arithmetic on the wrong species; at 6.93 this budget
+stops closing, so the difference is not academic.
+
+The house quarter survives as a **floor** — a part whose own table happens to
+be tight cannot argue its way below it, only above. The Ethernet PHY is
+exactly that case and is left alone deliberately: every current in its
+datasheet is in a table with no MIN/TYP/MAX columns at all, and the only
+rows SMSC does bound are I/O thresholds at 1.13 to 1.17. **The largest
+uncertain load on the 3V3 rail is still a judgement, and the part offers
+nothing to replace it with.**
 
 The last three rows are newer than the rest and this table read **7.06 %**
 without them. Two figures above are stated at one temperature — the

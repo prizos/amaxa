@@ -31,5 +31,16 @@
     "sha256": "d9e72b376e576f102abb7e354c6930ace852e7e98629f706f30e5fa95ec6fae0",
     "shows": "Output short circuit, 74 mA maximum, short-circuit to ground with one comparator per package. It is what bounds the output stage in the behavioural model the trip-chain deck drives the Schottky bus with: 50 ohm from the V_OH/V_OL row would otherwise let the model push 100 mA into the bus on the first instant of an edge, which this part cannot do.",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/32caf6282c83fc4232a547d24aa7019c.pdf"
+  },
+  "tlv3501_typ_to_max": {
+    "assumes": "that a designed quantity spreads like the part's other designed quantities. TI publishes no hysteresis distribution and no hysteresis-versus-temperature curve; the typical characteristics section has curves for propagation delay, wake-up delay and quiescent current and none for hysteresis.",
+    "crop": "147,660,1400,1275",
+    "document": "TI TLV3501, TLV3502, SBOS321E (March 2005, revised April 2016), served by LCSC for C193413",
+    "dpi": 200,
+    "page": 5,
+    "read": "2026-09-25",
+    "sha256": "d9e72b376e576f102abb7e354c6930ace852e7e98629f706f30e5fa95ec6fae0",
+    "shows": "Section 6.6 Electrical Characteristics in full, which is where this part's own typical-to-maximum ratios come from. The rows written with a plus-or-minus are mismatch specifications - Vos +-1 typ against +-6.5 max, Ib +-2 against +-10 - and the rows written as a plain number are designed quantities: output swing from rail 30 typ against 50 max, quiescent current 3.2 against 5. Input hysteresis is 6 mV under TYP with MIN and MAX both empty, and it is a plain number, so what bounds it is the plain rows' worst ratio and not the mismatch rows'.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/32caf6282c83fc4232a547d24aa7019c.pdf"
   }
 }

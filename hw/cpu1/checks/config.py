@@ -131,7 +131,7 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
     "SOT23": ["ref3030_electrical", "bat54a_common_anode", "bat54a_forward_voltage",
               "bat54a_reverse_current", "ref3030_dropout"],
     "SOT23_6": ["tlv3501_delay_vs_load", "tlv3501_output_drive",
-                "tlv3501_offset"],
+                "tlv3501_offset", "tlv3501_typ_to_max"],
     "TSSOP20": ["lvc541a_current_ratings", "lvc541a_dc_limits"],
     "VSSOP8": ["test_load"],
     "TC2030": ["pad_signals"],

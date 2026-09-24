@@ -988,6 +988,35 @@ COMPARATOR = PartSpec(
         # `loads.unguaranteed_margin` now. The name says so, which is how the
         # rail sum finds the others.
         "input_hysteresis_typical": exact(6e-3),
+        # **What SBOS321E says about its own spread, which is not a quarter.**
+        #
+        # The hysteresis above has a figure under TYP and nothing under MIN or
+        # MAX, and `loads.unguaranteed_margin` adds a flat 25 % to it. That
+        # number is declared as "a judgement rather than a measurement" in
+        # `cpu1.py`, and this part's own table contradicts it.
+        #
+        # Section 6.6 bounds plenty of rows, and they fall into two kinds that
+        # the datasheet distinguishes in its own notation:
+        #
+        #   - **plus-or-minus rows are mismatch specifications** - V_OS is
+        #     +-1 typ against +-6.5 max, I_B is +-2 against +-10. Those
+        #     describe a zero-mean random quantity, and their ratio is a
+        #     distribution statistic. Applying 6.5 to a designed quantity
+        #     would be the wrong arithmetic on the wrong species;
+        #   - **plain rows are designed quantities**, and there are three:
+        #     the output swing from rail, 30 mV typ against 50 max; the
+        #     quiescent current, 3.2 mA against 5; and §6.7's propagation
+        #     delay, 4.5 ns typ against 7 max over the full temperature
+        #     range. They cluster - 1.67, 1.56, 1.56 - which is the reason to
+        #     believe any of them.
+        #
+        # Hysteresis is written plain, so the worst of the plain rows is what
+        # bounds it: **1.67, not 1.25.** TI publishes no hysteresis
+        # distribution and no hysteresis-against-temperature curve; the
+        # typical characteristics section has curves for propagation delay,
+        # wake-up delay and quiescent current and none for this. See
+        # SOT23_6/evidence/tlv3501_typ_to_max.png.
+        "typical_to_maximum_worst": exact(50.0 / 30.0),
         "common_mode_headroom": exact(0.2),      # from either rail
         "output_swing_from_rail": exact(50e-3),  # at 1 mA
         # 50 mV at 1 mA is an output resistance of 50 ohm, and 50 ohm across a
@@ -1047,6 +1076,16 @@ THRESHOLD_DAC = PartSpec(
         "offset_error": exact(20e-3),            # at code 000h
         "gain_error": exact(0.0125),             # fraction of full scale
         "integral_nonlinearity": exact(13),      # LSB
+        # **How far this part's own table says it travels from typical.**
+        # DS22187E bounds most of what it states, and the worst ratio it
+        # publishes for a plainly-written row is the supply current: 800 uA
+        # typical against 1400 maximum, over -40 to +125 degC. The short
+        # circuit current is the next at 15 against 24. Neither is a
+        # plus-or-minus row, which is the distinction that matters - see the
+        # comparator's own declaration for why - so 1.75 is what this part
+        # says about a figure it left unbounded, and that is more than the
+        # quarter the board adds by default.
+        "typical_to_maximum_worst": exact(1400.0 / 800.0),
         # **How long after a write the threshold is the threshold**, which
         # the channel review listed as not declared and the trip deck treats
         # as instant. 6 us, and it is a TYPICAL with no MIN and no MAX -
@@ -1371,6 +1410,28 @@ ETH_PHY = PartSpec(
         # figure there is, and that it is a typical is the budget's largest
         # single piece of slack - it is the number to measure first.
         "supply_current_typical": exact(102e-3),
+        # **And no `typical_to_maximum_worst`, deliberately.**
+        #
+        # Two other parts declare that ratio because their own tables bound
+        # rows of the same kind as the figure they leave unbounded. This one
+        # does not. Every current in this datasheet is in Tables 5.2 to 5.5,
+        # which have no MIN/TYP/MAX columns at all - each row is labelled
+        # "Typical" and that is the end of it. What SMSC *does* bound is the
+        # I/O buffer thresholds in Table 5.6, where the Schmitt hysteresis is
+        # 336 / 399 / 459 mV and the switching points are tighter still:
+        # ratios of 1.13 to 1.17, all of them *below* the house quarter.
+        #
+        # Declaring 1.17 here would use a buffer threshold's spread to bound
+        # a supply current's, and would *lower* the margin on the largest
+        # uncertain load on the 3V3 rail. The fixture would refuse it anyway
+        # - the quarter is a floor - but the honest thing is not to claim a
+        # derivation that is not one. **This stays a judgement, and it is the
+        # biggest one left on this board.**
+        #
+        # What can be said without a bench is how much room it has:
+        # `tools/breaking_point.py` reports the multiplier at which the rail
+        # actually fails, which is the question the quarter is standing in
+        # for.
         # Table 5.8: 950 to 1050 mV peak, measured at the line side of the
         # transformer with the line replaced by 100 ohm. It is what decides
         # what the line terminations dissipate, and it is the whole reason
