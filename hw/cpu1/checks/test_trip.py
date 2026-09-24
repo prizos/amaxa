@@ -908,3 +908,147 @@ def test_every_comparator_is_switched_on(design, pad_net, spec, comparators, boa
                 f"which is {state} - the part needs {enable_below:g} V"
             )
     assert not wrong, "Comparators not switched on:\n" + "\n".join(wrong)
+
+
+def test_the_threshold_bus_and_the_dac_can_arm_between_them(
+    design, spec, pad_net, board_capacitance, board_dir
+):
+    """
+    The thresholds arrive over I2C, and **that bus had no electrical check.**
+
+    Twenty checks in this file are about what a threshold is worth once it is
+    set. Nothing was about the wire it arrives on, or about how long after it
+    arrives it means anything - `DESIGN-REVIEW` listed the DAC's settling
+    time as not declared at all, and the trip chain's deck drives the
+    comparator references from ideal sources.
+
+    Three things, each derived from the part's own tables and this board's
+    measured copper.
+
+    **The pull-up has two ends and the board has to be between them.** Too
+    large and the bus does not rise inside the 300 ns Fast mode allows; too
+    small and the part cannot pull it to a low, because its SDA is specified
+    to reach 0.4 V only while sinking no more than 3 mA. High-Speed mode is
+    not a candidate - the datasheet asks 4.5 V for it and this part runs from
+    VREF+ at three volts, which is the same supply move that took the trip
+    budget from 11.46 % to 7.46 %.
+
+    The rise time is `R * C * ln(0.7/0.3)`, the I2C convention of 0.3 to 0.7
+    of the rail. `C` here is the copper the layout measured and nothing else:
+    neither this part nor the MCU declares an SDA pin capacitance, so what is
+    asserted is the copper against the limit and the headroom left over is
+    what the two pins have to fit in. **The part's own 400 pF bus limit is
+    not the board's**: at 4.7 k the rise time allows about 75 pF, so this bus
+    works because it is two devices and forty millimetres rather than because
+    it is inside the standard.
+
+    **And the settling time has conditions.** 6 us is quoted at `RL = 5 kohm,
+    CL = 100 pF` in the table's own header. A threshold net heavier than that
+    is a net the figure does not describe, so each one is held to both.
+
+    **What it is all for**: a threshold is valid one settling time after the
+    write that set it, and this asserts the wait is free - that settling,
+    with the unguaranteed margin a typical carries, finishes inside the time
+    the *next* byte takes on the bus. Four channels written back to back
+    never have to pause. If settling grew past a byte time, or the bus slowed
+    down, firmware would need a wait that nothing in this repository would
+    have told it about.
+    """
+    import math
+    import sys
+
+    sys.path.insert(0, str(board_dir.parent / "tools"))
+    from symbols import symbol_pin_names
+
+    _, unguaranteed = spec("loads", "unguaranteed_margin")
+
+    # The rail the bus is pulled up to, from the part that makes it rather
+    # than from a number: `test_the_threshold_dac_is_wired_...` already
+    # establishes that this DAC's supply is the reference's output.
+    reference = next(address for address, part in design["parts"].items()
+                     if part["symbol"].startswith("Reference_Voltage:"))
+    rail, _ = spec(reference, "output_voltage")
+
+    low, _ = spec(DAC, "output_low_voltage_max")
+    sink, _ = spec(DAC, "output_low_current")
+    rise, _ = spec(DAC, "i2c_rise_time_max")
+    rate, _ = spec(DAC, "i2c_fast_rate_max")
+
+    # The pull-ups, found by walking the netlist from the DAC's bus pins to
+    # whatever resistor also sits there - not by their addresses.
+    on_net: dict[str, set[tuple[str, str]]] = {}
+    for (address, pad), net in pad_net.items():
+        on_net.setdefault(net, set()).add((address, pad))
+    # Which pads are the bus, from Microchip's pin table rather than from the
+    # net names - `DAC_SPARE` starts `DAC_S` too, and a check that found the
+    # bus by spelling would have put a threshold output on it.
+    bus = sorted({pad_net[(DAC, pad)] for pad, name in DAC_PINS.items()
+                  if name in ("SDA", "SCL")})
+    assert len(bus) == 2, f"{DAC} has {len(bus)} bus nets, expected SDA and SCL: {bus}"
+
+    weakest = (0.0, None)
+    for net in bus:
+        pulls = [address for address, _ in on_net[net]
+                 if design["parts"][address]["symbol"] == "Device:R"]
+        assert len(pulls) == 1, f"{net} has {len(pulls)} resistors on it: {pulls}"
+        ohms, ohms_high = spec(pulls[0], "resistance")
+
+        floor = (rail - low) / sink
+        assert ohms >= floor, (
+            f"{pulls[0]} is {ohms:.0f} ohm and {DAC} can only reach "
+            f"{low:g} V while sinking {sink * 1e3:g} mA, which off a "
+            f"{rail:.3f} V rail needs at least {floor:.0f}. A bus the part "
+            f"cannot pull low is a bus with no low on it."
+        )
+
+        copper = board_capacitance(net)
+        allowed = rise / (ohms_high * math.log(0.7 / 0.3))
+        assert copper < allowed, (
+            f"{net} carries {copper * 1e12:.1f} pF of copper and "
+            f"{pulls[0]} at {ohms_high:.0f} ohm allows {allowed * 1e12:.0f} "
+            f"before the {rise * 1e9:g} ns Fast-mode rise time is gone."
+        )
+        print(f"    {net}: {copper * 1e12:.1f} pF of copper against "
+              f"{allowed * 1e12:.0f} allowed at {ohms_high:.0f} ohm, leaving "
+              f"{(allowed - copper) * 1e12:.0f} pF for the two pins")
+        if allowed - copper > weakest[0]:
+            weakest = (allowed - copper, net)
+
+    # Every threshold net against the load the settling figure was taken in.
+    load_c, _ = spec(DAC, "settling_load_capacitance")
+    load_r, _ = spec(DAC, "settling_load_resistance")
+    outputs = sorted({net for (address, pad), net in pad_net.items()
+                      if address == DAC
+                      and symbol_pin_names(
+                          design["parts"][DAC]["symbol"]
+                      ).get(str(pad), "").startswith("VOUT")})
+    assert outputs, f"{DAC} drives no threshold nets"
+    for net in outputs:
+        copper = board_capacitance(net)
+        assert copper < load_c, (
+            f"{net} carries {copper * 1e12:.1f} pF and {DAC}'s settling time "
+            f"is quoted into {load_c * 1e12:g} pF, so the figure does not "
+            f"describe this net"
+        )
+        resistors = [address for address, _ in on_net[net]
+                     if design["parts"][address]["symbol"] == "Device:R"]
+        for address in sorted(resistors):
+            ohms, _ = spec(address, "resistance")
+            assert ohms >= load_r, (
+                f"{address} loads {net} with {ohms:.0f} ohm where {DAC}'s "
+                f"settling is quoted into {load_r:g}, which is a lighter load"
+            )
+
+    # And the point of all of it.
+    settling, _ = spec(DAC, "output_settling_typical")
+    settled = settling * (1.0 + unguaranteed)
+    a_byte = 9.0 / rate                      # eight bits and the acknowledge
+    assert settled < a_byte, (
+        f"{DAC} settles in {settled * 1e6:.1f} us with the {unguaranteed:.0%} "
+        f"this board adds to a figure with no maximum, and a byte at "
+        f"{rate / 1e3:g} kHz takes {a_byte * 1e6:.1f}. Writing the four "
+        f"thresholds back to back would no longer settle them on the way, so "
+        f"firmware needs a wait and nothing here says how long."
+    )
+    print(f"    threshold valid {settled * 1e6:.1f} us after its write, "
+          f"inside the {a_byte * 1e6:.1f} us the next byte takes")

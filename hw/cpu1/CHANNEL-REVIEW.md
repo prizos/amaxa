@@ -349,7 +349,7 @@ What each one has, and what it still does not.
 | Channel | Coverage | What is not checked |
 |---|---|---|
 | **Safety chain** | 30 checks, a transient deck, the 50 ns budget derived five ways | nothing found this pass |
-| **Trip / thresholds** | 18 checks; the error budget derived and printed at 7.46 % of 12 | the DAC's settling time is not declared and the deck treats it as ideal |
+| **Trip / thresholds** | 19 checks; the error budget at 7.46 % of 12, and the I²C bus that carries the thresholds now has an electrical check | the trip deck still drives the comparator references from ideal sources |
 | **ADC / measurement** | 10 checks, two decks, both corners of the band | — |
 | **Power** | 31 checks, a sequencing deck, every rail summed off the netlist | no control loop is simulated; inrush and brown-out are prose |
 | **Ethernet** | 23 checks; the RMII budget closed at both ends from both datasheets | nothing found this pass, and the transmit margin is 9 ps of 1000 |

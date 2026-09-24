@@ -1047,6 +1047,38 @@ THRESHOLD_DAC = PartSpec(
         "offset_error": exact(20e-3),            # at code 000h
         "gain_error": exact(0.0125),             # fraction of full scale
         "integral_nonlinearity": exact(13),      # LSB
+        # **How long after a write the threshold is the threshold**, which
+        # the channel review listed as not declared and the trip deck treats
+        # as instant. 6 us, and it is a TYPICAL with no MIN and no MAX -
+        # the same species as the PHY's supply current and the comparator's
+        # hysteresis, so it carries `loads.unguaranteed_margin`.
+        #
+        # Note 8 is the definition and it is not a small-signal one: within
+        # half an LSB of final value for a code change from a quarter to
+        # three quarters of full scale. That is the worst step this part is
+        # characterised over and it is larger than any threshold move the
+        # arming sequence makes.
+        "output_settling_typical": exact(6e-6),
+        # And what the figure is quoted into, from the table's own header:
+        # `RL = 5 kohm, CL = 100 pF`. A threshold net heavier than that is a
+        # net the 6 us does not describe, and this board's are checked
+        # against it - they carry two to four and a half picofarads of copper
+        # and a 100 k resistor, so the load is lighter than the test's at
+        # both ends. See MSOP10/evidence/settling_and_its_load.png.
+        "settling_load_capacitance": exact(100e-12),
+        "settling_load_resistance": exact(5e3),
+        # **The bus the thresholds arrive on, which had no electrical check
+        # of any kind.** Fast mode, because High-Speed needs 4.5 V and this
+        # part runs from VREF+ at 3.0. Both figures are from the I2C Serial
+        # Timing table; the rise time is ensured by characterization and not
+        # 100 % tested, which its Note 1 says.
+        "i2c_fast_rate_max": exact(400e3),
+        "i2c_rise_time_max": exact(300e-9),
+        # What the part can sink, which sets the *other* end of the pull-up
+        # window: too large and the bus does not rise in time, too small and
+        # the part cannot pull it down to a low anyone will read.
+        "output_low_voltage_max": exact(0.4),     # SDA, at IOL below
+        "output_low_current": exact(3e-3),
     },
 )
 

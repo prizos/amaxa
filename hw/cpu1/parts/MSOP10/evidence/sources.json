@@ -20,5 +20,16 @@
     "sha256": "7e6515c45a02ffe4ad7506f3347cce7714cdd56659ff2fb22b858fc0472f381e",
     "shows": "Table 4-2, EEPROM memory map and factory default settings: every channel ships with D11..D0 = 0, VREF = 1 (internal 2.048 V), PD = 00, gain = 1, and I2C address bits 000",
     "url": "https://ww1.microchip.com/downloads/en/DeviceDoc/22187E.pdf"
+  },
+  "settling_and_its_load": {
+    "assumes": "The settling figure is a typical with no guaranteed bound, so it carries loads.unguaranteed_margin like every other figure of that species on this board.",
+    "crop": "220,233,1320,1593",
+    "document": "Microchip MCP4728 datasheet, DS22187E (2010)",
+    "dpi": 200,
+    "page": 5,
+    "read": "2026-09-24",
+    "sha256": "7e6515c45a02ffe4ad7506f3347cce7714cdd56659ff2fb22b858fc0472f381e",
+    "shows": "Analog Output section. TSETTLING is 6 us TYPICAL with no MIN and no MAX column, under Note 8: within 1/2 LSB of the final value when the code changes from 1/4 to 3/4 of full scale. The table header states the conditions every row is quoted into - RL = 5 kohm, CL = 100 pF - which is what the board's threshold nets have to be inside for the 6 us to apply at all.",
+    "url": "https://ww1.microchip.com/downloads/en/devicedoc/22187e.pdf"
   }
 }

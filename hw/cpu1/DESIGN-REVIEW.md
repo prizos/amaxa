@@ -342,7 +342,7 @@ and scales the output to this rail.
 
 ## 7. What the checks are, and what they are for
 
-215 of them. The distribution is the interesting part:
+216 of them. The distribution is the interesting part:
 
 | file | checks | |
 |---|---|---|
@@ -350,7 +350,7 @@ and scales the output to this rail.
 | `test_safety.py` | 29 | the trip chain end to end |
 | `test_ethernet.py` | 23 | the one block with an external standard to satisfy |
 | `test_core.py` | 19 | the MCU against its own datasheet |
-| `test_trip.py` | 18 | thresholds, the DAC, what a trip is worth |
+| `test_trip.py` | 19 | thresholds, the DAC, what a trip is worth |
 | `test_buses.py` | 14 | CAN and RS-485 |
 | `test_usb.py` | 12 | one differential pair, thoroughly |
 | `test_routing.py` | 12 | what the copper does that the netlist cannot say |
