@@ -275,22 +275,48 @@ that read it, which is a different question from whether anything *looks it
 up*: a check can read a figure, put it in a message, and compare something
 else.
 
-Over the board's declared promises — the intent bands, which are the numbers
-this board asserts about itself rather than the ones it read off a datasheet:
+Run over everything, with the tool's reader map fixed first — see below:
 
-> **0 of 67 intent bands change no outcome.**
+| | |
+|---|---|
+| intent bands that change no outcome | **0 of 67** |
+| part parameters | **68 of 799** |
+| — unmoved by every check that reads them | 39 |
+| — read only by a simulation deck, which it does not run | 13 |
+| — read by no check's call phase at all | 16 |
 
-Every promise this board makes is held to something that fails when the
-promise moves. The count was 56 when `mutate.py`'s own headline was written
-and has grown with the board — `trip.prompt_overshoot`,
+Every promise this board makes about itself is held to something that fails
+when the promise moves. The intent count was 56 when `mutate.py`'s headline
+was written and has grown with the board — `trip.prompt_overshoot`,
 `ethernet.rmii_skew_share`, the four sequencing figures — without anything
 falling dead.
 
-**The other half was not re-run.** A full sweep is a pytest run per value,
-867 of them, and takes the better part of a day; the last recorded figure is
-150 of 677 part parameters unmoved, every one of which fell into one of the
-categories `mutate.py` lists — a resistor that dissipates nothing being
-unmoved by its power rating, one of seven identical comparators being unmoved
-by a check that takes the worst of them. That is worth a night before a spin
-rather than an afternoon during a review, and it is the one thing this pass
-did not finish.
+The 39 fall into the categories `mutate.py` itself names as legitimate: one of
+six identical dual diodes unmoved by a check that takes the worst of all six,
+one of seven identical comparators likewise, a bypass capacitor whose value
+nothing states a requirement for. Three were re-tested against the **whole**
+suite by hand and were quiet there too.
+
+### And the tool was overstating it
+
+The first run of this sweep reported **164** of 800, and one of them was
+`safety.r_gate_kill_drain.resistance` — which, set to zero, makes
+`test_the_gate_kill_stays_inside_its_ratings` fail. It is noticed, loudly, and
+it was on the list.
+
+The plugin that records who reads what took a set difference against
+`PARAMETERS_READ`, which is **one cumulative set for the whole session**. That
+difference is non-empty only for the *first* test to read a value; every later
+reader registers nothing. So the map held one reader per parameter and the
+sweep probed that one. Re-measured with a plugin that empties the set around
+each test: **116 of the 164 had other readers that were never asked.**
+
+That is the failure the module exists to catch — a figure read, put in a
+message, and compared against something else — occurring in the module. Fixed
+in `d2ea237`: every reader is recorded and all of them are probed together,
+and parameters read only by a simulation deck are reported as that rather than
+as dead weight.
+
+**What it still cannot see:** only the readers the plugin recorded. A check
+reaching a figure some way the recorder misses would be missed too. Running
+the whole suite per probe would be exact and is the next thing to try.

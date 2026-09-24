@@ -37,17 +37,34 @@ read into a message - which `test_every_design_intent_is_read_by_something`
 accepts, because it asks whether a value is looked up. This is the thing that
 notices, and it only notices when it is run.
 
-At the time of writing, cpu1: **0 of 67 intent bands** change no outcome.
-That figure was 0 of 56 when this was written and the count has grown with
-the board - `trip.prompt_overshoot`, `ethernet.rmii_skew_share` and the rest
-- without anything falling dead, which is the only way that number stays
-worth printing.
+Measured on cpu1, with every reader probed:
 
-The part-parameter half was 150 of 677 at that time and **has not been re-run
-since**, because a full sweep is a pytest run per value and takes the better
-part of a day. `--intent-only` is the half-hour version and is what the
-adversarial pass in `cpu1/CHANNEL-REVIEW.md` used; the other half is worth a
-night before a spin.
+    0 of 67 intent bands change no outcome
+    68 of 799 part parameters, of which
+        39  unmoved by every check that reads them
+        13  read only by a simulation deck, which this does not run
+        16  read by no check's call phase at all
+
+**The 68 was 164 before the reader map was fixed**, and the difference is not
+a change to the board. This used to record one reader per parameter - see the
+note on the plugin below - and probe that one, so ninety-six parameters were
+reported as held to nothing while checks that do hold them were never asked.
+`safety.r_gate_kill_drain.resistance` was on that list, and setting it to
+zero makes `test_the_gate_kill_stays_inside_its_ratings` fail.
+
+**Cost.** A parameter's readers run in one pytest invocation: about a second
+for a single cheap check, ten for one with five readers, against twenty-five
+for the whole suite. A full sweep is therefore hours rather than minutes, and
+the one wall-clock figure measured here - 59945 s - was taken while other
+work was running on the same machine and is an overestimate of what it costs
+alone. `--intent-only` is the short version: 67 bands, one suite run each.
+
+**What it still cannot see.** Only the checks the plugin recorded as reading
+a value are probed, so a check that reaches a figure some way the recorder
+misses would be missed too. Three of the 39 were re-tested against the whole
+suite by hand and were quiet there as well, which is evidence and not proof.
+Running the whole suite per probe would be exact, and at twenty-five seconds
+a run it is not obviously worse than ten; it is the next thing to try.
 """
 
 import argparse
