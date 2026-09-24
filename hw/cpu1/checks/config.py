@@ -68,11 +68,6 @@ UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
         "Recorded because it is what makes the part suitable for a rail that "
         "may be fed from a battery"
     ),
-    ("vref.ic", "temperature_drift"): (
-        "75 ppm/degC is the board's measurement accuracy, and there is nothing "
-        "to compare it against until the ADC input networks exist and the "
-        "error budget has a second term in it. M6"
-    ),
     ("safety.buffer1", "enable_time_max"): (
         "7 ns from the enable going low to the outputs driving again. Turning "
         "on is not time-critical - firmware chooses when - and the number that "
@@ -134,7 +129,8 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
               "rs485_common_mode", "rs485_esd_ratings"],
     "SOT23": ["ref3030_electrical", "bat54a_common_anode", "bat54a_forward_voltage",
               "bat54a_reverse_current", "ref3030_dropout"],
-    "SOT23_6": ["tlv3501_delay_vs_load", "tlv3501_output_drive"],
+    "SOT23_6": ["tlv3501_delay_vs_load", "tlv3501_output_drive",
+                "tlv3501_offset"],
     "TSSOP20": ["lvc541a_current_ratings", "lvc541a_dc_limits"],
     "VSSOP8": ["test_load"],
     "TC2030": ["pad_signals"],

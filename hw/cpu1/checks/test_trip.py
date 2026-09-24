@@ -315,7 +315,32 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
     rail, (rail_low, rail_high) = _supply_of(pad_net, DAC, "1", spec, design)
     supply_low, supply_high = spec(DAC, "supply_voltage")
     offset = max(spec(address, "input_offset_voltage")[0] for address in comparators)
-    hysteresis = max(spec(address, "input_hysteresis")[0] for address in comparators)
+    # **A typical read as a bound, carrying the board's own margin for that.**
+    # SBOS321E's hysteresis row has a figure under TYP and nothing under MIN
+    # or MAX. `loads.unguaranteed_margin` is the quarter this board adds to
+    # any figure a datasheet did not guarantee, declared once and applied by
+    # name; this is the same species and takes the same quarter.
+    _, unguaranteed = spec("loads", "unguaranteed_margin")
+    hysteresis = max(spec(address, "input_hysteresis_typical")[0]
+                     for address in comparators) * (1 + unguaranteed)
+
+    # **And what temperature does to the two figures stated at one.** The
+    # comparator's offset and the reference's accuracy are both 25 degC
+    # numbers - each datasheet's own table header says so - and this budget
+    # counted neither drift until the DAC moved onto the reference and made
+    # the reference's drift a trip-point term rather than a measurement one.
+    # `vref.ic.temperature_drift`'s exemption said it was waiting for exactly
+    # that, and had said so since M6.
+    #
+    # The excursion is the worse end of the declared ambient away from the
+    # temperature the figures are stated at, so a board declared for a
+    # narrower range earns the difference back.
+    ambient_low, ambient_high = spec("environment", "ambient")
+    stated, _ = spec("vref.ic", "accuracy_temperature")
+    excursion = max(abs(ambient_high - stated), abs(stated - ambient_low))
+    reference_drift, _ = spec("vref.ic", "temperature_drift")
+    comparator_drift = max(spec(address, "input_offset_drift")[0]
+                           for address in comparators)
     _, allowed = spec("trip", "threshold_tolerance")
 
     assert supply_low <= rail_low and rail_high <= supply_high, (
@@ -342,6 +367,10 @@ def test_the_thresholds_are_as_accurate_as_the_board_claims(
         f"{rail}, which is the DAC's full scale":
             (rail_high - rail_low) / 2 / full_scale,
         "the comparator": (offset + hysteresis) / threshold,
+        f"the reference drifting over {excursion:g} degC of ambient":
+            reference_drift * excursion,
+        f"the comparator drifting over the same {excursion:g} degC":
+            comparator_drift * excursion / threshold,
         # And the three the part itself declares, which were not summed at all.
         "the DAC's offset": dac_offset / threshold,
         "the DAC's gain error": dac_gain,
@@ -413,7 +442,8 @@ def test_the_comparator_the_deck_models_stands_for_all_of_them(design, spec, com
     )
     figures = ("propagation_delay_max", "delay_load_reference", "delay_per_farad",
                "output_short_circuit_current", "output_swing_from_rail",
-               "input_offset_voltage", "input_hysteresis")
+               "input_offset_voltage", "input_hysteresis_typical",
+               "input_offset_drift")
 
     symbol = design["parts"][modelled]["symbol"]
     problems = []

@@ -10,6 +10,17 @@
     "shows": "Figure 5: propagation delay against capacitive load at 20 mV overdrive. The fall curve starts at about 4.7 ns at 13 pF - close to the 4.5 ns the switching table gives as typical - and reaches about 8.2 ns at 100 pF, so the delay grows by roughly 40 ps for every picofarad hung on the output.",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/32caf6282c83fc4232a547d24aa7019c.pdf"
   },
+  "tlv3501_offset": {
+    "assumes": "",
+    "crop": "147,660,1400,330",
+    "document": "TI TLV3501, TLV3502, SBOS321E (March 2005, revised April 2016), served by LCSC for C193413",
+    "dpi": 200,
+    "page": 5,
+    "read": "2026-09-24",
+    "sha256": "d9e72b376e576f102abb7e354c6930ace852e7e98629f706f30e5fa95ec6fae0",
+    "shows": "Section 6.6's own header - **At TA = 25 C** - which is the condition the +-6.5 mV offset maximum is stated under, not over temperature. The drift is the separate dVOS/dT row at +-5 uV/C over -40 to +125. And the input hysteresis row has a figure in the TYP column and **nothing in MIN or MAX**: 6 mV is a typical, and this board declared it as an exact and used it as a bound in the trip point's error budget.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/32caf6282c83fc4232a547d24aa7019c.pdf"
+  },
   "tlv3501_output_drive": {
     "assumes": "that a short-circuit maximum is a fair ceiling on the drive at any output voltage. It is an absolute maximum rather than a guaranteed figure, so a model using it is optimistic rather than conservative about how fast the output can move a capacitive load",
     "crop": "147,260,1406,547",

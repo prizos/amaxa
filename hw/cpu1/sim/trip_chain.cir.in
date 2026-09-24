@@ -93,7 +93,7 @@ Vthresh thresh 0 DC {vth}
 * share one bus through Schottky diodes.
 Xcomp thresh sense trip_out n5v tlv3501
 + vshift={@trip.fast4_high.input_offset_voltage:max@
-+       + @trip.fast4_high.input_hysteresis:max@/2}
++       + @trip.fast4_high.input_hysteresis_typical:max@/2}
 + tpd=@trip.fast4_high.propagation_delay_max:max@
 + cref=@trip.fast4_high.delay_load_reference:max@
 + isc=@trip.fast4_high.output_short_circuit_current:max@

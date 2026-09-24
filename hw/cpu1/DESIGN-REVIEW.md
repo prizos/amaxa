@@ -231,14 +231,30 @@ reference.
 | term | share |
 |---|---|
 | the DAC's offset, 20 mV at a 0.750 V threshold | 2.67 % |
-| the comparator's offset and hysteresis | 1.67 % |
+| the comparator's offset and hysteresis | 1.87 % |
 | the DAC's nonlinearity, 13 LSB | 1.27 % |
 | the DAC's gain error | 1.25 % |
-| **VREF+ itself**, the REF3030's ±0.2 % | 0.20 % |
+| **VREF+ itself**, the REF3030's ±0.2 % at 25 °C | 0.20 % |
+| the reference drifting over 25 °C of ambient | 0.19 % |
+| the comparator drifting over the same 25 °C | 0.02 % |
 | the reference's line regulation, from 3V3 | 0.004 % |
-| **total** | **7.06 % of 12 declared** |
+| **total** | **7.46 % of 12 declared** |
 
-The last two rows are the interesting ones. The DAC ran from 3V3 until
+The last three rows are newer than the rest and this table read **7.06 %**
+without them. Two figures above are stated at one temperature — the
+comparator's offset under a header saying "At T_A = 25 °C", the
+reference's accuracy under one saying the same — and the budget counted
+the figures and not the drift. The DAC's three terms do **not** have that
+gap: Microchip's header states −40 to +125 °C outright, so its maxima
+already cover it.
+
+The comparator's row moved for a second reason. Its hysteresis has a
+figure under TYP and **nothing under MIN or MAX**, and it was declared
+`exact` and used as a bound. It carries `loads.unguaranteed_margin` now —
+the quarter this board adds to any figure a datasheet did not guarantee,
+which is what the PHY's supply current already does.
+
+The 5.00 % row that is missing is the interesting one. The DAC ran from 3V3 until
 recently, and then the top row of this table was the **logic rail at 5.00 %** —
 the largest single term, and a number the board was spending on nothing,
 because the thresholds it scaled were being compared against sensors scaled to
@@ -246,7 +262,7 @@ a different reference entirely.
 
 Moving the supply to VREF+ replaced it with the reference's own accuracy and
 its line regulation, which together are 0.204 %, and took the budget from
-11.46 % to 7.06 %. It cost 7.74 mA of the 12.9 mA the reference's headroom
+11.46 % to 7.46 %. It cost 7.74 mA of the 12.9 mA the reference's headroom
 allows, worth 0.77 mV of load regulation, and it cost the I²C pull-ups moving
 to VREF+ as well — Microchip's absolute maximum for every pin on that part is
 VDD + 0.3 V, and a bus idling on the logic rail would have been 171 mV outside

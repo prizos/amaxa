@@ -792,7 +792,7 @@ def test_nothing_runs_alongside_a_raw_comparator_input(
     # margin - the comparator that trips first is the one with the least to
     # lose. All seven are identical today, so this changes no number.
     hysteresis = min(
-        spec(address, "input_hysteresis")[0]
+        spec(address, "input_hysteresis_typical")[0]
         for address, part in design["parts"].items()
         if part["symbol"].startswith("Comparator:")
     )

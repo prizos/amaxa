@@ -529,6 +529,17 @@ VREF_3V0 = PartSpec(
         "line_regulation_max": exact(375e-6),
         "supply_bypass": exact(0.47e-6),
         "temperature_drift": exact(75e-6),
+        # The temperature the accuracy above is stated at. SBVS032F's table
+        # header: boldface limits apply over -40 to +125, and everything else
+        # is "At T_A = +25 C, I_LOAD = 0mA, V_IN = 5V". The output voltage row
+        # is not boldface, so its +-0.2 % is a room-temperature figure and the
+        # drift beside it is what happens away from that.
+        #
+        # Nothing needed this while VREF+ only set the ADCs' full scale. It is
+        # needed now: the threshold DAC runs from this node, so the drift is a
+        # term in the trip point's error budget, which is the exact thing
+        # `temperature_drift`'s exemption said it was waiting for.
+        "accuracy_temperature": exact(25.0),
     },
 )
 
@@ -924,8 +935,21 @@ COMPARATOR = PartSpec(
         # was not counting. See the figure in SOT23_6/evidence.
         "delay_load_reference": exact(13e-12),
         "delay_per_farad": exact((8.2e-9 - 4.7e-9) / (100e-12 - 13e-12)),
+        # **Both of these are 25 degC figures and one of them is a typical.**
+        # SBOS321E section 6.6's own header is "At T_A = 25 C and V_S = 2.7 V
+        # to 5.5 V, unless otherwise noted" - so +-6.5 mV is the offset at
+        # room temperature and the drift is the separate dVOS/dT row, +-5
+        # uV/degC over -40 to +125. The trip point's error budget counted the
+        # offset and not the drift.
         "input_offset_voltage": exact(6.5e-3),
-        "input_hysteresis": exact(6e-3),
+        "input_offset_drift": exact(5e-6),
+        # And the hysteresis row has a figure under TYP and **nothing under
+        # MIN or MAX**. It was declared `exact(6e-3)` and used as a bound,
+        # which is a typical read as a maximum - the same species as the
+        # PHY's supply current, and it carries the same
+        # `loads.unguaranteed_margin` now. The name says so, which is how the
+        # rail sum finds the others.
+        "input_hysteresis_typical": exact(6e-3),
         "common_mode_headroom": exact(0.2),      # from either rail
         "output_swing_from_rail": exact(50e-3),  # at 1 mA
         # 50 mV at 1 mA is an output resistance of 50 ohm, and 50 ohm across a
