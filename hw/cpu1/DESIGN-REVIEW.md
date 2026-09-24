@@ -342,7 +342,7 @@ and scales the output to this rail.
 
 ## 7. What the checks are, and what they are for
 
-214 of them. The distribution is the interesting part:
+215 of them. The distribution is the interesting part:
 
 | file | checks | |
 |---|---|---|
@@ -355,7 +355,7 @@ and scales the output to this rail.
 | `test_usb.py` | 12 | one differential pair, thoroughly |
 | `test_routing.py` | 12 | what the copper does that the netlist cannot say |
 | `test_adc.py` | 10 | the measurement path |
-| others | 46 | pin map, parts, geometry, build gates |
+| others | 47 | pin map, parts, geometry, build gates |
 
 They are not regression tests. The rule they are written under is that a check
 **derives** what it expects — from the netlist, the routed board, the stackup,

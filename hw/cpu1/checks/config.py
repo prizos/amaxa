@@ -19,7 +19,7 @@ BLOCKING: dict[str, str] = {
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 214
+EXPECTED_CHECKS = 215
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {

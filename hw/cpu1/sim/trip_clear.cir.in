@@ -27,6 +27,7 @@
 * its resolved range to take.
 
 .include ../models/lvc1g74.lib
+.include ../models/dmg1012t.lib
 .include ../models/bat54a.lib
 
 .param v3v3 = @rail.3v3.voltage:max@
@@ -65,6 +66,42 @@ Xlatch pre clr tripped trip_n n3v3 lvc1g74
 
 Ctripped tripped 0 @copper.TRIPPED.capacitance:nom@
 Rtripped n3v3 tripped @safety.r_tripped_pullup.resistance:min@
+
+* **The three loads the latch's one output is actually holding.** This deck
+* had TRIPPED as copper and a pull-up and nothing else, so the node it
+* measured `t_clear_to_q` on was lighter than the node on the board - the two
+* buffer enables and the gate-kill transistor's gate were missing, which are
+* exactly the loads `trip_chain.cir.in` exists to model and the trip budget's
+* `max(buffer_off, turn_on)` term is about.
+*
+* It changed no answer: the release is twelve nanoseconds against a band
+* three orders of magnitude wider. It was still a deck disagreeing with the
+* board about what is wired to what, which is the thing a deck cannot be
+* allowed to do, and it took a check to notice -
+* `test_every_deck_carries_the_parts_that_load_the_nets_it_models`.
+Cenable1 tripped 0 @safety.buffer1.input_capacitance_typical:max@
+Cenable2 tripped 0 @safety.buffer2.input_capacitance_typical:max@
+
+Xfet tripped 0 kill_drain dmg1012t
++ vth=@safety.q_gate_kill.gate_threshold_max:max@
++ rds=@safety.q_gate_kill.on_resistance_at_2v5:max@
++ vgs_rds=@safety.q_gate_kill.on_resistance_gate_voltage:max@
++ qg={@safety.q_gate_kill.gate_charge_gate_source:max@
++   + @safety.q_gate_kill.gate_charge_gate_drain:max@}
+
+* The drain resistor and the pull-down below it, so the transistor has
+* somewhere to pull to and its drain is not left floating. The gate line's
+* own buffer and series resistor are not here - this deck is about the clear,
+* and what the gate line does afterwards is `trip_chain.cir.in`'s question.
+*
+* **And `GATE_ENABLE_OUT`'s measured copper is deliberately not read here.**
+* Reaching for it would be claiming to model that net, and
+* `test_every_deck_carries_the_parts_that_load_the_nets_it_models` would then
+* rightly ask for the series resistor and the buffer behind it, which is the
+* other deck. A node this one does not measure is left as the two resistors
+* that terminate the transistor.
+Rdrain kill_drain gate_out @safety.r_gate_kill_drain.resistance:max@
+Rpulldown gate_out 0 @safety.pulldown.gate_enable_out.resistance:max@
 Ctrip_n trip_n 0 @copper.TRIP_N.capacitance:nom@
 Rtrip_n trip_n 0 @safety.r_trip_n_pulldown.resistance:min@
 

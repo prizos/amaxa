@@ -225,10 +225,26 @@ seventh dual diode and the design check's loading term grows, the deck's does
 not, and **both go on passing**, because both are banded against the whole
 50 ns budget and neither would notice two nanoseconds of divergence.
 
-Now counted, for that one part on that one net. **The general problem stays
-open**: a hand-written deck drifts from the board it claims to model, and
-nothing but a reader's attention connects `trip_clear.cir.in`'s three RCs or
-`power_up.cir.in`'s rail tree to the netlist they are drawn from.
+Now counted for that one part on that one net — and then generalised.
+`test_every_deck_carries_the_parts_that_load_the_nets_it_models` takes the
+same argument over every deck: wherever one reaches for a net's measured
+copper, which is the only way a deck can name a net, every part the netlist
+puts on that net must appear in the deck, either as a named placeholder or as
+a model from `sim/models/` whose name is inside the part's own value or MPN.
+Connectors and the MCU are exempt by symbol library, because a deck
+represents those as its excitation rather than modelling them.
+
+**It found one.** `trip_clear.cir.in` modelled `TRIPPED` as its copper and a
+pull-up and left off the two buffer enables and the gate-kill transistor's
+gate — the three loads on the latch's single output, which are the whole
+subject of the trip budget's `max(buffer_off, turn_on)` term and which
+`trip_chain.cir.in` models correctly. Adding them moved `t_clear_to_q` from
+12.09 to 12.20 ns inside a band three orders wider, which is why no band
+caught it, and is the point: **a deck is not verified by its bands.**
+
+What stays open is the half a machine cannot reach — the node *names* and the
+connections between them are still typed, so a deck can put the right parts in
+the wrong order. Only a reader catches that.
 
 ---
 
@@ -349,14 +365,20 @@ What each one has, and what it still does not.
 ## What is still open
 
 1. **The aux pin and the ideal-diode OR**, dropped from the plan without a
-   record. Now recorded; whether to fit them is a spin-2 decision.
+   record. Now recorded; whether to fit them is a spin-2 decision. Both
+   headers are fully assigned — 52 pins as 34 signals and 18 grounds, 30 as
+   17 and 13 — so there is no spare pin, and a supply pin without the OR is
+   two sources back-feeding each other. It is one change or neither.
 2. **A local symbol library**, which would end the stand-in class of problem
-   rather than declaring each instance of it.
-3. **Deck topology**, above.
-4. **Scope-by-what-exists** as a pattern. Two instances were fixed this pass;
-   the shape recurs — `assert out` accepts one field bus where the board has
-   two, and a fixture keyed on `address.endswith(".transceiver")` cannot see a
-   bus whose part is named otherwise.
+   rather than declaring each instance of it. Less urgent than it was: the
+   three stand-ins are declared, the one that costs something has its
+   misnaming carried into `design.json`, and the rail sum reads it.
+3. **Deck node names.** The parts in a deck are now held to the netlist; the
+   nodes and the order they are wired in are still typed.
+4. **The RMII's nine picoseconds.** Not a defect and not fixable in copper:
+   ST's 11.5 ns and Microchip's 7.5 ns take 19 of the 20 ns period before any
+   track is drawn. Real margin needs the PHY nearer the MCU or REF_CLK-In
+   mode with an oscillator, and both are spin-2.
 5. **The eight floating connector inputs.** Declared now, and still floating.
    A power board that is unfitted leaves eight MCU pins at mid-rail; firmware
    is expected to configure an internal pull before it samples them, and

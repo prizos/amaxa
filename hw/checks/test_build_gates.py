@@ -6,6 +6,8 @@ so they check what was actually generated. A part can be described perfectly
 and still reach the board wrong.
 """
 
+import pytest
+
 
 def test_one_value_per_part_number(footprints):
     """
@@ -270,3 +272,106 @@ def test_a_board_declaring_itself_unfinished_says_what_is_unfinished(
     )
     for what, why in sorted(blocking.items()):
         assert why.strip(), f"{board_dir.name}: {what!r} blocks the board and gives no reason"
+
+
+def test_every_deck_carries_the_parts_that_load_the_nets_it_models(design, board_dir):
+    """
+    A deck's values come from the build. Its topology is typed. This is the
+    part of that gap a machine can close.
+
+    `tools/simulate.py` resolves every `@path:end@` out of `design.json`, so a
+    deck cannot hold a stale number. Nothing resolves its **netlist**: the
+    nodes and the parts between them are written by hand, and a deck can go
+    on agreeing with its band while the board it claims to model grows a
+    capacitor the deck has never heard of. `DESIGN-REVIEW` has listed that as
+    open since the decks were written, with one instance closed by hand - the
+    trip bus's twelve Schottky junctions, counted against the six packages
+    that make them.
+
+    This is that instance generalised. Wherever a deck names a net - by
+    reaching for its measured copper as `@copper.<NET>.capacitance:end@`,
+    which is the only way a deck can - every part the netlist puts on that
+    net has to appear in the deck, one of two ways:
+
+      - **by name**, as an `@<address>.<parameter>:end@` placeholder, which
+        is how a passive gets its value; or
+      - **by model**, as a `.subckt` or `.model` from `sim/models/` whose
+        name is inside the part's own value or manufacturer part number -
+        `lvc1g74` in `74LVC1G74`, `bat54a` in `BAT54A`. That match is made
+        from `design.json` and the library, so a part swapped for a different
+        one stops matching.
+
+    Two kinds of part are exempt, and the exemption is a symbol library
+    rather than a list of addresses: a **connector** and the **MCU** are
+    what a deck represents as its excitation - a `PWL` source or a current
+    ramp - and requiring them to appear as components would be requiring the
+    deck to model the thing it is stimulating.
+
+    **What it found.** `trip_clear.cir.in` modelled `TRIPPED` as its copper
+    and a pull-up, and left off the two buffer enables and the gate-kill
+    transistor's gate - the three loads on the latch's single output, which
+    are the whole subject of the trip budget's `max(buffer_off, turn_on)`
+    term and which `trip_chain.cir.in` models correctly. It changed the
+    answer by a tenth of a nanosecond in a band three orders wider, which is
+    why no band caught it and why a deck is not verified by its bands.
+    """
+    import json
+    import re
+
+    sim = board_dir / "sim"
+    decks = sorted(sim.glob("*.cir.in"))
+    if not decks:
+        pytest.skip(f"{board_dir.name} has no simulation decks")
+
+    models = set()
+    for library in sorted((sim / "models").glob("*.lib")):
+        models |= {found.group(1).lower() for found in
+                   re.finditer(r"(?im)^\s*\.(?:subckt|model)\s+(\S+)",
+                               library.read_text())}
+
+    on_net: dict[str, set[str]] = {}
+    for net, nodes in design["nets"].items():
+        for address, _ in nodes:
+            on_net.setdefault(net, set()).add(address)
+
+    def squashed(text) -> str:
+        return re.sub(r"[^a-z0-9]", "", (text or "").lower())
+
+    # A deck represents these rather than modelling them.
+    EXCITED = ("Connector", "MCU_", "TestPoint")
+
+    missing = []
+    for deck in decks:
+        text = deck.read_text()
+        lower = text.lower()
+        # The net-name charset, not "anything up to the next dot": these
+        # files document their own placeholder syntax in a comment, and
+        # `@copper.<NET>.capacitance:end@` written as an example is not a net.
+        nets = set(re.findall(r"@copper\.([A-Za-z0-9_+~{}\-]+)\.capacitance", text))
+        named = set(re.findall(r"@([a-z][a-z0-9_.]*)\.[a-z_0-9]+:", text))
+        for net in sorted(nets):
+            assert net in on_net, (
+                f"{deck.name} reads the copper capacitance of {net}, which is "
+                f"not a net on this board"
+            )
+            for address in sorted(on_net[net]):
+                if address in named:
+                    continue
+                part = design["parts"][address]
+                if part["symbol"].startswith(EXCITED):
+                    continue
+                matched = [name for name in models
+                           if name in squashed(part["value"])
+                           or name in squashed(part["mpn"])]
+                if any(re.search(rf"(?m)^\s*\S+\s+.*\b{re.escape(name)}\b", lower)
+                       for name in matched):
+                    continue
+                missing.append(
+                    f"  {deck.name} models {net} and not {address} "
+                    f"({part['value']}), which the netlist puts on it")
+
+    assert not missing, (
+        "Decks whose topology is not the board's:\n" + "\n".join(missing)
+        + "\nEvery number in a deck comes from the build; its netlist does "
+        "not, so a part added to a modelled net has to be added here too."
+    )
