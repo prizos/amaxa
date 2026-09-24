@@ -1124,15 +1124,22 @@ CAN_TRANSCEIVER = PartSpec(
         # dominant state into 50 ohm is the worst row: 49 mA typical, 80 mA
         # maximum. At 60 ohm it is 70. The 5 V rail takes all of that - the
         # V_IO rows carry no load condition because V_IO feeds only the level
-        # shifter, not the bus driver, and its dominant figure is 300 uA.
-        # (The V_IO rows are 300 uA dominant and 48 uA recessive, also
-        # maxima over temperature. They are not declared as a parameter: the
-        # KiCad symbol this part borrows is the SN65HVD230's, whose pin 5 is
-        # that part's V_REF rather than this one's V_IO, so nothing could
-        # attribute the figure to the right rail without a table saying which
-        # pin is really which - and 300 uA is a fifth of a milliamp against
-        # the 3V3 rail's fifteen of margin. See SOIC8.md.)
+        # shifter, not the bus driver.
         "supply_current_max": exact(80e-3),
+        # **And the V_IO rows, which used to be a paragraph saying why they
+        # could not be declared.** 300 uA dominant and 48 uA recessive, both
+        # maxima over temperature. The reason given was real: the KiCad
+        # symbol this part borrows is the SN65HVD230's, whose pin 5 is that
+        # part's V_REF rather than this one's V_IO, so nothing could
+        # attribute the figure to the right rail.
+        #
+        # `symbol_misnames` below is that table, and it now reaches the
+        # netlist - the build writes it into `design.json` and the rail sum
+        # resolves a stand-in's pin to what it really is. So the figure is
+        # declared, and it lands on 3V3 where it belongs rather than on
+        # nothing. It is a fifth of a milliamp against that rail's fifteen of
+        # margin, which is why this was easy to leave undone.
+        "io_supply_current_max": exact(300e-6),
         "loop_delay_max": exact(210e-9),
         "bus_fault_voltage": exact(58.0),
         "data_rate_max": exact(8e6),

@@ -98,6 +98,24 @@ def design(
             "mpn": spec.mpn,
             "lcsc": spec.lcsc,
         }
+        # **What the symbol calls a pin, where the symbol is a stand-in.**
+        # Three parts on cpu1 borrow another part's symbol because no library
+        # carries theirs, and one of the three has two pins whose names are
+        # wrong: the CAN transceiver's pin 5 is its I/O supply drawn as a
+        # voltage reference *output*, so the netlist reported a part driving
+        # the 3V3 rail and its I/O current sat in no rail's sum.
+        #
+        # `symbol_misnames` recorded that, and recorded it where only
+        # `parts.py` could see it. Written here, a check reading the netlist
+        # can resolve a pin to what it really is without having to know which
+        # PartSpec a part came from. The real name is the first field of the
+        # note, which is the form `test_every_symbol_a_part_says_is_a_stand_in
+        # _really_is_one` already holds it to.
+        if spec.symbol_misnames:
+            components[address]["misnames"] = {
+                pad: says.split(",")[0].strip()
+                for pad, says in spec.symbol_misnames.items()
+            }
         for name, (low, high) in spec.params.items():
             values[f"{address}.{name}"] = [low, high]
 

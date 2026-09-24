@@ -69,15 +69,52 @@ def buses(design, pads_of):
     check below would be asking about a bus that does not exist - which is why
     the first check is that each pair has exactly two wires in it.
     """
+    # **The population comes off the netlist, not off the addresses.**
+    #
+    # This used to enumerate parts whose address ends `.transceiver` and
+    # demand a sibling ending `.header`. That is scope-by-what-exists - the
+    # pattern this repository keeps finding - and it fails in the direction
+    # that is hard to see: a bus whose parts are named anything else is not a
+    # bus, every check below silently has nothing to say about it, and the
+    # only guard was `assert out`, which one bus satisfies on a board with
+    # two.
+    #
+    # A field bus is what it looks like on the wire instead: an integrated
+    # circuit and a connector that share **exactly two** nets that are not
+    # ground and are not a supply. Nothing else on this board does that -
+    # the SWD header shares five with the MCU, the Ethernet jack five with
+    # the PHY, and every other shared net is a rail.
+    #
+    # The supply nets are themselves derived, from the pin types the symbols
+    # declare: a net with a `power_in` pin on it is a rail, whatever it is
+    # called. So this holds on a board with different rail names and finds a
+    # third bus the day one is fitted.
+    supplies = {
+        net
+        for address, part in design["parts"].items()
+        for pad, kind in symbol_pin_types(part["symbol"]).items()
+        if kind == "power_in"
+        for net in (pads_of.get(address, {}).get(str(pad)),)
+        if net
+    }
+    connectors = [address for address, part in design["parts"].items()
+                  if part["symbol"].startswith("Connector")]
+
     out = {}
-    for address in design["parts"]:
-        if not address.endswith(".transceiver"):
-            continue
-        bus = address[: -len(".transceiver")]
-        header = f"{bus}.header"
-        assert header in design["parts"], f"{bus} has a transceiver and no connector"
-        shared = (set(pads_of[address].values()) & set(pads_of[header].values())) - {GROUND}
-        out[bus] = (address, header, sorted(shared))
+    for connector in sorted(connectors):
+        for address, part in sorted(design["parts"].items()):
+            if address == connector or not part["ref"].startswith("U"):
+                continue
+            shared = ((set(pads_of[address].values()) & set(pads_of[connector].values()))
+                      - {GROUND} - supplies)
+            if len(shared) != 2:
+                continue
+            bus = address.partition(".")[0]
+            assert bus not in out, (
+                f"{bus} looks like two field buses: {out.get(bus)} and "
+                f"({address}, {connector}) - a name is being reused"
+            )
+            out[bus] = (address, connector, sorted(shared))
     assert out, "no field buses found, and this file is about them"
     return out
 

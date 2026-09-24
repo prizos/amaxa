@@ -1038,8 +1038,7 @@ def test_the_reference_is_not_loaded_past_what_it_allows(
     for address, part in design["parts"].items():
         if address == REFERENCE:
             continue
-        here = {name.upper() for pad, name in symbol_pin_names(part["symbol"]).items()
-                if pad_net.get((address, str(pad))) == node}
+        here = _supply_names(part, address, pad_net, node)
         for parameter in sorted({p for name in here for p in SUPPLY_PINS.get(name, ())}):
             if spec_has(address, parameter):
                 items.append((f"{address}.{parameter}", spec(address, parameter)[1]))
@@ -1551,6 +1550,31 @@ RAILS = (("3V3", "rail.3v3"), ("5V", "rail.5v"))
 # Symbol libraries whose parts cannot source current into a net.
 PASSIVES = {"Device", "Connector", "Jumper", "TestPoint", "Diode", "Switch"}
 
+def _supply_names(part, address, pad_net, net) -> set:
+    """
+    The supply-pin names this part puts on `net`, as the part really has them.
+
+    Two corrections to what the symbol says, and both matter on this board:
+
+      - **a stand-in's pin is resolved to its real name.** The CAN
+        transceiver borrows the SN65HVD230's symbol, whose pin 5 is that
+        part's `V_REF` where this one's is `V_IO`. `parts.py` has recorded
+        that as `symbol_misnames` for a while and nothing could act on it,
+        because the record lived beside the PartSpec and the rail sum reads
+        the netlist. The build writes it into `design.json` now, so the
+        300 uA this part draws on its I/O supply lands on the rail that
+        carries it instead of on none;
+      - **underscores are dropped**, so `V_IO` and `VIO` are one name. That
+        is a normalisation and not an alias table: checked across every
+        symbol on this board, ninety-two pin names contain an underscore and
+        not one of them becomes a different `SUPPLY_PINS` key by losing it.
+    """
+    names = dict(symbol_pin_names(part["symbol"]))
+    names.update(part.get("misnames", {}))
+    return {name.upper().replace("_", "") for pad, name in names.items()
+            if pad_net.get((address, str(pad))) == net}
+
+
 # Which declared parameter belongs to which supply pin. Not a table of values -
 # a part states its own current; this says which of a multi-supply part's pins
 # that current comes out of, which the symbol alone cannot say.
@@ -1743,8 +1767,7 @@ def test_each_rail_carries_no_more_than_it_is_budgeted(
             # per *part*, not per pin - the MCU has fourteen VDD pads and one
             # 500 mA - so each parameter is counted once, on the rail the pin
             # that carries it sits on.
-            here = {name.upper() for pad, name in symbol_pin_names(part["symbol"]).items()
-                    if pad_net.get((address, str(pad))) == net}
+            here = _supply_names(part, address, pad_net, net)
             if not here:
                 continue
             wanted = {parameter for name in here for parameter in SUPPLY_PINS.get(name, ())}
