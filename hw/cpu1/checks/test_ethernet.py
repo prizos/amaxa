@@ -606,118 +606,203 @@ def test_the_pairs_arrive_together_enough(spec, stack, lengths, pcb_text):
         )
 
 
-def test_the_rmii_bus_arrives_with_its_own_clock(spec, stack, lengths, pcb_text, design):
+def test_the_rmii_bus_closes_its_timing_budget(spec, stack, lengths, pcb_text, design):
     """
-    Nine single-ended signals at 50 MHz, and how far each lands from the clock
-    that samples it.
+    Nine single-ended signals at 50 MHz, and whether the bus actually works.
 
-    **This block had twenty-one checks and none of them was about the RMII.**
-    The two differential pairs to the jack are checked for impedance, for
-    coupling, for skew, for what runs beside them and for what plane returns
-    them. The bus that feeds those pairs - REF_CLK, RXD[1:0], CRS_DV,
-    TXD[1:0], TX_EN, MDC, MDIO - was checked for being wired to the right
-    pins and for nothing else, and it is the only 50 MHz bus on the board.
+    **The previous version of this check measured the wrong quantity.** It
+    took the difference between each line's length and the clock's, held that
+    to a window, and reported 0.31 % of a period. That is the right quantity
+    for the receive path and the wrong one for the transmit path, and the
+    transmit path is the one with no margin.
 
-    What is asserted is the copper's share of the timing and not the timing:
-    closing the real budget needs the MCU's own RMII output delay and setup
-    window, and the pages of ST's datasheet vendored here do not state them.
-    The board's copper contributes skew between a data line and the clock
-    edge that latches it, and that share is what the board controls.
+    The PHY sources REF_CLK out of its `nINT/REFCLKO` pin. So the clock
+    travels PHY to MCU and the transmit data travels MCU to PHY, and at the
+    PHY's own sampling edge the data has taken **the clock's flight time plus
+    the MCU's output delay plus its own flight time**. Those add. A check on
+    their difference can read zero while the sum is two nanoseconds and the
+    bus does not work; this board's difference is 47 ps and its sum is a
+    nanosecond, which is the entire budget.
 
-    `ethernet.rmii_skew_share` is a **ratchet**, in the same sense as
-    `ethernet.coupled_fraction`: this placement achieves 0.31 % of a clock
-    period and the bound is half a per cent, so a change that lets one of the
-    nine wander has to be argued for rather than discovered on a bench.
+    The receive path *is* a difference, because REF_CLK and RXD leave the
+    same pin of the same part and arrive at the same one: the clock's flight
+    time appears on both sides and cancels.
 
-    The datasheet's own figures are declared and printed beside it, so the
-    margin the copper is eating into is visible even though this does not
-    spend it: at 20 ns of period, the PHY's data is valid from 7.0 ns after
-    one edge until 3.0 ns after the next, and it wants 7.5 ns of setup and
-    2.0 of hold on what the MCU sends back. Two nanoseconds of hold is the
-    smallest of those and the one skew subtracts from directly.
+    **What made the old check possible was a missing half of the budget.**
+    Its docstring said "closing the real budget needs the MCU's own RMII
+    output delay and setup window, and the pages of ST's datasheet vendored
+    here do not state them". The second half of that was true and the first
+    half was a conclusion drawn from it: ST states all six figures in Table
+    111 of the same document every other number on this part came from, two
+    pages from a table already cropped for the analog pins. The right move
+    was to vendor the page. See `LQFP144/evidence/rmii_timing.png`.
+
+    Four ends, each derived from two datasheets and this board's copper:
+
+      - **transmit setup** - `t_clk + td(TXD) + t_data` against a period less
+        the PHY's setup. 11.5 + 7.5 of 20 leaves **one nanosecond** for both
+        pieces of copper together, and this is the binding constraint on the
+        whole bus;
+      - **transmit hold** - the same sum at the MCU's *minimum* delay, which
+        has to clear the PHY's hold;
+      - **receive setup** - the PHY's `toval` plus the length difference,
+        against a period less the MCU's setup;
+      - **receive hold** - the PHY's `toinvld` plus the difference, against
+        the MCU's hold. `toinvld` is 3.0 ns and `tih(RXD)` is 3.0 ns, so the
+        margin here is exactly the amount by which RXD is *longer* than the
+        clock - a data line shorter than the clock fails, whatever else is
+        true.
+
+    **One condition on all of this that no check can enforce.** Table 111 is
+    measured at `OSPEEDRy[1:0] = 10` with a 20 pF load. At the reset default
+    ST does not specify the delay at all, and the documented symptom is CRC
+    errors at the PHY. Nothing on the board sets OSPEEDR; the pin map records
+    it as a firmware constraint, beside the Hall pins' own.
     """
     phy = next((address for address, part in design["parts"].items()
                 if part["symbol"].startswith("Interface_Ethernet:")), None)
     assert phy, "no Ethernet PHY on this board, and this check is about its bus"
+    mcu = next((address for address, part in design["parts"].items()
+                if part["symbol"].startswith("MCU_ST_")), None)
+    assert mcu, "no MCU on this board, and half this budget is its"
 
     _, period = spec(phy, "rmii_clock_period")
-    _, share = spec("ethernet", "rmii_skew_share")
-    hold, _ = spec(phy, "rmii_hold_min")
-    valid, _ = spec(phy, "rmii_output_valid_max")
-    setup, _ = spec(phy, "rmii_setup_min")
+    toval, _ = spec(phy, "rmii_output_valid_max")
+    toinvld, _ = spec(phy, "rmii_output_invalid_min")
+    phy_setup, _ = spec(phy, "rmii_setup_min")
+    phy_hold, _ = spec(phy, "rmii_hold_min")
 
-    # **Two paths, two windows, and they are checked separately.** This took
-    # the smaller of the two and held everything to it, which made the receive
-    # window dead: the transmit one is always tighter, so the receive figures
-    # were read, put in a message and compared against nothing. The board's
-    # own mutation tester found that, which is the exact failure
-    # `tools/mutate.py` exists to catch, committed the same day.
-    #
-    # `toinvld` came out of `parts.py` entirely for the same reason: it only
-    # widens the receive window and this board is two hundred times inside it,
-    # so no value of it decides anything. The window below is a period less
-    # `toval` alone, which is the conservative reading of the same table.
-    #
-    # They are different paths. The PHY drives RXD and CRS_DV and the MCU
-    # samples them; the MCU drives TXD and TX_EN and the PHY samples those.
-    # Each has its own skew and its own window, so each is held to its own.
-    #
-    # Neither is this board's whole budget - the MCU's share is missing from
-    # both, because ST does not state it in the pages vendored here - but skew
-    # larger than a window is not a tight budget, it is a bus that cannot work.
-    paths = {
-        "receive": (["ETH_RXD0", "ETH_RXD1", "ETH_CRS_DV"],
-                    period - valid,
-                    "a period less the toval the PHY takes to drive RXD"),
-        "transmit": (["ETH_TXD0", "ETH_TXD1", "ETH_TX_EN"],
-                     period - setup - hold,
-                     "what a period leaves once the PHY's own setup and hold "
-                     "are taken out of it"),
-    }
+    txd_max, _ = spec(mcu, "rmii_transmit_data_delay_max")
+    txd_min, _ = spec(mcu, "rmii_transmit_data_delay_min")
+    txen_max, _ = spec(mcu, "rmii_transmit_enable_delay_max")
+    rxd_setup, _ = spec(mcu, "rmii_receive_setup_min")
+    rxd_hold, _ = spec(mcu, "rmii_receive_hold_min")
+    crs_setup, _ = spec(mcu, "rmii_carrier_setup_min")
+    crs_hold, _ = spec(mcu, "rmii_carrier_hold_min")
 
     clock = "ETH_REF_CLK"
-    assert clock in lengths, f"{clock} has no copper"
     # MDC and MDIO are left out on purpose: the management interface is its
     # own clock at 2.5 MHz and is not sampled against this one.
-    missing = [net for nets, _, _ in paths.values() for net in nets
-               if net not in lengths]
+    bus = ("ETH_TXD0", "ETH_TXD1", "ETH_TX_EN",
+           "ETH_RXD0", "ETH_RXD1", "ETH_CRS_DV")
+    missing = [net for net in (clock, *bus) if net not in lengths]
     assert not missing, f"no copper on {missing}"
 
     width = pairs.controlled_width(pairs.tracks_of(pcb_text, (clock,)))
     per_mm = pairs.delay_per_mm(stack, width)
+    flight = {net: lengths[net] * per_mm for net in (clock, *bus)}
+    t_clk = flight[clock]
 
-    overall_net, overall = None, 0.0
-    for direction, (nets, window, why) in sorted(paths.items()):
-        net = max(nets, key=lambda n: abs(lengths[n] - lengths[clock]))
-        gap = abs(lengths[net] - lengths[clock])
-        skew = gap * per_mm
-        if skew > overall:
-            overall_net, overall = net, skew
+    # Each end of each path, as a margin in seconds. Positive is slack.
+    #
+    # The transmit rows carry the *sum* and the receive rows the difference,
+    # which is the whole substance of this check. Writing them the same shape
+    # would be writing the bug back in.
+    ends = []
+    for net, delay_max, delay_min in (("ETH_TXD0", txd_max, txd_min),
+                                      ("ETH_TXD1", txd_max, txd_min),
+                                      ("ETH_TX_EN", txen_max, txd_min)):
+        together = t_clk + flight[net]
+        ends.append((
+            net, "transmit setup",
+            period - phy_setup - delay_max - together,
+            f"the clock's {t_clk * 1e12:.0f} ps out and this line's "
+            f"{flight[net] * 1e12:.0f} ps back are {together * 1e12:.0f} ps "
+            f"of copper, on top of the MCU's {delay_max * 1e9:g} ns of output "
+            f"delay, against a {period * 1e9:g} ns period less the PHY's "
+            f"{phy_setup * 1e9:g} ns of setup"))
+        ends.append((
+            net, "transmit hold",
+            together + delay_min - phy_hold,
+            f"the MCU holds it for {delay_min * 1e9:g} ns plus "
+            f"{together * 1e12:.0f} ps of copper, against the PHY's "
+            f"{phy_hold * 1e9:g} ns of hold"))
+    for net, setup, hold in (("ETH_RXD0", rxd_setup, rxd_hold),
+                             ("ETH_RXD1", rxd_setup, rxd_hold),
+                             ("ETH_CRS_DV", crs_setup, crs_hold)):
+        apart = flight[net] - t_clk
+        ends.append((
+            net, "receive setup",
+            period - setup - toval - apart,
+            f"the PHY takes {toval * 1e9:g} ns to drive it and it lands "
+            f"{apart * 1e12:+.0f} ps after the clock, against a "
+            f"{period * 1e9:g} ns period less the MCU's {setup * 1e9:g} ns "
+            f"of setup"))
+        ends.append((
+            net, "receive hold",
+            toinvld + apart - hold,
+            f"the PHY holds it {toinvld * 1e9:g} ns past the next edge and it "
+            f"lands {apart * 1e12:+.0f} ps after the clock, against the MCU's "
+            f"{hold * 1e9:g} ns of hold"))
 
-        print(f"    RMII {direction}: {net} is {gap:.1f} mm from {clock}, "
-              f"{skew * 1e12:.0f} ps, {skew / period:.3%} of a "
-              f"{period * 1e9:g} ns period; its window is {window * 1e9:.1f} ns")
+    for net, end, margin, why in ends:
+        print(f"    RMII {end:15s} {net:12s} {margin * 1e12:+8.0f} ps")
 
-        # The physical bound, per path, because it is the one that is not a
-        # judgement: whatever the MCU adds, the copper alone cannot be allowed
-        # to eat a window the datasheet states.
-        assert skew < window, (
-            f"{net} is {skew * 1e12:.0f} ps from {clock} and the {direction} "
-            f"window is {window * 1e9:.1f} ns - {why}. The MCU's own share is "
-            f"on top of this and is not stated in the pages vendored here, so "
-            f"a bus this skewed does not have a tight budget, it has none."
-        )
-
-    # And the ratchet, on the worst of the two.
-    assert overall <= share * period, (
-        f"{overall_net} is {abs(lengths[overall_net] - lengths[clock]):.1f} mm "
-        f"from {clock}, which is {overall * 1e12:.0f} ps - "
-        f"{overall / period:.2%} of a {period * 1e9:g} ns clock period, over "
-        f"the {share:.1%} this board holds itself to. The bound is a ratchet "
-        f"on the placement and not a timing budget; the timing it eats into "
-        f"is {hold * 1e9:g} ns of hold at the PHY, the smallest number in "
-        f"Table 5.12."
+    tight = sorted((margin, net, end, why) for net, end, margin, why in ends
+                   if margin < 0.0)
+    assert not tight, (
+        "RMII budget ends this board does not meet:\n"
+        + "\n".join(f"  {net} {end}: {margin * 1e12:.0f} ps short - {why}."
+                    for margin, net, end, why in tight)
+        + "\nThe clock is sourced by the PHY, so transmit costs the clock's "
+        "flight time and the data's together and shortening either one buys "
+        "the same amount."
     )
+
+    # And the ratchet the old check was, kept for what a budget does not do:
+    # it fails on a change that has not yet become a violation.
+    _, share = spec("ethernet", "rmii_skew_share")
+    worst = max(bus, key=lambda net: abs(flight[net] - t_clk))
+    skew = abs(flight[worst] - t_clk)
+    assert skew <= share * period, (
+        f"{worst} is {abs(lengths[worst] - lengths[clock]):.1f} mm from "
+        f"{clock}, which is {skew * 1e12:.0f} ps - {skew / period:.2%} of a "
+        f"{period * 1e9:g} ns clock period, over the {share:.1%} this board "
+        f"holds itself to. This is a ratchet on the placement and not the "
+        f"budget above; it exists to fail before the budget does."
+    )
+
+
+def test_the_rmii_lines_stay_inside_the_load_their_timing_was_measured_at(
+    spec, design, board_capacitance
+):
+    """
+    Every figure in the budget above is quoted into 20 pF. This is the copper.
+
+    ST states Table 111 at a capacitive load of 20 pF, and the PHY's own
+    Table 5.12 carries the note "timing was designed for system load between
+    10 pf and 25 pf". Neither part says what its delay becomes outside that,
+    so a bus loaded past it is a bus whose timing is not specified - and the
+    budget above would go on passing, because it reads the figures and not
+    the conditions they were taken under.
+
+    What the board contributes is measured: `build/copper.json` is written by
+    the layout from the routed tracks and pads against the stackup, the same
+    file the trip chain's deck draws its bus capacitance from.
+
+    The pin at each end is not in this and cannot be: neither datasheet gives
+    an RMII input capacitance. So what is asserted is the copper alone
+    against the stated load, and the headroom left over is what the two pins
+    have to fit in - stated in the message, so a reader can see how much of
+    the 20 pF is already spent.
+    """
+    mcu = next((address for address, part in design["parts"].items()
+                if part["symbol"].startswith("MCU_ST_")), None)
+    assert mcu, "no MCU on this board"
+    reference, _ = spec(mcu, "rmii_load_reference")
+
+    bus = ("ETH_REF_CLK", "ETH_TXD0", "ETH_TXD1", "ETH_TX_EN",
+           "ETH_RXD0", "ETH_RXD1", "ETH_CRS_DV")
+    loaded = {net: board_capacitance(net) for net in bus}
+    worst = max(loaded, key=loaded.get)
+    assert loaded[worst] < reference, (
+        f"{worst} carries {loaded[worst] * 1e12:.1f} pF of copper against the "
+        f"{reference * 1e12:g} pF both datasheets state their RMII timing "
+        f"into, so the delays the budget is built from do not apply to it."
+    )
+    print(f"    RMII worst copper load: {worst} {loaded[worst] * 1e12:.1f} pF "
+          f"of {reference * 1e12:g}, leaving "
+          f"{(reference - loaded[worst]) * 1e12:.1f} pF for the two pins")
 
 
 def test_the_centre_taps_sit_where_the_transmitter_can_use_them(

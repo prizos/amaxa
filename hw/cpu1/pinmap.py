@@ -78,6 +78,20 @@ PINS = [
              "boots unable to receive CAN, not merely unable to transmit. "
              "Drive it low before expecting a frame"),
     Pin("PA1", "ETH_REF_CLK", "ETH_REF_CLK", note="50 MHz from the PHY"),
+    # **The three transmit pins must be configured at OSPEEDR[1:0] = 10, and
+    # nothing on the board can make that true.**
+    #
+    # ST states Table 111's RMII figures at that setting with a 20 pF load,
+    # and `td(TXD)` max 11.5 ns is what the transmit budget is built from.
+    # At the reset default the delay is not specified at all - there is no
+    # slower number to fall back to, only an unspecified one - and the
+    # documented symptom of leaving it there is CRC errors at the PHY.
+    #
+    # It is the same species of constraint as the Hall inputs below: a thing
+    # the copper cannot hold and firmware has to. The difference is that the
+    # Hall pins fail obviously and this fails as a link that mostly works.
+    # `test_the_rmii_bus_closes_its_timing_budget` is built on the 11.5 ns
+    # and says so; see LQFP144/evidence/rmii_conditions.png.
     Pin("PA2", "ETH_MDIO", "ETH_MDIO"),
     Pin("PC1", "ETH_MDC", "ETH_MDC"),
     Pin("PA7", "ETH_CRS_DV", "ETH_CRS_DV"),

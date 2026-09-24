@@ -19,7 +19,7 @@ BLOCKING: dict[str, str] = {
 }
 
 # Checks that must actually run for this board, common and board-specific.
-EXPECTED_CHECKS = 213
+EXPECTED_CHECKS = 214
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
@@ -117,7 +117,8 @@ CONFIRMED_FROM_A_RENDER: dict[str, list[str]] = {
                 "analog_input_absolute_maximum",
                 "analog_input_injection_current",
                 "current_consumption_scheme",
-                "vref_against_vdda"],
+                "vref_against_vdda",
+                "rmii_timing", "rmii_conditions"],
     "MSOP10": ["factory_default", "absolute_maximum"],
     "TSOT23_6": ["uvlo_and_soft_start"],
     "QFN24": ["package_outline", "front_end"],

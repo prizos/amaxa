@@ -54,6 +54,28 @@
     "shows": "Figure 13, Power supply scheme, with each decoupling value against the pin it belongs to: VDD gets N x 100 nF plus one 4.7 uF where N is the package's VDD pin count, VCAP 2 x 2.2 uF, VDDLDO 4.7 uF, VDDA 100 nF + 1 uF, VREF+ 100 nF + 1 uF, and VDD33USB and VDD50USB 100 nF each",
     "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
   },
+  "rmii_conditions": {
+    "assumes": "Nothing on the board sets OSPEEDR. It is a firmware constraint, recorded in the pin map.",
+    "crop": "340,818,1133,345",
+    "document": "ST STM32H742xI/G STM32H743xI/G datasheet, DocID030538 Rev 3",
+    "dpi": 200,
+    "page": 192,
+    "read": "2026-09-24",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "The conditions Table 111 is measured under: output speed set to OSPEEDRy[1:0] = 10, capacitive load C = 20 pF, measurement points at 0.5 VDD. The 11.5 ns td(TXD) maximum is a high-drive figure - at the reset default it is not specified at all, which is the documented cause of RMII CRC errors on this MCU.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
+  "rmii_timing": {
+    "assumes": "",
+    "crop": "340,807,1133,427",
+    "document": "ST STM32H742xI/G STM32H743xI/G datasheet, DocID030538 Rev 3",
+    "dpi": 200,
+    "page": 193,
+    "read": "2026-09-24",
+    "sha256": "3c2bc223086eab8b726d3c77e86ec67df3b7a6efbdb8a5fe071673da642c7e2b",
+    "shows": "Table 111, Dynamics characteristics: Ethernet MAC signals for RMII. td(TXD) transmit data valid delay 7 / 7.5 / 11.5 ns, td(TXEN) 4 / 4.5 / 7, tsu(RXD) 2 ns minimum, tih(RXD) 3 ns minimum, tsu(CRS) 2.5, tih(CRS) 2. Guaranteed by characterization results. These are the MCU's half of the RMII budget, which this board's RMII check said ST does not state.",
+    "url": "https://datasheet.lcsc.com/datasheet/pdf/1d386575094f3fdfd287263ac6c5715f.pdf"
+  },
   "thermal_characteristics": {
     "assumes": "",
     "crop": "260,700,1400,560",

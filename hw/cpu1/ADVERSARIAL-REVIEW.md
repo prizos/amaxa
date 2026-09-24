@@ -17,7 +17,7 @@ Two denominators matter, and they give different answers, which is itself the
 finding.
 
 **The 206 checks**, counted by what each one actually reads. The suite is
-**213** now; the seven added since were not re-classified, so the denominator
+**214** now; the eight added since were not re-classified, so the denominator
 below is the one the classification was done against:
 
 | | | |

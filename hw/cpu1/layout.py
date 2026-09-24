@@ -3295,9 +3295,9 @@ def _gate_enable() -> None:
 ETH_STEP = (-3.5, -5.0)         # where the inner lanes step north, clear of
                                 # the two supply vias beside pin 131
 ETH_NORTH = (
-    ("ETH_TX_EN", -6.8, -7.8, -21.05, -24.2, -45.9, "eth.phy:16"),
-    ("ETH_TXD0", -7.3, -8.3, -20.4, -24.75, -46.2, "eth.phy:17"),
-    ("ETH_TXD1", -7.8, -8.8, -19.75, -25.3, -46.5, "eth.phy:18"),
+    ("ETH_TX_EN", -6.8, -7.8, -21.05, -24.05, -45.9, "eth.phy:16"),
+    ("ETH_TXD0", -7.3, -8.3, -20.4, -24.6, -46.2, "eth.phy:17"),
+    ("ETH_TXD1", -7.8, -8.8, -19.75, -25.15, -46.5, "eth.phy:18"),
 )
 
 # The reset line does not go under the package. It is the one signal here that
@@ -3407,7 +3407,7 @@ ETH_WEST_IN = {
     "ETH_REF_CLK": ((-11.7, 8.25), ()),
 }
 ETH_WEST_COLUMN = {"ETH_MDIO": -18.6, "ETH_MDC": -19.6, "ETH_REF_CLK": -20.2}
-ETH_WEST_STRIP = {"ETH_MDIO": 19.4, "ETH_MDC": 18.9, "ETH_REF_CLK": 18.4}
+ETH_WEST_STRIP = {"ETH_MDIO": 19.4, "ETH_MDC": 18.9, "ETH_REF_CLK": 17.5}
 # The management line's pull-up sits on the column it climbs out of the
 # package on, forty millimetres from the PHY: a bus pull-up is a DC term and
 # does not care, and every millimetre nearer the PHY is inside the fan.

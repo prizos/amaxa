@@ -102,6 +102,44 @@ MCU_H743 = PartSpec(
         # reading the junction limit off the wrong table.
         "power_dissipation_at_reference_ambient": exact(0.915),
         "power_dissipation_reference_ambient": exact(85.0),
+        # **The MCU's half of the RMII budget, which the RMII check said ST
+        # does not state.** It does: Table 111 on page 193, in the same
+        # document every other figure on this part came out of. What was true
+        # is that the *pages vendored here* did not carry it, and the check
+        # wrote that down as a property of the datasheet. See the crop in
+        # LQFP144/evidence/rmii_timing.png.
+        #
+        # td(TXD) is the one that decides this board. The PHY sources REF_CLK,
+        # so the clock travels PHY to MCU and the transmit data travels MCU to
+        # PHY: at the PHY's next sampling edge the data has taken the clock's
+        # flight time *plus* this delay *plus* its own flight time. 11.5 ns of
+        # a 20 ns period, against the PHY's 7.5 ns of setup, leaves one
+        # nanosecond for both pieces of copper together.
+        #
+        # **And 11.5 ns is a high-drive figure.** Table 111 is measured at
+        # OSPEEDRy[1:0] = 10 with a 20 pF load - see rmii_conditions.png. At
+        # the reset default the delay is not specified at all, and the
+        # documented symptom is CRC errors at the PHY. Nothing on this board
+        # sets OSPEEDR; it is a firmware constraint and the pin map carries
+        # it.
+        "rmii_transmit_data_delay_max": exact(11.5e-9),
+        "rmii_transmit_data_delay_min": exact(7.0e-9),
+        "rmii_transmit_enable_delay_max": exact(7.0e-9),
+        "rmii_receive_setup_min": exact(2.0e-9),
+        "rmii_receive_hold_min": exact(3.0e-9),
+        # The carrier-sense pair. Its setup is half a nanosecond worse than
+        # RXD's and its hold a nanosecond better, so neither is the binding
+        # one on either end - it is declared because CRS_DV is one of the
+        # three lines the receive path is checked over and holding it to
+        # RXD's window would be holding it to the wrong number.
+        "rmii_carrier_setup_min": exact(2.5e-9),
+        "rmii_carrier_hold_min": exact(2.0e-9),
+        # What Table 111 was measured into, and what the board must not
+        # exceed for it to apply. The PHY's own table says the same thing
+        # from the other side - "timing was designed for system load between
+        # 10 pF and 25 pF" - so 20 pF is inside both and is the figure the
+        # copper is held to.
+        "rmii_load_reference": exact(20e-12),
     },
 )
 
@@ -1267,13 +1305,17 @@ ETH_PHY = PartSpec(
         # mode this board uses:
         "rmii_clock_period": exact(20e-9),            # tclkp, 50 MHz
         "rmii_output_valid_max": exact(7.0e-9),       # toval, PHY drives RXD
-        # `toinvld`, 3.0 ns, is **deliberately not declared.** It only widens
-        # the receive window - the PHY's data stays good that long past the
-        # next edge - and this board's skew is two hundred times inside that
-        # window either way, so no value of it changes any answer. Declared
-        # and read, it was a figure sitting in a message: `make mutate` said
-        # so, which is what that tool is for. The window is computed without
-        # it, which is the conservative reading of the same table.
+        # **`toinvld` was withdrawn, and it is back, because the thing that
+        # made it unable to fail was the missing half of the budget.** It was
+        # declared, read into a receive window the board was two hundred
+        # times inside, and removed when `make mutate` reported that no value
+        # of it changed an answer. That was correct about the check and wrong
+        # about the part: the receive window was open at the hold end only
+        # because the MCU's own `tih(RXD)` was not declared either. It is now
+        # - 3.0 ns, Table 111 - and the hold check is `toinvld` against it,
+        # with the copper's skew in between. 3.0 against 3.0 leaves the skew
+        # exactly nothing, which is the finding, not a rounding.
+        "rmii_output_invalid_min": exact(3.0e-9),     # toinvld, RXD holds this long
         "rmii_setup_min": exact(7.5e-9),              # tsu, PHY samples TXD
         "rmii_hold_min": exact(2.0e-9),               # tihold
         # **A typical, because the datasheet has no maximum.** Table 5.5,

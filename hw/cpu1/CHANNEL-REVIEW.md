@@ -11,8 +11,11 @@ declared, a number typed rather than derived, and a feature with no check at
 all. Datasheets were re-read where a claim rested on one.
 
 **Seven findings, all fixed in `9b3e7f6` except where marked open**, plus an
-eighth in `23f4a92` and two more from a second pass over the same ground. The
-board's own mutation tester was run afterwards and its result is at the end.
+eighth in `23f4a92` and three more from a second pass over the same ground.
+The eleventh is the one that mattered: a check that measured the wrong
+quantity on the only 50 MHz bus on the board, and a budget that turned out to
+have **nine picoseconds of margin in a thousand**. The board's own mutation
+tester was run afterwards and its result is at the end.
 
 ---
 
@@ -29,6 +32,7 @@ board's own mutation tester was run afterwards and its result is at the end.
 | 7 | **Simulation** | A deck's values come from the build; its topology is typed | narrowed |
 | 9 | **Trip / thresholds** | The error budget counted two figures stated at 25 °C and never their drift | fixed |
 | 10 | **Routing** | The board declared a clearance margin and wrote no rule enforcing it | fixed |
+| 11 | **Ethernet** | The RMII check measured the difference between clock and data where the transmit path is limited by their **sum**; the board was over budget | fixed |
 
 ---
 
@@ -259,6 +263,69 @@ fails a check instead of sitting in a review.
 
 ---
 
+## 11. The clock goes one way and the data goes the other
+
+The RMII is the only 50 MHz bus on this board and until the last pass it had
+no timing check at all. The one added then measured **the difference** between
+each line's length and the clock's — 47 ps, 0.24 % of a period — and held it
+to a window. That is the right quantity for the receive path and the wrong one
+for transmit, and transmit is the path with no margin.
+
+The PHY sources REF_CLK out of its `nINT/REFCLKO` pin. So the clock travels
+PHY → MCU and the transmit data travels MCU → PHY, and at the PHY's own
+sampling edge the data has taken **the clock's flight time plus the MCU's
+output delay plus its own flight time**. Those add. A check on their
+difference can read zero while the sum is two nanoseconds and the bus does not
+work.
+
+**What made the wrong check possible was a missing half of the budget.** Its
+docstring said closing the real one "needs the MCU's own RMII output delay and
+setup window, and the pages of ST's datasheet vendored here do not state
+them". The second clause was true and the first was a conclusion drawn from
+it. ST states all six figures in Table 111, page 193 — the same document, two
+pages from a table already cropped for the analog pins. The fix was to vendor
+the page, not to narrow the check.
+
+With both halves present the arithmetic is unforgiving:
+
+| | |
+|---|---|
+| RMII period | 20.0 ns |
+| MCU `td(TXD)` maximum | 11.5 ns |
+| PHY `tsu` minimum | 7.5 ns |
+| **left for the clock's copper and the data's, together** | **1.0 ns** |
+| what the board had | 1.004 ns |
+
+**The board was over its transmit budget by four picoseconds, and no check on
+it could ever have said so.** Both parts sit at the pessimistic end of the
+RMII envelope, and 19 of the 20 ns are gone before any copper is drawn.
+
+Fixed by taking 1.6 mm off the clock's detour south of the analog header and
+0.15 mm off each transmit lane — the most the geometry allows, bounded by a
+`VREF+` track crossing the strip on the back layer and by the PHY reset line's
+own crossing. The margin is now **+9 ps of 1000**, which is not comfort; it is
+the finding restated. Real margin needs the PHY nearer the MCU or REF_CLK-In
+mode with an oscillator, and both are spin-2.
+
+Two more things came out of it:
+
+- **`toinvld` is back.** It was declared, read into a receive window the board
+  was two hundred times inside, and withdrawn when `make mutate` reported that
+  no value of it changed an answer. That was right about the check and wrong
+  about the part: the receive window was open at the hold end only because the
+  MCU's own `tih(RXD)` was not declared either. Both are now, they are 3.0 ns
+  each, and the margin between them is exactly how much longer RXD is than the
+  clock — 51 ps. Setting `toinvld` to 2.9 fails the check.
+- **A firmware constraint nothing could hold.** Table 111 is measured at
+  `OSPEEDRy[1:0] = 10` with a 20 pF load. At the reset default ST does not
+  specify the delay at all — not a slower number, an absent one — and the
+  documented symptom is CRC errors at the PHY. The pin map records it beside
+  the Hall inputs' own, and a second check holds the copper to the 20 pF the
+  figures were taken into: the worst RMII net carries 7.9 pF, leaving 12.1 for
+  the two pins.
+
+---
+
 ## Channel by channel
 
 What each one has, and what it still does not.
@@ -269,7 +336,7 @@ What each one has, and what it still does not.
 | **Trip / thresholds** | 18 checks; the error budget derived and printed at 7.46 % of 12 | the DAC's settling time is not declared and the deck treats it as ideal |
 | **ADC / measurement** | 10 checks, two decks, both corners of the band | — |
 | **Power** | 31 checks, a sequencing deck, every rail summed off the netlist | no control loop is simulated; inrush and brown-out are prose |
-| **Ethernet** | 22 checks including the new RMII one | the MCU's own RMII timing is not vendored, so the budget is half-closed |
+| **Ethernet** | 23 checks; the RMII budget closed at both ends from both datasheets | nothing found this pass, and the transmit margin is 9 ps of 1000 |
 | **USB** | 12 checks — one pair, thoroughly | — |
 | **CAN / RS-485** | 14 checks after this pass | the V_IO current is out of the rail sum, disclosed with its magnitude |
 | **MCU core** | 15 checks — crystals, VCAP, decoupling, reset, thermal | — |
