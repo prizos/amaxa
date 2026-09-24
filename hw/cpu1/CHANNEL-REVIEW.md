@@ -11,8 +11,8 @@ declared, a number typed rather than derived, and a feature with no check at
 all. Datasheets were re-read where a claim rested on one.
 
 **Seven findings, all fixed in `9b3e7f6` except where marked open**, plus an
-eighth in `23f4a92`. The board's own mutation tester was run afterwards and
-its result is at the end.
+eighth in `23f4a92` and two more from a second pass over the same ground. The
+board's own mutation tester was run afterwards and its result is at the end.
 
 ---
 
@@ -27,6 +27,8 @@ its result is at the end.
 | 5 | **CAN / symbols** | The netlist reports a part driving the 3V3 rail, because a stand-in symbol types a supply input as an output | fixed |
 | 6 | **Ethernet** | The RMII — nine single-ended signals at 50 MHz — had no timing or length check | fixed |
 | 7 | **Simulation** | A deck's values come from the build; its topology is typed | narrowed |
+| 9 | **Trip / thresholds** | The error budget counted two figures stated at 25 °C and never their drift | fixed |
+| 10 | **Routing** | The board declared a clearance margin and wrote no rule enforcing it | fixed |
 
 ---
 
@@ -226,6 +228,37 @@ nothing but a reader's attention connects `trip_clear.cir.in`'s three RCs or
 
 ---
 
+## 10. The margin that was declared and then enforced by nothing
+
+`routing.clearance_over_floor` has been declared since the board was drawn,
+and until this pass **nothing ever asked DRC for it**. `rules.kicad_dru` had
+track widths, via sizes and a hole floor, and no clearance rule at all — so
+DRC fell back to the fabricator's 0.100 mm, the board passed, and the one
+check that measured clearance — `test_nothing_sits_on_the_fabricators_floor`
+— walked vias and track segments and never looked at a pad.
+
+Three reviews listed the consequence — thirteen places between 0.100 and
+0.117 mm, every one involving a pad — and each of them listed it again rather
+than fixing it, because the finding as written had no owner: it named a
+number without saying whether the number was reachable.
+
+It was not, quite. Four of the thirteen are forced by the package: a
+decoupling capacitor sits on its supply pin's line, the next pin along escapes
+down its own line half a millimetre away, and 0.5 − 0.31 − 0.075 = **0.115**
+is what is left between two parallel lines no matter who places what. So the
+declaration was wrong by 0.005 mm, and the nine that *were* movable had been
+hidden behind it.
+
+Fixed on both sides: `rules.kicad_dru` carries the board's first clearance
+rule, six coordinates in `layout.py` moved, DRC reports **0 violations**
+against the board's own margin rather than the fabricator's, and
+`test_the_clearance_this_board_asks_for_is_one_it_can_reach` derives that
+0.115 from the footprint pitch, the fitted decoupling pad and the narrowest
+track width in the rules file — so a declaration the geometry forbids now
+fails a check instead of sitting in a review.
+
+---
+
 ## Channel by channel
 
 What each one has, and what it still does not.
@@ -233,7 +266,7 @@ What each one has, and what it still does not.
 | Channel | Coverage | What is not checked |
 |---|---|---|
 | **Safety chain** | 30 checks, a transient deck, the 50 ns budget derived five ways | nothing found this pass |
-| **Trip / thresholds** | 18 checks; the error budget derived and printed at 7.06 % of 12 | the DAC's settling time is not declared and the deck treats it as ideal |
+| **Trip / thresholds** | 18 checks; the error budget derived and printed at 7.46 % of 12 | the DAC's settling time is not declared and the deck treats it as ideal |
 | **ADC / measurement** | 10 checks, two decks, both corners of the band | — |
 | **Power** | 31 checks, a sequencing deck, every rail summed off the netlist | no control loop is simulated; inrush and brown-out are prose |
 | **Ethernet** | 22 checks including the new RMII one | the MCU's own RMII timing is not vendored, so the budget is half-closed |
@@ -241,27 +274,23 @@ What each one has, and what it still does not.
 | **CAN / RS-485** | 14 checks after this pass | the V_IO current is out of the rail sum, disclosed with its magnitude |
 | **MCU core** | 15 checks — crystals, VCAP, decoupling, reset, thermal | — |
 | **Headers** | 8 checks; every connector signal now declares its idle | the aux pin and the ideal-diode OR the plan called for are not fitted |
-| **Routing / copper** | 11 checks, DRC clean at the fab floor | **pad-to-track and pad-to-pad clearance**, still |
+| **Routing / copper** | 12 checks, DRC clean at the board's own margin | nothing found this pass |
 | **Encoder / Hall** | idle state now declared | no electrical check at all — no series resistance, no clamp, nothing between the connector and an MCU pin |
 
 ---
 
 ## What is still open
 
-1. **Pad clearance.** DRC is clean against PCBWay's 0.100 mm floor. At this
-   board's own declared 0.120 mm there are **13 violations, 0.100 to
-   0.117 mm, every one involving a pad** — the class no check here measures.
-   Named in `DESIGN-REVIEW.md` §8 and unmoved.
-2. **The aux pin and the ideal-diode OR**, dropped from the plan without a
+1. **The aux pin and the ideal-diode OR**, dropped from the plan without a
    record. Now recorded; whether to fit them is a spin-2 decision.
-3. **A local symbol library**, which would end the stand-in class of problem
+2. **A local symbol library**, which would end the stand-in class of problem
    rather than declaring each instance of it.
-4. **Deck topology**, above.
-5. **Scope-by-what-exists** as a pattern. Two instances were fixed this pass;
+3. **Deck topology**, above.
+4. **Scope-by-what-exists** as a pattern. Two instances were fixed this pass;
    the shape recurs — `assert out` accepts one field bus where the board has
    two, and a fixture keyed on `address.endswith(".transceiver")` cannot see a
    bus whose part is named otherwise.
-6. **The eight floating connector inputs.** Declared now, and still floating.
+5. **The eight floating connector inputs.** Declared now, and still floating.
    A power board that is unfitted leaves eight MCU pins at mid-rail; firmware
    is expected to configure an internal pull before it samples them, and
    nothing enforces that because nothing here can.

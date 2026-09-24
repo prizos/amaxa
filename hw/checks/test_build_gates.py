@@ -146,6 +146,18 @@ def test_every_rule_in_the_dru_file_is_one_kicad_will_apply(board_dir):
 
     So this reads the file the way KiCad's parser does, and requires that what
     comes out is the rules the file appears to contain.
+
+    **A board-wide floor is the one rule that may have no condition**, and it
+    has to be, because that is what makes it board-wide. Every other rule here
+    narrows a constraint to the nets it names - a width rule matching every
+    net would say nothing, which is what this is for - but a `clearance` with
+    no condition is the board's own minimum, above the fabricator's, and cpu1
+    had no such rule at all until an adversarial pass counted the places
+    sitting between the two figures. There were thirteen, in no check and in
+    no rule, because DRC only ever saw PCBWay's floor.
+
+    So the exemption is by constraint and not by name: a rule may drop its
+    condition if what it constrains is `clearance`, and nothing else.
     """
     import re
 
@@ -174,11 +186,16 @@ def test_every_rule_in_the_dru_file_is_one_kicad_will_apply(board_dir):
         f"parses as {len(parsed)}: one of them closes early, and the parts left "
         "outside it are not applied to anything"
     )
+    def constrains(form, what):
+        return any(part[0] == "constraint" and len(part) > 1 and part[1] == what
+                   for part in form[2:] if isinstance(part, list))
+
     incomplete = [
         form[1]
         for form in parsed
-        if not any(part[0] == "condition" for part in form[2:] if isinstance(part, list))
-        or not any(part[0] == "constraint" for part in form[2:] if isinstance(part, list))
+        if not any(part[0] == "constraint" for part in form[2:] if isinstance(part, list))
+        or (not any(part[0] == "condition" for part in form[2:] if isinstance(part, list))
+            and not constrains(form, "clearance"))
     ]
     assert not incomplete, (
         "Rules with no condition or no constraint, which apply to everything or "

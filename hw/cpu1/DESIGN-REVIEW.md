@@ -342,20 +342,20 @@ and scales the output to this rail.
 
 ## 7. What the checks are, and what they are for
 
-206 of them. The distribution is the interesting part:
+213 of them. The distribution is the interesting part:
 
 | file | checks | |
 |---|---|---|
 | `test_power.py` | 31 | rails, converters, ratings, the resistor fault model |
-| `test_safety.py` | 28 | the trip chain end to end |
-| `test_ethernet.py` | 21 | the one block with an external standard to satisfy |
-| `test_trip.py` | 17 | thresholds, the DAC, what a trip is worth |
-| `test_core.py` | 15 | the MCU against its own datasheet |
-| `test_buses.py` | 13 | CAN and RS-485 |
+| `test_safety.py` | 29 | the trip chain end to end |
+| `test_ethernet.py` | 22 | the one block with an external standard to satisfy |
+| `test_core.py` | 19 | the MCU against its own datasheet |
+| `test_trip.py` | 18 | thresholds, the DAC, what a trip is worth |
+| `test_buses.py` | 14 | CAN and RS-485 |
 | `test_usb.py` | 12 | one differential pair, thoroughly |
-| `test_routing.py` | 11 | what the copper does that the netlist cannot say |
+| `test_routing.py` | 12 | what the copper does that the netlist cannot say |
 | `test_adc.py` | 10 | the measurement path |
-| others | 48 | pin map, parts, geometry, build gates |
+| others | 46 | pin map, parts, geometry, build gates |
 
 They are not regression tests. The rule they are written under is that a check
 **derives** what it expects — from the netlist, the routed board, the stackup,
@@ -446,12 +446,28 @@ bound is the jack's own 20.7 mm span), and the pair's plane-reference check
 (every routable layer on this stackup is backed by ground). Both are kept
 because they are the assertions that *would* fail on a different stackup.
 
-**Not covered by anything, and it costs something:** pad-to-track and
-pad-to-pad clearance are measured by no check here — only by DRC, against the
-fabricator's 0.100 mm floor rather than against this board's own 0.120 mm
-target. Raise the DRC rule to 0.120 and **13 violations appear**, 0.100 to
-0.117 mm, every one of them involving a pad. The track-to-track figure above
-is honest and it is not the whole picture.
+**Pad clearance, which this said was covered by nothing, now is.** The board
+declared `routing.clearance_over_floor` and then never wrote a clearance rule,
+so DRC only ever compared against the fabricator's 0.100 mm floor, and the one
+check that measured clearance looked at vias and tracks and never at pads. The
+gap between the two figures was thirteen places, 0.100 to 0.117 mm, every one
+of them involving a pad.
+
+`rules.kicad_dru` now carries the board's first clearance rule and DRC enforces
+the declared margin. Nine of the thirteen moved; the other four did not,
+because they cannot: a decoupling capacitor sits on its supply pin's line and
+the next pin along escapes down its own line 0.5 mm away, so an 0402 pad's
+0.31 mm and a signal's 0.075 mm leave **0.115 mm** between two parallel lines
+whatever anybody places where. The declared margin is 1.15 × the floor rather
+than 1.2 for that reason — the same argument this board already makes about
+the hole floor, where asking for more would be asking the LQFP-144 to have
+coarser pins.
+
+`test_the_clearance_this_board_asks_for_is_one_it_can_reach` now derives that
+0.115 from the footprint pitch in the board file, the fitted decoupling pad,
+and the narrowest track width in the rules file, and rejects any declaration
+the geometry forbids. Set the declaration back to 1.2 and it fails with the
+arithmetic printed.
 
 ---
 

@@ -419,7 +419,7 @@ def _debug() -> None:
             # get past VCAP2's capacitor. That line is a quarter of a
             # millimetre from one of them, and both of them need it now, so it
             # goes down where it is instead.
-            out = p.at(11.9)
+            out = p.at(11.82)
         elif pin == "133":
             # SWO stays on the front until it is clear of the band the four
             # field-bus signals cross in. Where it used to go down, at 12.3 mm,
@@ -1532,7 +1532,7 @@ def _vref_out() -> None:
 # The spare DAC output's test network. Its pin is on the south edge in the
 # middle of the analog fan's own escapes, so it goes inward and out again to
 # the west, where the network now sits.
-DAC_TEST_INWARD, GATE_ENABLE_INWARD = (-7.25, 10.0), (5.5, 7.7)
+DAC_TEST_INWARD, GATE_ENABLE_INWARD = (-7.25, 9.87), (5.5, 7.7)
 DAC_TEST_PATH = (
     (B, [(-10.0, 10.0)]),
     (F, [(-11.2, 10.0)]),                           # over VDDA's own corner
@@ -2163,7 +2163,7 @@ def _sense_routes() -> None:
 # The one wire the whole safety chain hangs off, along the top of the board
 # where the only thing in its way is the RS-485 connector - and it passes north
 # of that too, rather than crossing the pair on its way to it.
-TRIP_BUS, TRIP_BUS_EAST = -49.5, 20.5
+TRIP_BUS, TRIP_BUS_EAST = -49.5, 20.55
 
 # From the pull-up to the latch is the length of the board, and the front of
 # that column belongs to the package's own escapes. It goes on the back.
@@ -2333,7 +2333,7 @@ PWM_BEHIND = (
     # signals to leave the package through. The first one stays where it is:
     # its line runs behind the two indicator LEDs, and on the front it would
     # bridge the mask to their pads.
-    ("PWM2_A_HIGH", (11.9, -2.75), 19.8, (23.0, 1.875)),
+    ("PWM2_A_HIGH", (11.82, -2.75), 19.8, (23.0, 1.875)),
     ("PWM2_B_HIGH", (18.6, -3.25), 20.6, (24.0, 1.225)),
     ("PWM2_C_HIGH", (19.4, -3.75), 21.4, (23.0, 0.575)),
     ("PWM2_CH4", (20.2, -4.25), 22.2, (24.0, -0.075)),
@@ -2453,7 +2453,7 @@ def _tripped() -> None:
 # that step already on the front and simply carries on, which saves it a via
 # and, more to the point, saves the via from standing in another net's way.
 SAFETY_STEP = (13.7, 14.7)
-SAFETY_STEP_END = 15.5
+SAFETY_STEP_END = 15.44
 
 
 
@@ -2533,7 +2533,7 @@ def _safety_signals() -> None:
     width = _width_for("PWM_ENABLE_N", SIGNAL)
     ROUTES.append(("PWM_ENABLE_N", width, F,
                    [(12.7, 12.4), (22.6, 12.4), "safety.buffer1:1"]))
-    under = (14.5, -0.65)
+    under = (14.56, -0.59)
     path("PWM_ENABLE_N", width, [
         (B, [(12.7, 1.1), under]),
         (F, [under, (20.0, -0.65), "safety.buffer2:1"]),

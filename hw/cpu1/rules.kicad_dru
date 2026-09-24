@@ -4,6 +4,23 @@
 # Net names are matched with KiCad's * wildcard, grouped by what the nets carry;
 # a rule matching every net would say nothing, and a check rejects one.
 
+# **The clearance this board holds itself to, above the fabricator's floor.**
+#
+# The fab file says of its own numbers that "these are the fabricator's floor,
+# not a design target", and that intent belongs here. Until this rule existed
+# nothing acted on that: DRC compared every gap against PCBWay's 0.1 mm and
+# passed, and `routing.clearance_over_floor` - the board's own declared margin
+# - was read only by a check that measures vias and tracks. Pads were in no
+# check and in no rule, and thirteen places on this board sat between the two
+# figures.
+#
+# 0.115 mm is `routing.clearance_over_floor` at its low end times that 0.1 mm
+# floor, and `test_the_board_holds_itself_above_the_fabricators_floor` asserts
+# that this number is still that product, so the two cannot drift.
+(rule "board clearance"
+	(constraint clearance (min 0.115mm))
+	(severity error))
+
 # The logic rail and ground carry the MCU's whole supply current.
 (rule "supply rails"
 	(condition "A.NetName == '3V3' || A.NetName == 'GND'")

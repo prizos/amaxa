@@ -16,7 +16,9 @@ count, it says so.
 Two denominators matter, and they give different answers, which is itself the
 finding.
 
-**The 206 checks**, counted by what each one actually reads:
+**The 206 checks**, counted by what each one actually reads. The suite is
+**213** now; the seven added since were not re-classified, so the denominator
+below is the one the classification was done against:
 
 | | | |
 |---|---|---|
@@ -25,7 +27,7 @@ finding.
 | assert structure only — this is wired to that, this exists | **72** | 35 % |
 
 **The 843 declared values** the checks compare against, counted by where the
-number came from:
+number came from. That figure is **874** now, for the same reason:
 
 | | | |
 |---|---|---|
@@ -221,7 +223,10 @@ and its supply was 3V3 — while every channel the ADCs convert is ratiometric
 to VREF+. Thresholds and measurements were scaled by two different numbers.
 The DAC's supply is VREF+ now, its I²C pull-ups with it (Microchip's absolute
 maximum is VDD + 0.3 V, and a bus on the logic rail would have been 171 mV
-outside it), and the budget is **7.06 % of 12** instead of 11.46 %. It cost
+outside it), and the budget is **7.46 % of 12** instead of 11.46 % — 7.06 %
+when this was written, before two drift terms were added that it had missed
+by counting figures stated at 25 °C and not their temperature coefficients.
+It cost
 7.74 mA of the reference's 12.9 mA and 0.77 mV of load regulation, both now
 derived and checked; the old part note had rejected the idea as "a worse
 trade" without measuring it.
@@ -234,20 +239,25 @@ junctions were quietly holding the node in the arithmetic. The check now
 asserts that the capacitor dominates the junctions; with the capacitor zeroed
 it fails.
 
-**And one measurement that is not a defect but belongs on the record.** The
-fabricator's floor in `fab/pcbway.kicad_dru` is 0.100 mm, and DRC against it
-is clean: 0 violations, 0 unconnected. This board declares a margin over that
-floor — `routing.clearance_over_floor` is 1.2 to 2.0 — so its own target is
-0.120 mm. Raise the DRC rule to 0.120 mm and **13 violations appear**, from
-0.100 to 0.117 mm.
+**And one measurement that was not a defect until it was.** The fabricator's
+floor in `fab/pcbway.kicad_dru` is 0.100 mm, and DRC against it was clean: 0
+violations, 0 unconnected. This board declared a margin over that floor —
+`routing.clearance_over_floor` — so its own target was 0.120 mm, and raising
+the DRC rule to 0.120 mm produced **13 violations**, from 0.100 to 0.117 mm.
 
-**Every one of the 13 involves a pad**: a track past a decoupling pad, a via
+**Every one of the 13 involved a pad**: a track past a decoupling pad, a via
 beside an LQFP pad, `TRIP_SET_N` running 0.100 mm from D7's `NRST` pad. That
-is precisely the class of clearance no check in this repository measures —
-`test_routing.py` measures track-to-track, finds 0.141 mm, and passes its
-0.120 mm bound honestly, because pads are not tracks. The board is inside what
-PCBWay will build and outside what it says about itself, in thirteen places,
-and only DRC run against a rule nobody runs can see it.
+was the class of clearance no check here measured — `test_routing.py` measured
+track-to-track, found 0.141 mm, and passed its 0.120 mm bound honestly,
+because pads are not tracks.
+
+Closed since. `rules.kicad_dru` now carries a clearance rule, so DRC enforces
+the board's own margin rather than the fabricator's, and it reports 0
+violations against it. Four of the thirteen were unreachable rather than
+unfixed — 0.5 mm pitch less an 0402 pad's 0.31 and a signal's 0.075 leaves
+0.115 — so the declaration is 1.15 over the floor and
+`test_the_clearance_this_board_asks_for_is_one_it_can_reach` derives that
+0.115 from the board file and rejects any declaration the package forbids.
 
 ---
 
@@ -265,8 +275,9 @@ In descending order of what it buys:
 3. **Make `adc_corner.cir.in` sweep both corners**, so the second method can
    contradict the first in both directions.
 4. **Resolve the 12 %.** Four candidates, listed in `BLOCKING`.
-5. **Add pad clearance to the checks**, so the board's own margin is measured
-   rather than the fabricator's.
+5. ~~**Add pad clearance to the checks**, so the board's own margin is
+   measured rather than the fabricator's.~~ **Done**, along with 2 and 3 —
+   see above and `CHANNEL-REVIEW.md` §10.
 
 None of these is large. The reason to write them down is that the board is at
 the point where the remaining risk is concentrated rather than spread, and

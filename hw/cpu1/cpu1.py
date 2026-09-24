@@ -587,7 +587,28 @@ INTENT: dict[str, tuple[float, float]] = {
     # spread; the routing grid already gives most of this board a quarter to
     # three quarters more than the floor, so what this catches is the copper
     # that was placed by hand and never checked against anything but DRC.
-    "routing.clearance_over_floor": (1.2, 2.0),
+    # **1.15, and it was 1.2, and 1.2 is not reachable on this board.**
+    #
+    # A decoupling capacitor sits on its supply pin's line, and the next pin
+    # along escapes down its own line half a millimetre away. An 0402 pad is
+    # 0.62 mm across and an MCU signal is 0.15 wide, so the gap between them
+    # is 0.5 - 0.31 - 0.075 = 0.115 mm, on two parallel lines, whatever
+    # anybody places where. Four places on this board are at exactly that and
+    # no placement moves them.
+    #
+    # It is the same argument `test_nothing_sits_on_the_fabricators_floor`
+    # already makes about holes - "asking for more would be asking the
+    # LQFP-144 to have coarser pins" - and it went unnoticed for copper
+    # because DRC only ever saw PCBWay's 0.1 mm floor: the board declared
+    # this margin and then never wrote a clearance rule that used it, so the
+    # thirteen places between the two figures were in no check and in no
+    # rule. Three reviews listed them as a defect to fix. Four of them are
+    # geometry.
+    #
+    # `test_the_clearance_this_board_asks_for_is_one_it_can_reach` now
+    # asserts the reachability, so a margin that the package forbids fails
+    # here rather than in a DRC run nobody makes.
+    "routing.clearance_over_floor": (1.15, 2.0),
     # The fastest edge any track on this board carries, for working out what
     # one track couples into another. The buffers' outputs are the quickest
     # thing here at about three nanoseconds and the RMII is slower again, so

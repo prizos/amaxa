@@ -1165,6 +1165,134 @@ def test_nothing_sits_on_the_fabricators_floor(vias, segments, board_dir, spec, 
     )
 
 
+def _pad_sizes(land: str) -> list[tuple[float, float]]:
+    """
+    Every `(pad ...)` in a footprint, as (width, height) in millimetres.
+
+    Scanned by matching brackets rather than by a regex over the whole file,
+    because `(size w h)` also gives the font size of the reference and value
+    text, and on a small chip land that font is larger than the copper.
+    """
+    sizes = []
+    for start in (index for index in range(len(land)) if land.startswith("(pad ", index)):
+        depth, end = 0, start
+        for end in range(start, len(land)):
+            if land[end] == "(":
+                depth += 1
+            elif land[end] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+        found = re.search(r"\(size ([\d.]+) ([\d.]+)\)", land[start:end + 1])
+        if found:
+            sizes.append((float(found.group(1)), float(found.group(2))))
+    return sizes
+
+
+def test_the_clearance_this_board_asks_for_is_one_it_can_reach(
+    board_dir, spec, pcb_text, design
+):
+    """
+    The margin the board declares over the fabricator's floor is a margin the
+    package allows, and the rules file asks DRC for exactly it.
+
+    **This is the check that was missing when the margin was wrong.**
+    `routing.clearance_over_floor` said 1.2, which is 0.120 mm over PCBWay's
+    0.100, and four places on this board sit at 0.115 and cannot move: a
+    decoupling capacitor sits on its supply pin's line and the next pin along
+    escapes down its own line half a millimetre away, so an 0402 pad's 0.31 mm
+    and an MCU signal's 0.075 leave 0.115 between two parallel lines whatever
+    anybody places where.
+
+    Nothing noticed for three reviews, and the reason is worth keeping: the
+    board declared the margin and then never wrote a clearance rule that used
+    it. DRC compared every gap against the fabricator's floor and passed, the
+    only check that measured clearance looked at vias and tracks and never at
+    pads, and the thirteen places between the two figures were in no rule and
+    in no check.
+
+    Two assertions, and the first is the one that was absent:
+
+      - the declared margin is **reachable** - no larger than the finest pad
+        pitch leaves once the widest pad on that pitch and the narrowest
+        signal beside it have taken their share. A target the geometry
+        forbids is a target that gets quietly violated, which is what
+        happened;
+      - and `rules.kicad_dru` asks DRC for that margin, so the declaration
+        and the thing enforcing it cannot drift apart.
+
+    Both ends are read from the board: the pitch from the footprint names
+    KiCad writes into the board file, the pad width from the decoupling
+    capacitors actually fitted, the track width from the rules file's own
+    narrowest signal rule.
+    """
+    fab = (board_dir.parent / "fab" / "pcbway.kicad_dru").read_text()
+    floor = float(re.search(r"\(constraint clearance \(min ([\d.]+)mm\)\)",
+                            fab).group(1))
+    over, _ = spec("routing", "clearance_over_floor")
+    asked = over * floor
+
+    rules = (board_dir / "rules.kicad_dru").read_text()
+    declared = [float(found) for found in
+                re.findall(r"\(constraint clearance \(min ([\d.]+)mm\)\)", rules)]
+    assert declared, (
+        f"{board_dir.name}/rules.kicad_dru states no clearance, so DRC only "
+        f"ever compares against the fabricator's {floor:g} mm floor and the "
+        f"{asked:.3f} mm this board declares is enforced by nothing"
+    )
+    assert abs(min(declared) - asked) < 1e-9, (
+        f"the rules file asks DRC for {min(declared):g} mm and "
+        f"`routing.clearance_over_floor` says {over:g} times {floor:g}, which "
+        f"is {asked:.3f}"
+    )
+
+    # The finest pitch on the board, from the footprint names, the same way
+    # the hole floor is derived.
+    pitches = [float(found) for found in
+               re.findall(r'"[^"]*_P([\d.]+)mm[^"]*"', pcb_text)]
+    assert pitches, "no footprint on this board states a pad pitch in its name"
+    pitch = min(pitches)
+
+    # The widest thing that sits on a pin's line, and the narrowest track that
+    # escapes down the next line along.
+    #
+    # **Which pad, derived rather than guessed.** The first version of this
+    # took the smallest pad on the board, got 0.25 mm - a via-in-pad, nowhere
+    # near a pin line - and computed a reachable 0.300 mm, which let the very
+    # margin this check exists to reject sail through. What sits on a supply
+    # pin's line is a decoupling capacitor, the design names them, and their
+    # footprint states its own size.
+    #
+    # The size has to come from the pad and not from every `(size ...)` in the
+    # file: a footprint states a font size for its reference and value text
+    # too, and on an 0402 that is `(size 1 1)`, larger than the pad itself. A
+    # second version read those and reported a negative reachable clearance,
+    # which fires but for a reason that is not true.
+    widths = [float(found) for found in
+              re.findall(r"\(constraint track_width \(min ([\d.]+)mm\)\)", rules)]
+    assert widths, "the rules file states no track width"
+
+    on_a_pin_line = {part["footprint"] for address, part in design["parts"].items()
+                     if address.startswith(("core.dec.", "core.vcap."))}
+    assert on_a_pin_line, "no decoupling capacitor sits on a supply pin's line"
+    sizes = []
+    for footprint in sorted(on_a_pin_line):
+        library, _, name = footprint.partition(":")
+        land = (board_dir / "parts" / library / f"{name}.kicad_mod").read_text()
+        sizes += [max(w, h) for w, h in _pad_sizes(land)]
+    assert sizes, f"no pad size in {sorted(on_a_pin_line)}"
+    decoupling = max(sizes)
+
+    reachable = pitch - decoupling / 2 - min(widths) / 2
+    assert asked <= reachable + 1e-9, (
+        f"this board asks for {asked:.3f} mm of clearance and its own geometry "
+        f"allows {reachable:.3f}: a {decoupling:g} mm pad on a {pitch:g} mm "
+        f"pitch, with a {min(widths):g} mm track escaping down the next line, "
+        f"leaves that much between two parallel lines and no placement moves "
+        f"it. Ask for less, or give the board coarser pins."
+    )
+
+
 def test_the_crossing_solver_finds_where_a_track_enters_and_leaves():
     """
     `_edge_crossings` against shapes whose answers are known by inspection.
