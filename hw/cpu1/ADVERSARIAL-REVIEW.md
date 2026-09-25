@@ -47,7 +47,7 @@ a figure nobody verified against a measurement.
 
 *This section described the board before the trip chain was simulated; what it
 says about the power path is still true, and the count above has moved from
-6 measurements to 27, across six decks. `sim/trip_chain.cir.in`
+6 measurements to 30, across seven decks. `sim/trip_chain.cir.in`
 integrates the chain end to end and gets 33.5 ns where the arithmetic sums to
 40.5; `sim/trip_clear.cir.in` runs the AC-coupled clear with its clamp as a
 diode; `sim/power_up.cir.in` holds the rails' ordering at every instant and
@@ -55,7 +55,11 @@ reproduces `c297e58` when the reference is moved back to the 5 V rail; and
 `sim/rmii_transmit.cir.in` drives the RMII's two critical nets as
 transmission lines, reproduces ST's own 20 pF test jig beside them, and finds
 that the analytic budget was adding the board's copper on top of a figure
-already measured into a load. **So comms is no longer unsimulated either.**
+already measured into a load. **So comms is no longer unsimulated either** - and
+`sim/brown_out.cir.in` runs the rail tree *downward*, which nobody had done,
+and found the board's worst open item: on a loss of supply the over-current
+comparators stop being specified 76 microseconds before the PWM buffers stop
+driving. See `CHANNEL-REVIEW.md` §12 and `checks/config.py`'s `BLOCKING`.
 See `DESIGN-REVIEW.md` §3 and §8. What follows is the argument that got them
 built, and what it says about the power path's **loops** - as opposed to its
 ordering - is still true: nothing simulates a control loop, ripple, inrush or

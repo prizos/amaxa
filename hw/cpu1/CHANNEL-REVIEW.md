@@ -33,6 +33,53 @@ tester was run afterwards and its result is at the end.
 | 9 | **Trip / thresholds** | The error budget counted two figures stated at 25 °C and never their drift | fixed |
 | 10 | **Routing** | The board declared a clearance margin and wrote no rule enforcing it | fixed |
 | 11 | **Ethernet** | The RMII check measured the difference between clock and data where the transmit path is limited by their **sum**; the board was over budget | fixed |
+| 12 | **Power / safety** | On a loss of supply the over-current comparators stop being specified **76 µs before** the PWM buffers stop driving | **open, and blocking** |
+
+---
+
+## 12. Losing the supply leaves the PWM driving with nothing watching it
+
+`power_up.cir.in` runs the rail tree upward and asks what arrives when.
+Nobody had ever run it downward.
+
+`sim/brown_out.cir.in` does, and the result is the worst thing found on this
+board:
+
+| | |
+|---|---|
+| the comparators' specified supply floor | 2.70 V on 5 V |
+| the buffers' specified supply floor | 1.65 V on 3V3 |
+| 5 V when the 3V3 converter lets go | **2.78 V** |
+| **comparators lost before buffers lost** | **76 µs** |
+| 3V3 at that instant | **2.88 V** |
+
+**It is the topology, not the values.** 3V3 comes from a converter whose
+input *is* the 5 V rail, and that converter holds on until its input falls to
+its UVLO less its hysteresis — as low as 2.90 V — while the comparators on
+that same rail are specified only to 2.70. Whatever the two rails'
+capacitors are, the thing that drives a bridge is fed through the thing that
+stops one, so it outlives it.
+
+**And the MCU does not save it.** When the comparators lose their supply 3V3
+is still at 2.88 V, above BOR3's 2.68 V falling edge — the highest of the
+four selectable brown-out levels — so the MCU is guaranteed still running and
+still holding `PWM_ENABLE_N` low. A BOR level is an option byte in any case,
+which nothing here could enforce.
+
+**Why it matters more on this board than it would on most.** cpu1 has no
+supply connection to the power board — that is finding 1, the aux pin that
+was never fitted — so cpu1 can lose its own supply while the power stage is
+fully alive with its DC link charged.
+
+No check here could have found it. Every check that touches the rails
+compares steady-state numbers, which is the same sentence `c297e58` was
+closed with.
+
+What closes it: a supervisor on the 5 V rail asserting the trip latch, or the
+buffers' enable referenced to the comparators' rail rather than to the logic
+rail. Both are spin-2. Accepting the window instead is a decision for whoever
+owns the machine, and it is in `BLOCKING` so that it is a decision rather
+than an oversight.
 
 ---
 
@@ -351,7 +398,7 @@ What each one has, and what it still does not.
 | **Safety chain** | 30 checks, a transient deck, the 50 ns budget derived five ways | nothing found this pass |
 | **Trip / thresholds** | 19 checks; the error budget at 7.46 % of 12, and the I²C bus that carries the thresholds now has an electrical check | the trip deck still drives the comparator references from ideal sources |
 | **ADC / measurement** | 10 checks, two decks, both corners of the band | — |
-| **Power** | 31 checks, a sequencing deck, every rail summed off the netlist | no control loop is simulated; inrush and brown-out are prose |
+| **Power** | 31 checks, a sequencing deck and a brown-out deck, every rail summed off the netlist | **the brown-out deck fails — see finding 12**; no control loop is simulated, and inrush is still prose |
 | **Ethernet** | 23 checks and a transmission-line deck; the RMII budget closed at both ends from both datasheets | the split of ST's `td(TXD)` between internal delay and load charging is not published, and it is worth 0.69 ns |
 | **USB** | 12 checks — one pair, thoroughly | — |
 | **CAN / RS-485** | 14 checks after this pass | the V_IO current is out of the rail sum, disclosed with its magnitude |

@@ -230,7 +230,23 @@ def _rmii_published_delay(values: dict[str, tuple[float, float]]) -> float:
     return values["mcu.rmii_transmit_data_delay_max"][1]
 
 
-EXPECTED_MEASUREMENTS = 27
+def _mcu_still_running(values: dict[str, tuple[float, float]]) -> float:
+    """
+    The 3V3 above which the MCU is guaranteed **not** to have reset.
+
+    BOR3's falling edge at its maximum. Below this the MCU may or may not
+    have reset; above it, it certainly has not, and is certainly still
+    holding `PWM_ENABLE_N` low.
+    """
+    return values["mcu.brown_out_reset_highest"][1]
+
+
+def _comparator_supply_floor(values: dict[str, tuple[float, float]]) -> float:
+    """The lowest 5 V the over-current comparators are specified at."""
+    return values["trip.fast1_high.supply_voltage"][0]
+
+
+EXPECTED_MEASUREMENTS = 30
 
 LIMITS = {
     "adc_corner": {
@@ -338,6 +354,52 @@ LIMITS = {
             "overlap rather than add and there is no closed form. A fitted "
             "constant goes quietly wrong when something upstream of it "
             "moves; this is what stops it being quiet.",
+        ),
+    },
+    "brown_out": {
+        "v_5v_at_3v3_dropout": (
+            _comparator_supply_floor, 6.0,
+            "Where the 5 V rail had fallen to when 3V3 left its band. It has "
+            "to still be somewhere the comparators are specified, because "
+            "everything after this instant is the two rails decaying against "
+            "each other and a 3V3 that outlived the protection would already "
+            "have lost the race here.\n"
+            "      The upper end is a sanity bound: a rail above 6 V on the "
+            "way down means the model is not decaying at all.",
+        ),
+        "v_3v3_at_comparators_lost": (
+            0.0, _mcu_still_running,
+            "Where 3V3 had fallen to at the instant the comparators lost "
+            "their specified supply - and therefore whether the MCU's own "
+            "brown-out reset closes the window that `t_protection_margin` "
+            "measures. When the MCU resets it lets `PWM_ENABLE_N` go to its "
+            "pull-up, and that turns the buffers off whatever else is true.\n"
+            "      So this has to be **below** the level at which the MCU is "
+            "still guaranteed to be running: BOR3's falling edge at its "
+            "maximum, 2.68 V, which is the highest of the four selectable "
+            "levels. It comes out at 2.88.\n"
+            "      **The MCU has not reset**, at any BOR setting, by the "
+            "time the over-current protection stops being specified. That is "
+            "the second half of the finding and the reason it is not closed "
+            "by an option byte.",
+        ),
+        "t_protection_margin": (
+            0.0, 1.0,
+            "**The safety property, and nothing on this board checked it.** "
+            "The PWM buffers run from 3V3 and are specified to 1.65 V; the "
+            "over-current comparators run from 5 V and are specified to "
+            "2.70. 3V3 comes from a converter whose input is the 5 V rail "
+            "and which holds on until that falls to its UVLO less its "
+            "hysteresis - as low as 2.90 V, two hundred millivolts above "
+            "where the comparators stop.\n"
+            "      So on every loss of supply there is a race, and this is "
+            "how much the buffers win it by. Positive means the thing that "
+            "drives a bridge lost its rail before the thing that stops one "
+            "lost its. Negative would be a window, on every brown-out, in "
+            "which this board emits PWM with nothing watching the current.\n"
+            "      The upper bound is a second's worth, which no rail on "
+            "this board can take to decay and which catches a measurement "
+            "that did not find its edge at all.",
         ),
     },
     "rmii_transmit": {

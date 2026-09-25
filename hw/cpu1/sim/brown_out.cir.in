@@ -1,0 +1,118 @@
+* cpu1: losing the supply, and whether the PWM stops before the protection does.
+*
+* `power_up.cir.in` runs this rail tree upward and asks what arrives when.
+* This runs the same tree downward and asks a different question, which
+* nothing on this board asked at all: **when the supply goes away, does the
+* thing that drives a bridge lose its rail before the thing that stops a
+* bridge loses its?**
+*
+* It is a race and it is not obvious which way it goes.
+*
+*   - the PWM buffers run from 3V3 and are specified down to 1.65 V;
+*   - the over-current comparators run from 5 V and are specified down to
+*     2.70 V;
+*   - 3V3 comes from a buck whose input *is* the 5 V rail, and that buck
+*     holds on until its input falls to its UVLO less its hysteresis - as
+*     low as 3.45 - 0.55 = 2.90 V.
+*
+* So the buck feeding the buffers keeps regulating until 5 V is at 2.90,
+* two hundred millivolts above where the comparators stop being specified.
+* From there it is a question of how fast each rail decays into its own
+* load, which is exactly the sort of thing a closed-form check cannot answer
+* and nobody had written down.
+*
+* **The excitation is the supply vanishing**, not sagging. A connector pulled
+* or a fuse opening is the fastest the input can go away, and it is the case
+* where the rails have only their own capacitance to live on. A slow sag
+* holds 5 V up by regulation for longer and gives the buffers longer to die
+* in; it is the gentler direction and it is not what is measured here.
+*
+* **The load is the declared budget on both rails**, which is the optimistic
+* end of the one thing this deck is sensitive to. A lightly loaded board -
+* no link on the PHY, nothing drawing from the connector - decays more
+* slowly on 3V3 and the margin below shrinks. The board declares no minimum
+* load and neither does this deck; what that costs is on the open list
+* rather than hidden in a number.
+*
+* Values come from the build; @path:end@ is an instance path and which end
+* of its resolved range to take.
+
+.include ../models/converters.lib
+
+* The input for ten milliseconds, which is twice the longest soft start
+* either converter declares and so long enough for everything to be up and
+* regulating, and then gone. The step is to zero and not to a lower
+* level because what is being measured is the decay, and any residual input
+* only feeds the rails.
+Vin vin 0 PWL(0 0 100u @input.voltage:nom@ 10m @input.voltage:nom@
++ 10.001m 0 30m 0)
+
+* --- 5 V ---------------------------------------------------------------------
+*
+* The same divider and converter `power_up.cir.in` uses, with the falling
+* thresholds filled in. The LM5164 declares an enable threshold and no
+* hysteresis for it, so the model is told to drop out at the same level it
+* picks up - which holds 5 V up for the shortest time, and a shorter 5 V is
+* the direction that hurts the comparators.
+Rlock_top vin lockout @buck5.r_uvlo_top.resistance:max@
+Rlock_bot lockout 0 @buck5.r_uvlo_bottom.resistance:min@
+
+Xbuck5 vin lockout n5v buck
++ vout=@rail.5v.voltage:nom@
++ uvlo=@buck5.ic.v_in:min@
++ ven=@buck5.ic.enable_threshold:max@
++ tss=@buck5.ic.soft_start_time:max@
++ ilim=@buck5.ic.load_current_max:min@
++ eff=@buck3v3.efficiency:min@
++ uvlo_off=@buck5.ic.v_in:min@
++ ven_off=@buck5.ic.enable_threshold:min@
+C5v n5v 0 {@buck5.c_out1.capacitance:min@ + @buck5.c_out2.capacitance:min@}
+R5v n5v 0 {@rail.5v.voltage:nom@ / @rail.5v.current:max@}
+
+* --- 3V3, and the threshold that decides the race ----------------------------
+*
+* `uvlo_off` is the UVLO at its lowest less the hysteresis at its largest,
+* which is the **latest** this converter can stop. Latest is worst here: the
+* longer it regulates, the longer the buffers keep a valid supply and the
+* closer they come to outliving the comparators.
+Xbuck3 n5v n5v n3v3 buck
++ vout=@rail.3v3.voltage:nom@
++ uvlo=@buck3v3.ic.input_uvlo:max@
++ ven=@buck3v3.ic.enable_high_voltage_min:max@
++ tss=@buck3v3.ic.soft_start_time:max@
++ ilim=@buck3v3.ic.load_current_max:min@
++ eff=@buck3v3.efficiency:min@
++ uvlo_off={@buck3v3.ic.input_uvlo:min@ - @buck3v3.ic.input_uvlo_hysteresis:max@}
++ ven_off=@buck3v3.ic.enable_high_voltage_min:min@
+C3v3 n3v3 0 {@buck3v3.c_out1.capacitance:min@ + @buck3v3.c_out2.capacitance:min@}
+R3v3 n3v3 0 {@rail.3v3.voltage:nom@ / @rail.3v3.current:max@}
+
+.tran 2u 30m
+
+* --- what happened -----------------------------------------------------------
+
+* Where 5 V had got to when the 3V3 converter let go. Between this and the
+* comparators' 2.70 V is the whole of the exposure.
+.meas tran v_5v_at_3v3_dropout FIND v(n5v) WHEN v(n3v3)=@rail.3v3.voltage:min@ FALL=1
+
+* The two instants the safety property is about.
+.meas tran tmp_buffers_lost
++ WHEN v(n3v3)=@safety.buffer1.supply_voltage:min@ FALL=1
+.meas tran tmp_comparators_lost
++ WHEN v(n5v)=@trip.fast1_high.supply_voltage:min@ FALL=1
+
+* **And where 3V3 had fallen to at that instant**, which decides whether the
+* MCU's own brown-out reset closes the window. The MCU releases
+* `PWM_ENABLE_N` to its pull-up when it resets, and that turns the buffers
+* off whatever 3V3 is still doing - so if 3V3 is already below the level the
+* MCU is guaranteed to have reset at, the exposure is closed by the MCU
+* rather than by the rails.
+.meas tran v_3v3_at_comparators_lost FIND v(n3v3)
++ WHEN v(n5v)=@trip.fast1_high.supply_voltage:min@ FALL=1
+
+* **The headline.** Positive means the buffers stopped driving while the
+* comparators were still specified, which is the only ordering that is safe.
+* Negative is a window on every brown-out in which this board emits PWM with
+* nothing watching the current.
+.meas tran t_protection_margin
++ PARAM='tmp_comparators_lost - tmp_buffers_lost'

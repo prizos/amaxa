@@ -21,6 +21,7 @@
 * `ilim` is the part's own current limit; without it the model would hold its
 * setpoint into any load, and the rails it feeds are the whole point.
 .subckt buck in en out params: vout=5 uvlo=4 ven=1.6 tss=3m ilim=1
++ uvlo_off=0 ven_off=0 eff=0.9
 
 * Armed once, and it stays armed: a converter that has started does not
 * un-start when its input dips below the threshold that let it start, which is
@@ -30,6 +31,20 @@ Barm arm_raw 0 V = 10 * (0.5+0.5*tanh(20*(v(in)-uvlo))) * (0.5+0.5*tanh(20*(v(en
 Darm arm_raw arm DARM
 Carm arm 0 1n
 Rarm arm 0 1e12
+
+* **And a way back down, which the model did not have.** "Armed once and it
+* stays armed" is right for the question these were built for - what comes up
+* when - and wrong for the opposite one. A real converter has UVLO hysteresis
+* and *does* shut off when its input falls far enough below the threshold
+* that let it start, and on this board the level it shuts off at decides
+* whether the PWM buffers lose their supply before the over-current
+* comparators lose theirs.
+*
+* `uvlo_off` and `ven_off` default to zero, which puts the tanh hard against
+* its rail for any real input and leaves the power-up decks exactly as they
+* were. A deck that wants the falling direction states them.
+Bdisarm arm 0 I = 1e-3 * v(arm) *
++ max(0.5+0.5*tanh(20*(uvlo_off - v(in))), 0.5+0.5*tanh(20*(ven_off - v(en))))
 .model DARM D(IS=1e-14 N=1 RS=1)
 
 * The ramp, started by that: a 1 nF capacitor fed a current that takes it from
@@ -42,8 +57,34 @@ Rramp ramp 0 1e12
 
 * And the output: the ramp times the setpoint, delivered through a source that
 * cannot give more than the part can, and never more than its own input.
-Bout 0 out I = min(max(1e3*(min(v(ramp),1)*vout - v(out)), -ilim), ilim)
+*
+* **Gated on `arm`, which it was not.** Disarming only froze the ramp, so a
+* converter whose input had gone away went on regulating its output for ever
+* - which no deck noticed, because none of them had ever taken an input
+* away. The first one that did found the 5 V rail sitting at 2.75 V a
+* hundred milliseconds after the supply was disconnected.
+Bout 0 sense I = (0.5+0.5*tanh(20*(v(arm)-5))) *
++ min(max(1e3*(min(v(ramp),1)*vout - v(out)), -ilim), ilim)
+Vsense sense out 0
 Rleak out 0 1e9
+
+* **And what it takes from its own input to do that**, which the model did
+* not draw at all. A converter that delivers power without consuming any is
+* harmless on the way up - the input is a supply and the question is only
+* what order things arrive in - and wrong the moment the input is a rail with
+* a capacitor on it. On this board the 3V3 converter draws about 560 mA from
+* the 5 V rail, nearly three times that rail's own declared budget, and a
+* deck that leaves it out has the 5 V rail outliving its real self by a
+* factor of four.
+*
+* Power in equals power out over the efficiency, clamped away from a divide
+* by zero as the input collapses.
+Bin in 0 I = abs(i(Vsense)) * v(out) / (eff * max(v(in), 0.5))
+
+* And the ramp comes back down with it, so a converter that drops out and
+* recovers soft-starts again rather than stepping straight to its setpoint.
+* On the way up this does nothing: the ramp is at zero until the part arms.
+Bramp_reset ramp 0 I = 1e-3 * v(ramp) * (0.5+0.5*tanh(20*(5 - v(arm))))
 
 .ends buck
 

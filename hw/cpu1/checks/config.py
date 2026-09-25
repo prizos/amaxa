@@ -13,9 +13,37 @@ What the common checks in hw/checks/ need to know that is specific to cpu1.
 # BLOCKING is what mattered. A board that says it is unfinished now has to say
 # what is unfinished, and a board that says it is finished has to have this
 # empty, so neither statement can drift from the board again.
-COMPLETE = True
+COMPLETE = False
 
 BLOCKING: dict[str, str] = {
+    "brown-out leaves the PWM driving with nothing watching it": (
+        "On a loss of supply the over-current comparators lose their "
+        "specified 5 V supply **76 microseconds before** the PWM buffers "
+        "lose their 3V3 supply, and for all of that window this board emits "
+        "whatever its timers are producing into a power stage that has its "
+        "own supply and its own charged DC link. `sim/brown_out.cir.in` "
+        "measures it; nothing else on this board could, because every check "
+        "that touches the rails compares steady-state numbers.\n"
+        "      The ordering is not an accident of values, it is the "
+        "topology: 3V3 comes from a converter whose input is the 5 V rail, "
+        "and that converter holds on until its input falls to its UVLO less "
+        "its hysteresis - as low as 2.90 V - while the comparators on the "
+        "same rail are specified only to 2.70. Whatever the two rails' "
+        "capacitors are, the thing that drives a bridge is fed through the "
+        "thing that stops one.\n"
+        "      **The MCU's brown-out reset does not close it.** When the "
+        "comparators lose their supply, 3V3 is still at 2.88 V, above BOR3's "
+        "2.68 V falling edge - the highest of the four selectable levels - "
+        "so the MCU is guaranteed still running and still holding "
+        "`PWM_ENABLE_N` low. And a BOR level is an option byte, which no "
+        "check here could enforce even if the number were favourable.\n"
+        "      What would close it: a supervisor on the 5 V rail asserting "
+        "the trip latch, or the buffers' enable referenced to the "
+        "comparators' rail rather than to the logic rail. Both are spin-2. "
+        "Accepting it instead is a decision that belongs to whoever owns "
+        "the machine this drives, and it is recorded here so that it is a "
+        "decision rather than an oversight."
+    ),
 }
 
 # Checks that must actually run for this board, common and board-specific.
@@ -23,21 +51,6 @@ EXPECTED_CHECKS = 216
 
 # Parameters recorded in parts.py that nothing reads, each with the reason.
 UNREAD_PARAMETERS: dict[tuple[str, str], str] = {
-    ("buck5.c_out2", "capacitance"): (
-        "the second half of the 5 V buck's output bulk. The LM5164's "
-        "datasheet gives an input capacitance minimum and no output figure, "
-        "so there is nothing to compare these against: the value follows from "
-        "the ripple wanted, and this board states no ripple target for the "
-        "5 V rail.\n"
-        "      `buck5.c_out1` is no longer excused - `sim/power_up.cir.in` "
-        "reads it as the rail's capacitance while it ramps - and that is "
-        "worth being precise about, because it is **not** the comparison this "
-        "exemption was about. The deck uses it as a lump of capacitance on a "
-        "node; what neither it nor anything else does is hold it against a "
-        "loop-stability or ripple figure, because no such figure exists to "
-        "hold it against. The gap the original note named is still open and "
-        "is still worth closing before a second spin"
-    ),
     ("can.decoupling_vcc", "capacitance"): (
         "a 100 nF bypass at a supply pin. That it exists, and sits beside its own pin, is checked; its *value* is convention and neither this part's datasheet nor anything else on this board states a figure to hold it to. It became visible when the converters' input-capacitance checks stopped summing the whole 5 V net - which is how these were being 'read' before, as part of an answer to a different question"
     ),

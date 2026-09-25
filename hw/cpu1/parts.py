@@ -157,6 +157,20 @@ MCU_H743 = PartSpec(
         # with no minimum and no maximum - a typical, so it carries a margin
         # like every other figure of that species on this board.
         "io_pin_capacitance_typical": exact(5e-12),
+        # **The highest supply at which this part is still guaranteed to be
+        # running**, which is what decides whether the MCU's own brown-out
+        # reset closes the window `sim/brown_out.cir.in` found.
+        #
+        # Four BOR levels, selected by option byte. The highest is BOR3, and
+        # its *falling* edge is 2.54 / 2.61 / 2.68 V. Below 2.54 the part is
+        # guaranteed reset; above 2.68 it is guaranteed not. 2.68 is the one
+        # a safety argument has to use, because it is the level above which
+        # the MCU is certainly still driving its pins.
+        #
+        # It is an option byte and not a board property, which is the other
+        # half of why this is on the blocking list: even if the number were
+        # favourable, nothing here could enforce the setting.
+        "brown_out_reset_highest": exact(2.68),
     },
 )
 
@@ -513,6 +527,20 @@ BUCK_3V3 = PartSpec(
         # the prose was outside the datasheet as well as unread. See the crop
         # in TSOT23_6/evidence.
         "input_uvlo": between(3.45, 4.05),
+        # **And the hysteresis, which decides a safety question on the way
+        # down.** 0.13 / 0.32 / 0.55 V, §7.5, "not production tested".
+        #
+        # Rising, this part starts somewhere in 3.45 to 4.05. Falling, it
+        # stops at that less the hysteresis, so the lowest it can hold on to
+        # is 3.45 - 0.55 = 2.90 V of input. Its input is the 5 V rail, and
+        # the over-current comparators on that same rail are specified only
+        # down to 2.70 V.
+        #
+        # So on a brown-out there is a race: 3V3 keeps the PWM buffers
+        # driving until it decays under 1.65 V, and the comparators stop
+        # protecting once 5 V is under 2.70. The buffers have to lose first.
+        # `sim/brown_out.cir.in` runs it.
+        "input_uvlo_hysteresis": between(0.13, 0.55),
         "soft_start_time": between(0.7e-3, 1.3e-3),
         # EN is hard-tied to the 5 V rail on this board, so what holds the
         # converter off on the way up is the UVLO above and not this - but the
