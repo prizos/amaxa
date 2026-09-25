@@ -653,6 +653,25 @@ def test_the_rmii_bus_closes_its_timing_budget(spec, stack, lengths, pcb_text, d
         clock - a data line shorter than the clock fails, whatever else is
         true.
 
+    **And a second method now disagrees with this one, in the board's
+    favour.** `sim/rmii_transmit.cir.in` drives the same two nets as
+    transmission lines - impedance and delay taken from `build/copper.json`,
+    which the layout writes from the routed segments - and reproduces ST's
+    own 20 pF test jig beside them. Two things come out of it that a sum of
+    lengths cannot see:
+
+      - the flight times are **longer** than length times delay-per-mm, 684
+        and 583 ps against 525 and 479, because the far end is a pin
+        capacitance and the driver has an impedance;
+      - and `td(TXD)` is quoted *into* that 20 pF, so 0.69 ns of the 11.5 is
+        the jig's own RC. **This check adds the copper on top of a figure
+        that already contains a load**, which counts it twice.
+
+    Net, the deck puts the transmit budget at 12.07 ns of 12.5 - 426 ps of
+    margin where this says nine. The deck is the better model and this one is
+    kept as it is: two methods that share an assumption cannot contradict
+    each other, and the nine picoseconds is the conservative reading.
+
     **One condition on all of this that no check can enforce.** Table 111 is
     measured at `OSPEEDRy[1:0] = 10` with a 20 pF load. At the reset default
     ST does not specify the delay at all, and the documented symptom is CRC

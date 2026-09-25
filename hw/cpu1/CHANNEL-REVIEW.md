@@ -352,7 +352,7 @@ What each one has, and what it still does not.
 | **Trip / thresholds** | 19 checks; the error budget at 7.46 % of 12, and the I²C bus that carries the thresholds now has an electrical check | the trip deck still drives the comparator references from ideal sources |
 | **ADC / measurement** | 10 checks, two decks, both corners of the band | — |
 | **Power** | 31 checks, a sequencing deck, every rail summed off the netlist | no control loop is simulated; inrush and brown-out are prose |
-| **Ethernet** | 23 checks; the RMII budget closed at both ends from both datasheets | nothing found this pass, and the transmit margin is 9 ps of 1000 |
+| **Ethernet** | 23 checks and a transmission-line deck; the RMII budget closed at both ends from both datasheets | the split of ST's `td(TXD)` between internal delay and load charging is not published, and it is worth 0.69 ns |
 | **USB** | 12 checks — one pair, thoroughly | — |
 | **CAN / RS-485** | 14 checks after this pass | the V_IO current is out of the rail sum, disclosed with its magnitude |
 | **MCU core** | 15 checks — crystals, VCAP, decoupling, reset, thermal | — |
@@ -375,10 +375,14 @@ What each one has, and what it still does not.
    misnaming carried into `design.json`, and the rail sum reads it.
 3. **Deck node names.** The parts in a deck are now held to the netlist; the
    nodes and the order they are wired in are still typed.
-4. **The RMII's nine picoseconds.** Not a defect and not fixable in copper:
-   ST's 11.5 ns and Microchip's 7.5 ns take 19 of the 20 ns period before any
-   track is drawn. Real margin needs the PHY nearer the MCU or REF_CLK-In
-   mode with an oscillator, and both are spin-2.
+4. **How ST's `td(TXD)` splits.** The nine picoseconds turned out to be an
+   artefact of adding copper delay to a figure measured into a 20 pF load —
+   `sim/rmii_transmit.cir.in` reproduces that jig, measures it at 0.69 ns,
+   and puts the budget at 12.07 ns of 12.5. What is genuinely open is the
+   other end of the bracket: read the 11.5 ns as *all* internal propagation
+   and the same deck gives 12.77, which does not close. ST publishes the
+   delay and not its split. A scope on TXD and REF_CLK at the PHY's pins
+   settles it; nothing here can.
 5. **The eight floating connector inputs.** Declared now, and still floating.
    A power board that is unfitted leaves eight MCU pins at mid-rail; firmware
    is expected to configure an internal pull before it samples them, and

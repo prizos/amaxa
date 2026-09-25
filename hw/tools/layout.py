@@ -36,7 +36,8 @@ from pathlib import Path
 HW_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from layout_lib import net_capacitance, reference_stack  # noqa: E402
+from layout_lib import (  # noqa: E402
+    net_capacitance, net_transmission, reference_stack)
 
 # Marks every object this script owns, so it can take them away again. KiCad
 # has nowhere to put a custom attribute on a track, so the mark goes in the one
@@ -705,8 +706,16 @@ def main() -> int:
         stack = reference_stack(description.BOARD, planes)
         farads = {net: value for net, value in net_capacitance(board.text, stack).items()
                   if net}
+        # And the same copper read as a transmission line. The RMII's
+        # transmit budget is a sum of two flight times against one
+        # nanosecond, and a deck asking that question needs an impedance and
+        # a delay, not a lump: `@copper.ETH_TXD1.impedance:nom@` and
+        # `@copper.ETH_TXD1.delay:nom@`.
+        line = net_transmission(board.text, stack)
         (board_dir / "build" / "copper.json").write_text(
-            json.dumps({net: {"capacitance": value}
+            json.dumps({net: ({"capacitance": value}
+                              | ({"impedance": line[net][0], "delay": line[net][1]}
+                                 if net in line else {}))
                         for net, value in sorted(farads.items())}, indent=1) + "\n")
 
     tracks = sum(1 for o in objects if o.lstrip().startswith("(segment"))

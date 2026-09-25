@@ -1,0 +1,111 @@
+* cpu1: the RMII transmit budget, as two transmission lines instead of a sum.
+*
+* `test_the_rmii_bus_closes_its_timing_budget` adds three numbers: the MCU's
+* `td(TXD)` maximum, the clock's copper delay and the data's copper delay,
+* against a period less the PHY's setup. On this board that is 11.5 + 0.53 +
+* 0.48 against 12.5, and it clears by **nine picoseconds** - a margin smaller
+* than the uncertainty in the one figure it all rests on, because a 2 % shift
+* in the prepreg's Dk moves it by more than that and the stackup declares no
+* Dk tolerance at all.
+*
+* Two things are wrong with the sum, and they pull opposite ways.
+*
+* **It counts the test jig twice.** ST quotes `td(TXD)` into a 20 pF load.
+* Through the 50 ohm its own Table 59 guarantees, charging 20 pF to half the
+* rail is 0.69 ns - so 0.69 of the 11.5 is the jig's capacitor, not the
+* part's internal delay. The sum then adds the board's copper *on top of a
+* figure that already contains a load*. This deck reproduces the jig,
+* measures what it is worth, and subtracts it.
+*
+* **And a line is not a lump.** 78 mm of 0.15 mm microstrip is a 69 ohm
+* transmission line, and at 50 MHz with an edge this fast it is not
+* electrically short: the far end sees an incident wave of the divider
+* between the driver and the line, and then a reflection off an almost-open
+* end. Whether that crosses the PHY's 1.90 V threshold on the incident wave
+* or has to wait for the reflection is not something a delay-per-millimetre
+* can answer, and it is worth about a nanosecond either way.
+*
+* **What this deck cannot settle**, and the reason to read its two totals
+* rather than one: ST publishes `td(TXD)` and not how it splits between
+* internal propagation and the output stage charging that 20 pF. Taking the
+* whole 11.5 as internal is the pessimistic reading and taking 11.5 less the
+* jig is the self-consistent one - the same driver model reproducing the
+* datasheet's test and then driving the board. Both are measured here.
+*
+* Z0 and the one-way delay of each line come from `build/copper.json`, which
+* the layout writes from the routed segments and the stackup. Nothing here is
+* typed; @path:end@ is an instance path and which end of its range to take.
+
+.param vdd = @rail.3v3.voltage:min@
+.param half = 'vdd / 2'
+.param launch = 1n
+
+* Every branch is launched by the same edge at t = 1 ns, so each measurement
+* is a time *since the launch* and the three can be added. The edge itself is
+* a step: the driver's own impedance into whatever it faces is what shapes
+* it, and a shaped stimulus would be putting a rise time in twice.
+Vedge src 0 PWL(0 0 {launch} 0 '{launch} + 1p' {vdd} 1u {vdd})
+
+* --- the jig ST measured td(TXD) in ------------------------------------------
+*
+* Table 59's worst-case output impedance into the 20 pF the Ethernet section
+* states, to the 0.5 VDD it states as the measurement point. This is the only
+* part of the deck whose answer is already known in closed form, and that is
+* deliberate: it is the calibration, and if it does not come out at R C ln 2
+* the driver model is wrong and every other number here is too.
+Rjig src jig @mcu.io_output_impedance:max@
+Cjig jig 0 @mcu.rmii_load_reference:max@
+
+* --- the clock, PHY to MCU ---------------------------------------------------
+*
+* The PHY sources REF_CLK, so this is the leg that makes the transmit budget
+* a sum rather than a difference. Driven by an O12 output, terminated by the
+* MCU's own pin capacitance, and measured to 0.5 VDD because that is where
+* ST's Ethernet section says its figures are taken.
+Rclk src clk_phy @eth.phy.io_output_impedance:max@
+Tclk clk_phy 0 clk_mcu 0 Z0=@copper.ETH_REF_CLK.impedance:nom@
++ TD=@copper.ETH_REF_CLK.delay:nom@
+Cclk clk_mcu 0 @mcu.io_pin_capacitance_typical:max@
+
+* --- the transmit data, MCU to PHY -------------------------------------------
+*
+* ETH_TXD1 and not TXD0: it is the longer of the two by a tenth of a
+* millimetre and the budget is held to the worst. TX_EN has its own, looser
+* delay figure and four and a half nanoseconds of slack, so it is not the one
+* that decides anything.
+Rtxd src txd_mcu @mcu.io_output_impedance:max@
+Ttxd txd_mcu 0 txd_phy 0 Z0=@copper.ETH_TXD1.impedance:nom@
++ TD=@copper.ETH_TXD1.delay:nom@
+Ctxd txd_phy 0 @eth.phy.rmii_input_capacitance:max@
+
+.tran 1p 40n
+
+* --- what happened -----------------------------------------------------------
+
+* The jig, which is the calibration and the credit this deck takes.
+.meas tran tmp_jig WHEN v(jig)={half} RISE=1
+.meas tran t_txd_into_jig PARAM='tmp_jig - launch'
+
+* The clock's flight, to the level ST measures its own figures at.
+.meas tran tmp_clk WHEN v(clk_mcu)={half} RISE=1
+.meas tran t_clk_flight PARAM='tmp_clk - launch'
+
+* The data's flight, to the threshold the PHY actually switches at - Table
+* 5.7's VIS positive-going maximum, because a rising edge is late when the
+* threshold is high.
+.meas tran tmp_txd WHEN v(txd_phy)=@eth.phy.rmii_input_high_threshold:max@ RISE=1
+.meas tran t_txd_flight PARAM='tmp_txd - launch'
+
+* **The headline**, self-consistent: the same driver model reproduces ST's
+* jig and then drives the board, so the jig's own RC comes off the published
+* delay and what is left is the part's internal propagation.
+.meas tran t_transmit_total
++ PARAM='t_clk_flight + (@mcu.rmii_transmit_data_delay_max:max@ - t_txd_into_jig)
++ + t_txd_flight'
+
+* **And the pessimistic reading**, which takes the whole published delay as
+* internal and gives the jig no credit at all. ST does not say which is
+* right. The gap between these two is the open question, and it is a
+* nanosecond wide on a budget with a nanosecond in it.
+.meas tran t_transmit_worst
++ PARAM='t_clk_flight + @mcu.rmii_transmit_data_delay_max:max@ + t_txd_flight'

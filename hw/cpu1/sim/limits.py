@@ -196,7 +196,41 @@ def _after_sharing(values: dict[str, tuple[float, float]]) -> float:
 # The guard on the guards, as checks/test_check_count.py is for the design
 # checks. A deck that quietly stops measuring something leaves a suite that
 # passes with less coverage than it had.
-EXPECTED_MEASUREMENTS = 22
+def _rmii_setup_window(values: dict[str, tuple[float, float]]) -> float:
+    """
+    What a period leaves once the PHY's setup is taken out of it.
+
+    The one number the whole transmit budget is held to, and it is two
+    figures from two datasheets and nothing else: the clock period the PHY
+    generates, less the setup its own Table 5.12 asks for on TXD. Everything
+    the deck measures has to fit inside it.
+    """
+    period = values["eth.phy.rmii_clock_period"][1]
+    setup = values["eth.phy.rmii_setup_min"][0]
+    return period - setup
+
+
+def _rmii_period(values: dict[str, tuple[float, float]]) -> float:
+    """One clock period, which nothing on this bus may exceed under any reading."""
+    return values["eth.phy.rmii_clock_period"][1]
+
+
+def _rmii_published_delay(values: dict[str, tuple[float, float]]) -> float:
+    """
+    The MCU's whole published output delay, as a ceiling on the jig's share.
+
+    `t_txd_into_jig` is subtracted from this to get the part's internal
+    propagation, so a jig time larger than the figure it comes out of would
+    make that negative and the headline meaningless. It comes out at about
+    0.69 ns against 11.5, and the point of the band is that a driver model
+    which stopped converging and returned zero - or one that charged the jig
+    slower than the part is allowed to - fails here rather than quietly
+    flattering the total below.
+    """
+    return values["mcu.rmii_transmit_data_delay_max"][1]
+
+
+EXPECTED_MEASUREMENTS = 27
 
 LIMITS = {
     "adc_corner": {
@@ -304,6 +338,67 @@ LIMITS = {
             "overlap rather than add and there is no closed form. A fitted "
             "constant goes quietly wrong when something upstream of it "
             "moves; this is what stops it being quiet.",
+        ),
+    },
+    "rmii_transmit": {
+        "t_txd_into_jig": (
+            0.0, _rmii_published_delay,
+            "What ST's own 20 pF test load is worth, measured by reproducing "
+            "it. This is the calibration the deck's headline rests on: the "
+            "published `td(TXD)` contains this RC, and a check that adds the "
+            "board's copper on top of the published figure counts it twice.\n"
+            "      Banded against the published delay itself, which is the "
+            "only bound that is not this measurement's own formula restated. "
+            "It comes out near R C ln 2 - 0.69 ns - and if it does not, the "
+            "driver model is wrong and nothing else in this deck means "
+            "anything.",
+        ),
+        "t_clk_flight": (
+            0.0, _rmii_setup_window,
+            "REF_CLK from the PHY's pin to the MCU's, as a transmission line "
+            "rather than a length times a delay per millimetre. It is charged "
+            "to the transmit budget in full, because the PHY sources the "
+            "clock and the data travels back the other way.",
+        ),
+        "t_txd_flight": (
+            0.0, _rmii_setup_window,
+            "And the data's leg, to the 1.90 V a VIS input is guaranteed to "
+            "have switched by. Whether this comes out near the line's one-way "
+            "delay or at twice it is the question a lumped model cannot "
+            "answer: the far end is nearly open, so the incident wave is the "
+            "driver-to-line divider and the reflection is what finishes the "
+            "job.",
+        ),
+        "t_transmit_total": (
+            0.0, _rmii_setup_window,
+            "**The headline, and a second method on the number this board has "
+            "least margin in.** The clock's flight, plus the MCU's published "
+            "delay less the jig that figure was taken in, plus the data's "
+            "flight - against a period less the PHY's setup.\n"
+            "      The analytic check computes the same budget by adding "
+            "lengths and clears it by nine picoseconds. Any real disagreement "
+            "between the two is a finding, which is the entire reason this "
+            "deck exists.",
+        ),
+        "t_transmit_worst": (
+            0.0, _rmii_period,
+            "The same budget with the jig given no credit at all - the whole "
+            "published `td(TXD)` treated as internal propagation. It comes "
+            "out at 12.77 ns against the 12.5 the setup window allows, so "
+            "**under this reading the bus does not close**, and the gap "
+            "between it and `t_transmit_total` is 0.69 ns on a budget with "
+            "one nanosecond in it.\n"
+            "      It is banded against a whole period rather than against "
+            "the setup window, and the reason is not that the tighter band "
+            "was uncomfortable. ST states `td(TXD)` *into a 20 pF load*. A "
+            "delay measured into a load contains the time to charge it, so "
+            "a reading that treats none of the 11.5 ns as the load is not "
+            "conservative - it contradicts the condition the figure is "
+            "quoted under. This is here to show the size of the assumption "
+            "the headline rests on, and to fail loudly if the deck stops "
+            "converging, which is what the period catches.\n"
+            "      What would settle it outright is ST stating the split, or "
+            "a scope on TXD and REF_CLK at the PHY's pins.",
         ),
     },
     "trip_clear": {

@@ -140,6 +140,23 @@ MCU_H743 = PartSpec(
         # 10 pF and 25 pF" - so 20 pF is inside both and is the figure the
         # copper is held to.
         "rmii_load_reference": exact(20e-12),
+        # **What the output stage looks like, so a deck can drive a line with
+        # it instead of a lump.** Table 59: a CMOS port holds V_OL at or
+        # below 0.4 V while sinking 8 mA, and V_OH at or above VDD - 0.4
+        # while sourcing it. 50 ohm is the worst-case impedance that implies,
+        # and worst case here means *weakest* - a real part is faster, so a
+        # budget built on this is built on the slow end.
+        #
+        # It matters because `td(TXD)` is quoted into 20 pF, and 20 pF
+        # through 50 ohm is 0.69 ns of the 11.5. The check that sums lengths
+        # adds the whole 11.5 *and* the copper's own delay, which counts that
+        # 0.69 twice; `sim/rmii_transmit.cir.in` reproduces the jig, measures
+        # what it is worth, and takes it off.
+        "io_output_impedance": exact(0.4 / 8e-3),
+        # The far end of the clock line, from the same section: C_IO is 5 pF,
+        # with no minimum and no maximum - a typical, so it carries a margin
+        # like every other figure of that species on this board.
+        "io_pin_capacitance_typical": exact(5e-12),
     },
 )
 
@@ -1396,6 +1413,20 @@ ETH_PHY = PartSpec(
         "rmii_output_invalid_min": exact(3.0e-9),     # toinvld, RXD holds this long
         "rmii_setup_min": exact(7.5e-9),              # tsu, PHY samples TXD
         "rmii_hold_min": exact(2.0e-9),               # tihold
+        # **The other end of both lines, for the transmit deck.**
+        #
+        # REFCLKO shares the nINT pin and Table 2.9 types that pin O12: 12 mA
+        # sink and source. Table 5.6 holds an O12 output to 0.4 V of the rail
+        # at that current, so its impedance is 33 ohm at the weakest.
+        "io_output_impedance": exact(0.4 / 12e-3),
+        # TXD0, TXD1 and TXEN are VIS - variable-voltage Schmitt inputs - and
+        # Table 5.7 gives the VIS positive-going threshold at 3.3 V as 1.65
+        # typical against a 1.90 maximum. A rising edge is late when the
+        # threshold is high, so 1.90 is the one a setup budget is measured
+        # to. The same table gives C_IN as 2 pF maximum, which is what the
+        # line is terminated in.
+        "rmii_input_high_threshold": exact(1.90),
+        "rmii_input_capacitance": exact(2e-12),
         # **A typical, because the datasheet has no maximum.** Table 5.5,
         # "Current Consumption and Power Dissipation (REF_CLK Out, Reg.
         # Enabled)", 100BASE-TX with traffic: 59 mA for the device and 102 mA

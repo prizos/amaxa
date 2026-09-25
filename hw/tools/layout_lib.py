@@ -438,6 +438,65 @@ def reference_stack(board: dict, planes: list[dict]) -> dict:
     return out
 
 
+def net_transmission(pcb_text: str, stack: dict) -> dict[str, tuple[float, float]]:
+    """
+    net -> (characteristic impedance in ohms, one-way delay in seconds).
+
+    The same copper `net_capacitance` measures, read as a transmission line
+    instead of as a lump. A deck that wants to know what a fifty-megahertz
+    edge does between two packages needs both numbers, and the alternative -
+    typing them - is the second copy of the design this repository exists to
+    avoid.
+
+    **Delay is summed per segment and impedance is not.** Each segment
+    contributes its own length times its own layer's effective permittivity,
+    so a net that changes width or crosses to the back is measured as it is
+    drawn. An impedance cannot be summed that way: a line is one number or it
+    is several lines. What is reported is the impedance of the width and layer
+    the net spends most of its length on, which on this board is the whole of
+    it for every controlled net - the RMII runs 0.15 mm on outer copper end to
+    end. A net drawn at two widths gets the impedance of the longer half and
+    the caller should know that before believing it.
+
+    Vias are left out, as above, and so are pads: a pad is a lumped load at
+    the end of a line, not part of it, and the deck puts the far-end pin
+    capacitance in itself.
+    """
+    names = dict(re.findall(r'\(net (\d+) "([^"]*)"\)', pcb_text))
+    delays: dict[str, float] = {}
+    spent: dict[str, dict[tuple[float, str], float]] = {}
+
+    for block in re.findall(r"\n\t\(segment\n(?:\t\t[^\n]*\n)+\t\)", pcb_text):
+        start = re.search(r"\(start ([-\d.]+) ([-\d.]+)\)", block)
+        end = re.search(r"\(end ([-\d.]+) ([-\d.]+)\)", block)
+        width = re.search(r"\(width ([\d.]+)\)", block)
+        layer = re.search(r'\(layer "([^"]+)"\)', block)
+        number = re.search(r"\(net (\d+)\)", block)
+        if not (start and end and width and layer and number):
+            continue
+        net = names.get(number.group(1), "")
+        if not net or layer.group(1) not in stack:
+            continue
+        length = math.dist(
+            (float(start.group(1)), float(start.group(2))),
+            (float(end.group(1)), float(end.group(2))),
+        )
+        here = stack[layer.group(1)]
+        effective = _effective_permittivity(float(width.group(1)), here)
+        # Millimetres over metres per second, so the delay comes out in
+        # seconds without a stray factor hiding in a constant.
+        delays[net] = delays.get(net, 0.0) + (length * 1e-3) * math.sqrt(effective) / LIGHT
+        key = (float(width.group(1)), layer.group(1))
+        widths = spent.setdefault(net, {})
+        widths[key] = widths.get(key, 0.0) + length
+
+    out = {}
+    for net, delay in delays.items():
+        width, layer = max(spent[net].items(), key=lambda item: item[1])[0]
+        out[net] = (microstrip_impedance(width, stack[layer]), delay)
+    return out
+
+
 def net_capacitance(pcb_text: str, stack: dict) -> dict[str, float]:
     """
     net -> farads of copper against the planes, tracks and pads together.
